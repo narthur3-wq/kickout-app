@@ -51,9 +51,11 @@ export const filtered = derived([events, ui], ([$events, $ui]) => {
 });
 
 // ---- Commands ----
-export function addEvent(row) { 
-  const id = (globalThis.crypto && globalThis.crypto.randomUUID) ? globalThis.crypto.randomUUID() : Math.random().toString(36).slice(2);
-  events.update(list => [{...row, id, created_at: new Date().toISOString()}, ...list]); 
+export function addEvent(row) {
+  const id = (globalThis.crypto && globalThis.crypto.randomUUID)
+    ? globalThis.crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
+  events.update(list => [{...row, id, created_at: new Date().toISOString()}, ...list]);
 }
 export function deleteEvent(id) { events.update(list => list.filter(e => e.id !== id)); }
 export function clearAll() { events.set([]); }
