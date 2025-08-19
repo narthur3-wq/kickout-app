@@ -1,6 +1,7 @@
 <script>
   import Pitch from './lib/Pitch.svelte';
   import Heatmap from './lib/Heatmap.svelte';
+  import PlayerDashboard from './lib/PlayerDashboard.svelte';
   import { onMount } from 'svelte';
 
   // Pitch size (m)
