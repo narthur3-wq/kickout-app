@@ -1,6 +1,6 @@
 <script>
   import Pitch from './lib/Pitch.svelte';
-  import KPIs from './lib/KPIs.svelte';
+
   import { ui, filtered, addEvent } from './lib/stores';
   import { displacement } from './lib/pitch-geometry';
  
