@@ -1,0 +1,17 @@
+{
+  "name": "kickout-app",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "postCreateCommand": "npm ci",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "svelte.svelte-vscode",
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint"
+      ]
+    }
+  },
+  "portsAttributes": {
+    "5173": { "label": "Vite dev server", "onAutoForward": "openBrowser" }
+  }
+}
