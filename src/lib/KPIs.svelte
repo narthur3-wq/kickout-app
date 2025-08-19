@@ -55,4 +55,29 @@
   <section class="card">
     <h3>Break Win Rate</h3>
     <table>
-      <thead><tr><th>Zone</th><th>Win%</t
+      <thead><tr><th>Zone</th><th>Win%</th><th>Breaks</th></tr></thead>
+      <tbody>
+        {#each Object.entries(zoneMap) as [z, v]}
+          <tr><td>{z}</td><td>{pct(v.breaks_won, v.breaks)}%</td><td>{v.breaks}</td></tr>
+        {/each}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h3>Overall</h3>
+    <ul>
+      <li>Retention: {pct(totals.retained, totals.total)}% ({totals.retained}/{totals.total})</li>
+      <li>Break win: {pct(totals.breaks_won, totals.breaks)}% ({totals.breaks_won}/{totals.breaks})</li>
+    </ul>
+  </section>
+</div>
+
+<style>
+  .grid { display: grid; gap: .75rem; grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .card { padding: .75rem; border: 1px solid #eee; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.04); background: #fff; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: .35rem .5rem; border-bottom: 1px solid #eee; text-align: left; }
+  thead th { font-size: .85rem; opacity: .7; }
+  @media (max-width: 900px){ .grid { grid-template-columns: 1fr; } }
+</style>
