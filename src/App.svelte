@@ -376,7 +376,29 @@
       </tbody>
     </table>
   </div>
+  </div> <!-- closes Break Win-Rate KPI -->
 
+  <!-- Per-player metrics -->
+  <h2>Per-Player Metrics</h2>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Player</th><th>Total</th><th>Retained</th><th>% Retained</th></tr>
+      </thead>
+      <tbody>
+        {#each Object.entries(playerStats) as [p, st]}
+          <tr>
+            <td>{p}</td>
+            <td>{st.tot}</td>
+            <td>{st.ret}</td>
+            <td>{st.tot ? Math.round(100*st.ret/st.tot)+'%' : '-'}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Unfiltered saved list -->
   <!-- Unfiltered saved list -->
   <h2>Saved events</h2>
   <div class="tablewrap">
