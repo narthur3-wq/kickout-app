@@ -6,3 +6,4 @@
   <h1>Kickout — {version}</h1>
   <p>Build OK ✅ (minimal page; no heatmap, no KPIs)</p>
 </main>
+
