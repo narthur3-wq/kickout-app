@@ -1,7 +1,8 @@
-import { defineConfig } from 'vite'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { defineConfig } from 'vite';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 export default defineConfig({
   plugins: [svelte()],
-  base: '/kickout-app/', // IMPORTANT for GH Pages
-})
+  // IMPORTANT for GitHub Pages under /kickout-app/
+  base: '/kickout-app/',
+});
