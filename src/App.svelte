@@ -202,3 +202,5 @@
   .row{ display:grid; grid-template-columns: 8rem 1fr 5rem 6rem; gap:.5rem; padding:.4rem .5rem; border:1px solid #f0f2f5; border-radius:8px; }
   @media (max-width: 700px){ .row{ grid-template-columns: 1fr; } }
 </style>
+
+
