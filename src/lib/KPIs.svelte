@@ -1,8 +1,6 @@
 <script>
   import { filtered } from './stores';
 
-  // Fixed version: compute from the store with reactive statements (no await)
-
   const zones = [
     'L-S','C-S','R-S',
     'L-M','C-M','R-M',
@@ -10,7 +8,7 @@
     'L-V','C-V','R-V'
   ];
 
-  // Build a zone map anytime the filtered data changes
+  // Recompute from the store reactively (no Promises)
   $: zoneMap = (() => {
     const map = Object.fromEntries(zones.map(z => [z, {
       total: 0, retained: 0, breaks: 0, breaks_won: 0
@@ -28,7 +26,6 @@
     return map;
   })();
 
-  // Totals
   $: totals = Object.values(zoneMap).reduce((a,b)=>({
     total: a.total + b.total,
     retained: a.retained + b.retained,
