@@ -8,7 +8,7 @@
     'L-V','C-V','R-V'
   ];
 
-  // Recompute from the store reactively (no Promises)
+  // Recompute metrics whenever $filtered changes
   $: zoneMap = (() => {
     const map = Object.fromEntries(zones.map(z => [z, {
       total: 0, retained: 0, breaks: 0, breaks_won: 0
@@ -26,6 +26,7 @@
     return map;
   })();
 
+  // Totals
   $: totals = Object.values(zoneMap).reduce((a,b)=>({
     total: a.total + b.total,
     retained: a.retained + b.retained,
