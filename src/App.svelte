@@ -3,7 +3,7 @@
   import KPIs from './lib/KPIs.svelte';
   import { ui, filtered, addEvent } from './lib/stores';
   import { displacement } from './lib/pitch-geometry';
-
+ 
   let form = {
     match_date: '', team: '', opponent: '',
     period: '1', clock: '', target_player: '',
