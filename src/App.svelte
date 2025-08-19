@@ -35,7 +35,7 @@
 </script>
 
 <header style="position:sticky;top:0;background:#0b1220;color:#fff;padding:.6rem 1rem;display:flex;justify-content:space-between;align-items:center">
-  <strong>Kickout — NO HEATMAP v3</strong>
+  <strong>Kickout — NO HEATMAP v5</strong>
   <label><input type="checkbox" bind:checked={$ui.ourGoalAtTop}> Our goal at top</label>
 </header>
 
