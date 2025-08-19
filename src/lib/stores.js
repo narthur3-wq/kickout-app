@@ -1,4 +1,3 @@
-# File: src/lib/stores.js
 import { writable, derived } from 'svelte/store';
 
 // ---- Config ----
@@ -6,35 +5,30 @@ export const APP_ID = 'kickout-app';
 const KEY = `${APP_ID}:events:v1`;
 const UI_KEY = `${APP_ID}:ui:v1`;
 
-// ---- Persistence helpers ----
+// ---- Persistence helpers (safe during build) ----
 function persistable(initial, key) {
-  const s = writable(initial, () => {
+  let startValue = initial;
+  if (typeof window !== 'undefined') {
     const raw = localStorage.getItem(key);
-    if (raw) {
-      try { s.set(JSON.parse(raw)); } catch {}
-    }
-    const unsub = s.subscribe(v => {
+    if (raw) { try { startValue = JSON.parse(raw); } catch {} }
+  }
+  const s = writable(startValue);
+  if (typeof window !== 'undefined') {
+    s.subscribe(v => {
       try { localStorage.setItem(key, JSON.stringify(v)); } catch {}
     });
-    return unsub;
-  });
+  }
   return s;
 }
 
 // ---- Data model ----
-export const events = persistable([], KEY); // array of Event rows
+export const events = persistable([], KEY);
 
 export const ui = persistable({
-  filters: {
-    opponent: '',
-    player: '',
-    ytd: true,
-    contest: 'all', // 'all' | 'clean' | 'break' | 'foul' | 'out'
-    outcome: 'all'  // 'all' | 'retained' | 'lost' | 'neutral'
-  },
+  filters: { opponent: '', player: '', ytd: true, contest: 'all', outcome: 'all' },
   ourGoalAtTop: true,
   showPickup: true,
-  activeEventDraft: null, // transient working copy before save
+  activeEventDraft: null,
 }, UI_KEY);
 
 export const filtered = derived([events, ui], ([$events, $ui]) => {
@@ -55,7 +49,7 @@ export function addEvent(row) {
   const id = (globalThis.crypto && globalThis.crypto.randomUUID)
     ? globalThis.crypto.randomUUID()
     : Math.random().toString(36).slice(2);
-  events.update(list => [{...row, id, created_at: new Date().toISOString()}, ...list]);
+  events.update(list => [{ ...row, id, created_at: new Date().toISOString() }, ...list]);
 }
 export function deleteEvent(id) { events.update(list => list.filter(e => e.id !== id)); }
 export function clearAll() { events.set([]); }
