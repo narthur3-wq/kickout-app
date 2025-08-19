@@ -64,7 +64,7 @@
 
 <header class="topbar">
   <div class="left">
-    <strong>Kickout App</strong>
+    <strong>Kickout App — no-heatmap v1</strong>
     <label><input type="checkbox" bind:checked={$ui.ourGoalAtTop}> Our goal at top</label>
   </div>
   <div class="timers">
