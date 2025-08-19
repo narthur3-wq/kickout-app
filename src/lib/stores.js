@@ -5,7 +5,7 @@ export const APP_ID = 'kickout-app';
 const KEY = `${APP_ID}:events:v1`;
 const UI_KEY = `${APP_ID}:ui:v1`;
 
-// ---- Persistence helpers (safe during build) ----
+// ---- Persistence helpers (safe during Node build) ----
 function persistable(initial, key) {
   let startValue = initial;
   if (typeof window !== 'undefined') {
@@ -14,9 +14,7 @@ function persistable(initial, key) {
   }
   const s = writable(startValue);
   if (typeof window !== 'undefined') {
-    s.subscribe(v => {
-      try { localStorage.setItem(key, JSON.stringify(v)); } catch {}
-    });
+    s.subscribe(v => { try { localStorage.setItem(key, JSON.stringify(v)); } catch {} });
   }
   return s;
 }
@@ -49,7 +47,7 @@ export function addEvent(row) {
   const id = (globalThis.crypto && globalThis.crypto.randomUUID)
     ? globalThis.crypto.randomUUID()
     : Math.random().toString(36).slice(2);
-  events.update(list => [{ ...row, id, created_at: new Date().toISOString() }, ...list]);
+  events.update(list => [{...row, id, created_at: new Date().toISOString()}, ...list]);
 }
 export function deleteEvent(id) { events.update(list => list.filter(e => e.id !== id)); }
 export function clearAll() { events.set([]); }
@@ -75,8 +73,7 @@ export function downloadCsv(name, rows) {
 
 // Simple de-dupe by (match_date,clock,team,x,y)
 export function dedupe(rows) {
-  const seen = new Set();
-  const out = [];
+  const seen = new Set(); const out = [];
   for (const r of rows) {
     const key = [r.match_date,r.clock,r.team,Number(r.x).toFixed(3),Number(r.y).toFixed(3)].join('|');
     if (seen.has(key)) continue; seen.add(key); out.push(r);
