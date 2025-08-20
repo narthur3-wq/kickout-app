@@ -1,3 +1,1 @@
-cat > src/app.css <<'EOF'
 @import "tailwindcss";
-EOF
