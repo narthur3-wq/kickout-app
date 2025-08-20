@@ -146,4 +146,138 @@
     let pxm=toNum(get('pickup_x_m')), pym=toNum(get('pickup_y_m'));
     if (unit==='meters'){
       if (px==null && pxm!=null) px = pxm / WIDTH_M;
-      if (py==null && pym!
+      if (py==null && pym!=null) py = our_goal_at_top ? (pym/LENGTH_M) : (1-pym/LENGTH_M);
+    } else {
+      if (pxm!=null && px==null) px = pxm / WIDTH_M;
+      if (pym!=null && py==null) py = our_goal_at_top ? (pym/LENGTH_M) : (1-pym/LENGTH_M);
+    }
+    if (px!=null && py!=null){
+      px = Math.max(0,Math.min(1,px));
+      py = Math.max(0,Math.min(1,py));
+    } else { px=py=null; }
+
+    const x_m = nx*WIDTH_M;
+    const y_m = (our_goal_at_top ? ny : (1-ny))*LENGTH_M;
+
+    const side_band = nx<1/3 ? 'Left' : (nx<2/3 ? 'Centre' : 'Right');
+    const depth_from_own_goal_m = our_goal_at_top ? y_m : (LENGTH_M - y_m);
+    const depth_band = depth_from_own_goal_m<20?'Short':(depth_from_own_goal_m<45?'Medium':(depth_from_own_goal_m<65?'Long':'Very Long'));
+    const zone_code = `${side_band[0]}-${depth_band[0]}`;
+
+    const break_displacement_m = (px!=null&&py!=null)
+      ? +Math.hypot((px-nx)*WIDTH_M,(py-ny)*LENGTH_M).toFixed(2)
+      : null;
+
+    return {
+      id: Date.now()+Math.floor(Math.random()*1e6),
+      created_at: new Date().toISOString(),
+      match_date, team, opponent, period, clock,
+      target_player, outcome, contest_type, break_outcome,
+      time_to_tee_s, total_time_s, scored_20s,
+      x: nx, y: ny, x_m, y_m,
+      depth_from_own_goal_m,
+      side_band, depth_band, zone_code,
+      our_goal_at_top,
+      pickup_x: px, pickup_y: py,
+      pickup_x_m: px==null? null : px*WIDTH_M,
+      pickup_y_m: py==null? null : (our_goal_at_top ? py*LENGTH_M : (1-py)*LENGTH_M),
+      break_displacement_m
+    };
+  }
+
+  $: preview = rows.slice(0,10).map(parseRow).filter(Boolean);
+  $: importableCount = rows.map(parseRow).filter(Boolean).length;
+
+  function doImport(){
+    const data = rows.map(parseRow).filter(Boolean);
+    dispatch('import', data);
+    open=false;
+    const input = document.getElementById('xlsxFile'); if (input) input.value='';
+  }
+</script>
+
+{#if open}
+  <div class="backdrop" on:click={() => open=false}></div>
+  <div class="modal" role="dialog" aria-label="Import Excel" on:click|stopPropagation>
+    <h2>Import from Excel / CSV</h2>
+
+    <div class="row">
+      <input id="xlsxFile" type="file" accept=".xlsx,.xls,.csv" on:change={onPickFile} />
+      {#if sheetNames.length>1}
+        <label>Sheet:
+          <select bind:value={chosenSheet} on:change={(e)=>onChangeSheet(e.target.value)}>
+            {#each sheetNames as s}<option value={s}>{s}</option>{/each}
+          </select>
+        </label>
+      {/if}
+    </div>
+
+    {#if headers.length}
+      <div class="options">
+        <label>Coordinates:
+          <select bind:value={coordsUnit}>
+            <option value="auto">Auto-detect</option>
+            <option value="norm">Normalised (0–1)</option>
+            <option value="meters">Metres (0–90 / 0–145)</option>
+          </select>
+        </label>
+        <label><input type="checkbox" bind:checked={defaultGoalTop}> Our goal at top (default)</label>
+      </div>
+
+      <table class="map">
+        <thead><tr><th>Field</th><th>Column</th></tr></thead>
+        <tbody>
+          {#each FIELDS as f}
+            <tr>
+              <td>{f.label}</td>
+              <td>
+                <select bind:value={map[f.key]}>
+                  <option value="">— not used —</option>
+                  {#each headers as h}<option value={h}>{h}</option>{/each}
+                </select>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+
+      <div class="preview">
+        <div class="count">{importableCount} row{importableCount===1?'':'s'} ready</div>
+        <table>
+          <thead><tr><th>Date</th><th>Opp</th><th>Player</th><th>Outcome</th><th>Contest</th><th>x</th><th>y</th><th>zone</th><th>pickup</th></tr></thead>
+          <tbody>
+            {#each preview as e}
+              <tr>
+                <td>{e.match_date}</td><td>{e.opponent}</td><td>{e.target_player}</td><td>{e.outcome}</td><td>{e.contest_type}</td>
+                <td>{e.x.toFixed(2)}</td><td>{e.y.toFixed(2)}</td><td>{e.zone_code}</td>
+                <td>{e.pickup_x==null?'-':`${e.pickup_x.toFixed(2)}, ${e.pickup_y.toFixed(2)}`}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="actions">
+        <button on:click={()=>open=false}>Cancel</button>
+        <button class="primary" on:click={doImport} disabled={importableCount===0}>
+          Import {importableCount} row{importableCount===1?'':'s'}
+        </button>
+      </div>
+    {/if}
+  </div>
+{/if}
+
+<style>
+  .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.25)}
+  .modal{position:fixed;inset:10% 12%;background:#fff;border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px;max-height:80vh;overflow:auto}
+  h2{margin:0 0 6px}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .options{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+  .map{width:100%;border-collapse:collapse;margin-top:6px}
+  .map th,.map td{border:1px solid #e5e7eb;padding:6px}
+  .preview{border:1px solid #eee;border-radius:8px;padding:8px;margin-top:8px}
+  .preview .count{font-size:13px;color:#444;margin:0 0 6px}
+  .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+  button{padding:6px 10px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+  .primary{background:#111;color:#fff;border-color:#111}
+</style>
