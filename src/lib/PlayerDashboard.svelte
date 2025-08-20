@@ -1,72 +1,47 @@
-<script>
-  // Input: filtered events to respect current filters
-  export let events = /** @type {Array<any>} */ ([]);
+<script lang="ts">
+  type Row = { player: string; tot: number; pct: number };
+  const { events = [] } = $props<{ events: any[] }>();
 
-  const RETAINED = new Set(['Won']);
-  const ZSIDES = ['Left','Centre','Right'];
-
-  const byPlayer = $derived.by(() => {
-    /** @type {Record<string, any>} */
-    const m = {};
+  const rows = $derived.by((): Row[] => {
+    const by = new Map<string, { tot: number; ret: number }>();
     for (const e of events) {
-      const p = (e.target_player||'').trim();
-      if (!p) continue;
-      if (!m[p]) m[p] = { attempts:0, won:0, breakTot:0, breakWon:0, depthSum:0, sides:{Left:0,Centre:0,Right:0} };
-      m[p].attempts++;
-      if (RETAINED.has(e.outcome)) m[p].won++;
-      if (e.contest_type==='break') { m[p].breakTot++; if (e.break_outcome==='won') m[p].breakWon++; }
-      m[p].depthSum += +e.depth_from_own_goal_m || 0;
-      m[p].sides[e.side_band] = (m[p].sides[e.side_band]||0)+1;
+      const key = (e?.target_player ?? '').trim() || '—';
+      const m = by.get(key) ?? { tot: 0, ret: 0 };
+      m.tot++;
+      if (e?.outcome === 'Retained' || e?.outcome === 'Score' || e?.outcome === 'Won') m.ret++;
+      by.set(key, m);
     }
-    // compute display rows
-    return Object.entries(m).map(([name, v]) => {
-      const wonPct   = v.attempts ? (100*v.won/v.attempts) : 0;
-      const breakPct = v.breakTot ? (100*v.breakWon/v.breakTot) : 0;
-      const avgDepth = v.attempts ? (v.depthSum/v.attempts) : 0;
-      const sideTot = Math.max(1, v.sides.Left+v.sides.Centre+v.sides.Right);
-      const sL = Math.round(100*v.sides.Left/sideTot);
-      const sC = Math.round(100*v.sides.Centre/sideTot);
-      const sR = Math.round(100*v.sides.Right/sideTot);
-      return { name, attempts:v.attempts, wonPct, breakPct, avgDepth, sL, sC, sR };
-    }).sort((a,b)=>b.attempts - a.attempts);
+    return [...by.entries()]
+      .map(([player, m]) => ({
+        player,
+        tot: m.tot,
+        pct: m.tot ? Math.round((100 * m.ret) / m.tot) : 0
+      }))
+      .sort((a, b) => b.tot - a.tot || a.player.localeCompare(b.player));
   });
 </script>
 
-<div class="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800">
-  <div class="max-h-[360px] sm:max-h-[480px] overflow-auto">
-    <table class="w-full border-collapse text-sm">
-      <thead class="bg-neutral-50 dark:bg-neutral-800 sticky top-0">
-        <tr>
-          <th class="p-2 text-left">Player</th>
-          <th class="p-2">Attempts</th>
-          <th class="p-2">Won %</th>
-          <th class="p-2">Break Won %</th>
-          <th class="p-2">Avg Depth (m)</th>
-          <th class="p-2">Side L/C/R</th>
+<div class="card overflow-auto">
+  <div class="p-4 border-b border-neutral-200 dark:border-neutral-800 font-semibold">Players</div>
+  <table class="w-full text-sm">
+    <thead class="bg-neutral-50 dark:bg-neutral-900/50">
+      <tr>
+        <th class="p-2 text-left">Player</th>
+        <th class="p-2 text-right">Events</th>
+        <th class="p-2 text-right">Retention %</th>
+      </tr>
+    </thead>
+    <tbody>
+      {#each rows as r}
+        <tr class="border-t border-neutral-200 dark:border-neutral-800">
+          <td class="p-2">{r.player}</td>
+          <td class="p-2 text-right">{r.tot}</td>
+          <td class="p-2 text-right">{r.tot ? r.pct + '%' : '-'}</td>
         </tr>
-      </thead>
-      <tbody>
-        {#each byPlayer as r}
-          <tr class="border-t border-neutral-200 dark:border-neutral-800">
-            <td class="p-2 text-left">{r.name}</td>
-            <td class="p-2">{r.attempts}</td>
-            <td class="p-2">{r.attempts?Math.round(r.wonPct):'-'}%</td>
-            <td class="p-2">{r.breakPct?Math.round(r.breakPct):'-'}%</td>
-            <td class="p-2">{r.avgDepth.toFixed(1)}</td>
-            <td class="p-2">
-              <div class="h-2 w-full rounded bg-neutral-200 dark:bg-neutral-700 overflow-hidden">
-                <div class="h-full bg-emerald-500" style={`width:${r.sL}%`}></div>
-                <div class="h-full bg-sky-500" style={`width:${r.sC}%`}></div>
-                <div class="h-full bg-amber-500" style={`width:${r.sR}%`}></div>
-              </div>
-              <div class="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1">{r.sL}% / {r.sC}% / {r.sR}%</div>
-            </td>
-          </tr>
-        {/each}
-        {#if byPlayer.length===0}
-          <tr><td class="p-3 text-neutral-500 dark:text-neutral-400" colspan="6">No player data in current filter.</td></tr>
-        {/if}
-      </tbody>
-    </table>
-  </div>
+      {/each}
+      {#if rows.length === 0}
+        <tr><td colspan="3" class="p-3 text-neutral-500">No data.</td></tr>
+      {/if}
+    </tbody>
+  </table>
 </div>

@@ -1,102 +1,152 @@
 <script>
   import { createEventDispatcher, onMount } from 'svelte';
 
-  /** @type {'clean'|'break'|'foul'|'out'} */ export let contestType='clean';
-  /** @type {{x:number,y:number}} */ export let landing={x:NaN,y:NaN};
-  /** @type {{x:number,y:number}} */ export let pickup={x:NaN,y:NaN};
+  /** Contest type controls whether we expect a pickup point after landing */
+  export let contestType = /** @type {'clean'|'break'|'foul'|'out'} */ ('clean');
+
+  /** Landing & pickup points as normalized coords (0..1); NaN means unset */
+  export let landing = { x: NaN, y: NaN };
+  export let pickup  = { x: NaN, y: NaN };
+
+  /**
+   * Overlays to draw on the pitch (e.g., prior events / heat points)
+   * items: { x:number (0..1), y:number (0..1), outcome?:string, contest_type?:string, target?:string }
+   */
+  export let overlays = /** @type {Array<{x:number,y:number,outcome?:string,contest_type?:string,target?:string}>} */ ([]);
+
+  const W = 90;    // meters across
+  const H = 145;   // meters long
 
   const dispatch = createEventDispatcher();
-  let svgEl;
 
-  // Constants for markings (in metres)
-  const LENGTH_M = 145;
-  const M21 = 21, M45 = 45;    // distance from each end line
-  const ARC_R = 13;            // semicircle radius (commonly ~13m near goals)
+  let el;                 // clickable container (same element we measure)
+  let bbox = { left:0, top:0, width:1, height:1 };
 
-  // Helpers
-  function toNorm(evt) {
-    const r = svgEl.getBoundingClientRect();
-    const x = Math.min(Math.max(0, (evt.clientX - r.left) / r.width), 1);
-    const y = Math.min(Math.max(0, (evt.clientY - r.top) / r.height), 1);
-    return { x, y };
+  function updateBox() {
+    const r = el?.getBoundingClientRect?.();
+    if (r) bbox = { left: r.left + window.scrollX, top: r.top + window.scrollY, width: r.width, height: r.height };
   }
-  function handlePrimary(p) {
-    if (Number.isNaN(landing.x) || Number.isNaN(landing.y) || contestType!=='break') {
-      dispatch('landed', p);
+
+  onMount(() => {
+    updateBox();
+    const ro = new ResizeObserver(updateBox);
+    ro.observe(el);
+    const s = () => updateBox();
+    window.addEventListener('scroll', s, true);
+    return () => { ro.disconnect(); window.removeEventListener('scroll', s, true); };
+  });
+
+  function toNorm(clientX, clientY) {
+    const nx = Math.min(1, Math.max(0, (clientX + window.scrollX - bbox.left) / bbox.width));
+    const ny = Math.min(1, Math.max(0, (clientY + window.scrollY - bbox.top)  / bbox.height));
+    return { x: nx, y: ny };
+  }
+
+  function onClick(ev) {
+    const { x, y } = toNorm(ev.clientX, ev.clientY);
+    if (contestType === 'break') {
+      // if landing not set, set landing; else set pickup
+      if (Number.isNaN(landing.x) || Number.isNaN(landing.y)) {
+        dispatch('landed', { x, y });
+      } else {
+        dispatch('picked', { x, y });
+      }
     } else {
-      dispatch('picked', p);
+      dispatch('landed', { x, y });
     }
   }
-  function handleClick(evt){ handlePrimary(toNorm(evt)); }
-  function handlePointer(evt){ if (evt.pointerType!=='mouse' || evt.button===0) handlePrimary(toNorm(evt)); }
-  function handleContext(evt){ evt.preventDefault(); if (contestType==='break') dispatch('picked', toNorm(evt)); }
 
-  onMount(()=>{ svgEl?.setAttribute('tabindex','0'); });
+  function onKey(ev) {
+    if (ev.key === 'Enter' || ev.key === ' ') {
+      // "Activate" at center if keyboard-activated
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width/2;
+      const cy = r.top  + r.height/2;
+      onClick({ clientX: cx, clientY: cy });
+      ev.preventDefault();
+    }
+  }
 
-  // Convert metres from end line to y in viewBox (0..100)
-  const my = (m)=> (m / LENGTH_M) * 100;
-  const y21 = my(M21), y45 = my(M45), y21b = 100 - y21, y45b = 100 - y45;
-  const rArc = my(ARC_R);
+  // helpers to display normalized points on SVG meters
+  const nx = (n) => n * W;
+  const ny = (n) => n * H;
+  const isSet = (p) => Number.isFinite(p.x) && Number.isFinite(p.y) && !Number.isNaN(p.x) && !Number.isNaN(p.y);
 
-  // Arc paths (top and bottom), centered on goal line mid (x=50, y≈0/100)
-  const arcTop = `M ${50 - rArc},0 A ${rArc},${rArc} 0 0 1 ${50 + rArc},0`;
-  const arcBot = `M ${50 - rArc},100 A ${rArc},${rArc} 0 0 0 ${50 + rArc},100`;
+  // simple color per outcome/contest
+  function dotColor(pt) {
+    if (pt.contest_type === 'break') return 'hsl(200 80% 45%)';
+    if (pt.outcome === 'Score' || pt.outcome === 'Won' || pt.outcome === 'Retained') return 'hsl(140 70% 40%)';
+    if (pt.outcome === 'Lost' || pt.outcome === 'Out' || pt.outcome === 'Foul') return 'hsl(0 70% 50%)';
+    return 'hsl(220 10% 50%)';
+  }
 </script>
 
-<div class="w-full h-full">
-  <svg
-    bind:this={svgEl}
-    viewBox="0 0 100 100"
-    preserveAspectRatio="xMidYMid meet"
-    role="img"
-    aria-label="Pitch. Click to set landing; in a break, click again or right-click to set pickup."
-    class="h-full w-full rounded-xl border border-neutral-200 dark:border-neutral-800 bg-emerald-50/40 dark:bg-neutral-800 outline-none focus:ring-2 focus:ring-sky-400"
-    on:click={handleClick}
-    on:pointerdown|preventDefault={handlePointer}
-    on:contextmenu|preventDefault={handleContext}
-  >
-    <!-- subtle grid -->
-    <defs>
-      <pattern id="g" x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
-        <path d="M10 0H0V10" fill="none" stroke="#94a3b855" stroke-width="0.4"/>
-      </pattern>
-    </defs>
-    <rect x="0" y="0" width="100" height="100" fill="url(#g)"/>
+<!--
+  Clickable container: maintain the *same* element for sizing/click mapping
+  aspect ratio matches viewBox 90:145; rounded and bordered; keyboardable
+-->
+<div
+  bind:this={el}
+  class="relative w-full aspect-[90/145] rounded-xl border border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 overflow-hidden select-none"
+  role="button"
+  tabindex="0"
+  aria-label="Pitch (click or press Enter/Space to place points)"
+  onclick={onClick}
+  onkeydown={onKey}
+>
+  <!-- SVG field: viewBox in meters -->
+  <svg viewBox="0 0 90 145" class="absolute inset-0 w-full h-full text-neutral-400 dark:text-neutral-600">
+    <!-- Grass stripes -->
+    {#each Array.from({ length: 12 }) as _, i}
+      <rect x="0" y={(i*H)/12} width="90" height={H/12} fill={i % 2 === 0 ? 'hsl(160 30% 94%)' : 'hsl(160 30% 98%)'} />
+    {/each}
 
-    <!-- sidelines / end lines -->
-    <rect x="0" y="0" width="100" height="100" fill="none" stroke="#334155" stroke-width="0.7" opacity="0.45"/>
+    <!-- Sidelines / endlines -->
+    <rect x="0.5" y="0.5" width="89" height="144" fill="none" stroke="currentColor" stroke-width="1"/>
 
-    <!-- halfway -->
-    <line x1="0" y1="50" x2="100" y2="50" stroke="#334155" stroke-width="0.6" opacity="0.45"/>
+    <!-- Midline -->
+    <line x1="0" y1={H/2} x2="90" y2={H/2} stroke="currentColor" stroke-width="0.8" />
 
-    <!-- 21 / 45 from both ends -->
-    <line x1="0" y1={y21} x2="100" y2={y21} stroke="#334155" stroke-width="0.5" opacity="0.45"/>
-    <line x1="0" y1={y45} x2="100" y2={y45} stroke="#334155" stroke-width="0.5" opacity="0.45"/>
-    <line x1="0" y1={y21b} x2="100" y2={y21b} stroke="#334155" stroke-width="0.5" opacity="0.45"/>
-    <line x1="0" y1={y45b} x2="100" y2={y45b} stroke="#334155" stroke-width="0.5" opacity="0.45"/>
+    <!-- 21m / 45m lines from both ends -->
+    <line x1="0" y1="21" x2="90" y2="21" stroke="currentColor" stroke-width="0.6" />
+    <line x1="0" y1="45" x2="90" y2="45" stroke="currentColor" stroke-width="0.6" />
+    <line x1="0" y1={H-21} x2="90" y2={H-21} stroke="currentColor" stroke-width="0.6" />
+    <line x1="0" y1={H-45} x2="90" y2={H-45} stroke="currentColor" stroke-width="0.6" />
 
-    <!-- goal rectangles -->
-    <rect x="40" y="1.5"  width="20" height="2" fill="#111827AA" rx="0.2"/>
-    <rect x="40" y="96.5" width="20" height="2" fill="#111827AA" rx="0.2"/>
+    <!-- D arcs (simple semicircles) near both goals -->
+    <!-- Top arc -->
+    <path d={`M ${W/2-13},21 A 13 13 0 0 1 ${W/2+13},21`} fill="none" stroke="currentColor" stroke-width="0.7" />
+    <!-- Bottom arc -->
+    <path d={`M ${W/2-13},${H-21} A 13 13 0 0 0 ${W/2+13},${H-21}`} fill="none" stroke="currentColor" stroke-width="0.7" />
 
-    <!-- arcs near goals -->
-    <path d={arcTop} stroke="#334155" stroke-width="0.6" fill="none" opacity="0.5"/>
-    <path d={arcBot} stroke="#334155" stroke-width="0.6" fill="none" opacity="0.5"/>
+    <!-- Goals (small thick bars) -->
+    <rect x={W/2-5} y="0.5" width="10" height="1.5" rx="0.3" fill="currentColor" />
+    <rect x={W/2-5} y={H-2} width="10" height="1.5" rx="0.3" fill="currentColor" />
 
-    <!-- markers -->
-    {#if !Number.isNaN(landing.x) && !Number.isNaN(landing.y)}
-      <circle cx={landing.x*100} cy={landing.y*100} r="2.2" fill="#0ea5e9" opacity="0.95"/>
-      <circle cx={landing.x*100} cy={landing.y*100} r="4" fill="none" stroke="#0ea5e9" stroke-width="0.8" opacity="0.6"/>
+    <!-- Prior overlays -->
+    {#each overlays as p}
+      <circle cx={nx(p.x)} cy={ny(p.y)} r="1.2" fill={dotColor(p)} opacity="0.7">
+        <title>{p.target ? `${p.target} • ${p.outcome ?? ''}` : (p.outcome ?? '')}</title>
+      </circle>
+    {/each}
+
+    <!-- Current landing / pickup markers -->
+    {#if isSet(landing)}
+      <circle cx={nx(landing.x)} cy={ny(landing.y)} r="1.8" fill="hsl(220 80% 40%)" />
+      <circle cx={nx(landing.x)} cy={ny(landing.y)} r="3"   fill="none" stroke="hsl(220 80% 40%)" stroke-width="0.7" />
     {/if}
-    {#if contestType==='break' && !Number.isNaN(pickup.x) && !Number.isNaN(pickup.y)}
-      <g transform={`translate(${pickup.x*100}, ${pickup.y*100})`}>
-        <line x1="-2.2" y1="-2.2" x2="2.2" y2="2.2" stroke="#ef4444" stroke-width="1.2" stroke-linecap="round"/>
-        <line x1="-2.2" y1="2.2"  x2="2.2" y2="-2.2" stroke="#ef4444" stroke-width="1.2" stroke-linecap="round"/>
-      </g>
+    {#if contestType === 'break' && isSet(pickup)}
+      <circle cx={nx(pickup.x)} cy={ny(pickup.y)} r="1.8" fill="hsl(28 88% 48%)" />
+      <path d={`M ${nx(landing.x)},${ny(landing.y)} L ${nx(pickup.x)},${ny(pickup.y)}`} stroke="hsl(28 88% 48%)" stroke-width="0.8" />
     {/if}
-
-    <text x="2" y="97" font-size="3" fill="#334155AA">
-      {contestType==='break' ? 'Click to set landing, click/right-click for pickup' : 'Click to set landing'}
-    </text>
   </svg>
+
+  <!-- Tiny helper text -->
+  <div class="absolute bottom-1 left-2 text-[11px] text-neutral-500 dark:text-neutral-400 bg-white/70 dark:bg-black/30 px-1.5 py-0.5 rounded">
+    Click to set {contestType === 'break' ? 'landing, then pickup' : 'landing'}
+  </div>
 </div>
+
+<style>
+  :global(.dark) .pitch-grid { color: #4b5563; }
+</style>
