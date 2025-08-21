@@ -1,24 +1,32 @@
-export const WIDTH_M = 90;
-export const LENGTH_M = 145;
+// Field dimensions (metres)
+export const LENGTH_M = 145; // left <-> right (X)
+export const WIDTH_M  = 90;  // top <-> bottom (Y)
 
-// Jersey numbers 2..25 (quick chips)
+// Jersey quick chips 2..25
 export const jerseyNums = Array.from({ length: 24 }, (_, i) => i + 2);
 
-export const toMetersX = (nx) => nx * WIDTH_M;
-export const toMetersY = (ny) => ny * LENGTH_M;
+// In landscape, X is length, Y is width
+export const toMetersX = (nx) => nx * LENGTH_M; // along length
+export const toMetersY = (ny) => ny * WIDTH_M;  // across width
 
-export function depthFromKickerGoal(ny, kickingGoalTop) {
-  const m = toMetersY(ny);
-  return kickingGoalTop ? m : (LENGTH_M - m);
+// Depth is distance from kicker's goal along the length (X axis)
+// NOTE: we continue to use meta.kicking_goal_top to avoid store rename.
+// In landscape, treat "true" as "kicking goal at LEFT".
+export function depthFromKickerGoal(nx, goalAtLeft) {
+  const m = toMetersX(nx);
+  return goalAtLeft ? m : (LENGTH_M - m);
 }
-export function sideBand(nx) {
-  return nx < 1 / 3 ? 'Left' : nx < 2 / 3 ? 'Centre' : 'Right';
+
+// Side bands across the width (Y axis)
+export function sideBand(ny) {
+  return ny < 1/3 ? 'Left' : ny < 2/3 ? 'Centre' : 'Right';
 }
+
 export function depthBand(d) {
   return d < 20 ? 'Short' : d < 45 ? 'Medium' : d < 65 ? 'Long' : 'Very Long';
 }
-export function zoneCode(nx, ny, kickingGoalTop) {
-  const d = depthFromKickerGoal(ny, kickingGoalTop);
-  return `${sideBand(nx)[0]}-${depthBand(d)[0]}`; // e.g. L-S, C-M
-}
 
+export function zoneCode(nx, ny, goalAtLeft) {
+  const d = depthFromKickerGoal(nx, goalAtLeft);
+  return `${sideBand(ny)[0]}-${depthBand(d)[0]}`; // e.g., L-M
+}
