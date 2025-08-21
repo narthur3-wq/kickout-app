@@ -1,17 +1,97 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* ---------- Global light/dark tokens ---------- */
+:root {
+  /* Light */
+  color-scheme: light;
+  --bg:      #f6f8fa;   /* page background */
+  --panel:   #ffffff;   /* cards/panels */
+  --chrome:  #f0f3f7;   /* toolbars/strips */
+  --text:    #0b1220;
+  --muted:   #475569;
+  --border:  #d0d7de;
+  --control: #ffffff;   /* inputs/buttons */
 
-/* Auto-detect dark mode */
+  /* Pitch (light) */
+  --pitch:   #c8e6c9;
+  --line:    #e6f1e6;
+
+  /* Status / accents */
+  --win:     #1B5E20;
+  --loss:    #C81E1E;
+  --accent:  #2563EB;
+  --grid:    #e2e8f0;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
+    /* Dark */
     color-scheme: dark;
+    --bg:      #0b0f14;
+    --panel:   #121821;
+    --chrome:  #0f141b;
+    --text:    #e5edf5;
+    --muted:   #94a3b8;
+    --border:  #243043;
+    --control: #11161d;
+
+    /* Pitch (dark) */
+    --pitch:   #173a24;
+    --line:    #214c31;
+
+    --grid:    #263242;
   }
-  body { background: #0b1210; color: #eef2f1; }
-  .app-header { background:#0b7a55; border-bottom-color: rgba(255,255,255,.12); }
-  .actions-bar{ background:#0e1412; border-top-color:#1f2937; }
-  button{ background:#0f1715; color:#e5e7eb; border-color:#374151; }
-  button:hover{ background:#111c19; }
-  input{ background:#0f1715; color:#e5e7eb; border-color:#374151; }
-  .kpi-table th{ background:#0f1715; }
 }
+
+/* ---------- Base resets using tokens ---------- */
+html, body, #app {
+  background: var(--bg);
+  color: var(--text);
+  height: 100%;
+}
+
+button, input, select, textarea {
+  background: var(--control);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+label { color: var(--muted); }
+
+/* Common app building blocks */
+.card {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.toolbar, .filters, .topbar {
+  background: var(--chrome);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+
+.legend, .pill {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+/* Pitch defaults (catches most SVGs/containers) */
+.pitch-wrap, .pitch, .pitch-container {
+  background: var(--panel);
+}
+.pitch-wrap svg, .pitch svg, svg.pitch {
+  background: var(--pitch);
+}
+.pitch line, .pitch path.lines, .pitch .line {
+  stroke: var(--line);
+}
+
+/* Helpful utility classes */
+.btn         { background: var(--control); color: var(--text); border: 1px solid var(--border); }
+.btn.positive{ background: var(--win); color: #fff; border: none; }
+.btn.danger  { background: var(--loss); color: #fff; border: none; }
+
+.muted { color: var(--muted); }
