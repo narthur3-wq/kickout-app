@@ -1,1 +1,27 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Theme-driven CSS vars for the pitch */
+@layer base {
+  :root {
+    --grid: theme(colors.emerald.200);
+    --border: theme(colors.emerald.600);
+    --pitch: theme(colors.emerald.50);
+  }
+  .dark {
+    --grid: theme(colors.neutral.700);
+    --border: theme(colors.emerald.400);
+    --pitch: theme(colors.neutral.900);
+    color-scheme: dark;
+  }
+}
+
+/* Minimal app chrome */
+:root { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; }
+body { margin: 0; }
+.container { max-width: 1100px; margin: 0 auto; padding: 12px; }
+.topnav { display:flex; gap:8px; align-items:center; padding:8px 12px; border-bottom: 1px solid #e5e7eb; position:sticky; top:0; background:var(--pitch); z-index:10; }
+.topnav .tab { padding:8px 10px; border-radius:8px; border:1px solid transparent; cursor:pointer; }
+.topnav .tab.active { background:#111; color:#fff; border-color:#111; }
+.spacer { flex:1; }
