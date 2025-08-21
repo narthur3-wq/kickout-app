@@ -1,39 +1,31 @@
 <script>
-  import Pitch from "./lib/Pitch.svelte";
-  import PlayerDashboard from "./lib/PlayerDashboard.svelte";
-  import PlayersModal from "./lib/PlayersModal.svelte";
-  import { isModalOpen } from "./stores.js";
+  import Capture from './capture/Capture.svelte';
+  import CoachView from './capture/CoachView.svelte';
+  import Review from './capture/Review.svelte';
+  import { meta } from './stores.js';
 
-  const openModal = () => isModalOpen.set(true);
+  let tab = localStorage.getItem('kickout:tab') || 'live';
+  $: localStorage.setItem('kickout:tab', tab);
+
+  $: {
+    if ($meta.dark) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+  }
 </script>
 
-<main class="min-h-screen bg-slate-50 py-10">
-  <div class="container mx-auto px-4 max-w-7xl space-y-6">
-    <header class="flex items-center justify-between">
-      <h1 class="text-2xl md:text-3xl font-bold text-blue-600">
-        Kickout App
-      </h1>
+<div class="topnav">
+  <button class="tab {tab==='live'?'active':''}" on:click={()=>tab='live'}>Live</button>
+  <button class="tab {tab==='coach'?'active':''}" on:click={()=>tab='coach'}>Coach View</button>
+  <button class="tab {tab==='review'?'active':''}" on:click={()=>tab='review'}>Review</button>
+  <div class="spacer"></div>
+  <label style="display:flex;gap:6px;align-items:center">
+    <input type="checkbox" bind:checked={$meta.dark}> Dark
+  </label>
+  <label style="display:flex;gap:6px;align-items:center">
+    <input type="checkbox" bind:checked={$meta.wake_lock}> Wake-lock
+  </label>
+</div>
 
-      <div class="flex gap-3">
-        <button
-          class="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700"
-          on:click={openModal}
-        >
-          Manage Players
-        </button>
-      </div>
-    </header>
-
-    <div class="grid gap-6 md:grid-cols-3">
-      <section class="md:col-span-2">
-        <Pitch />
-      </section>
-
-      <aside>
-        <PlayerDashboard />
-      </aside>
-    </div>
-  </div>
-
-  <PlayersModal />
-</main>
+{#if tab==='live'} <Capture />
+{:else if tab==='coach'} <CoachView />
+{:else} <Review /> {/if}
