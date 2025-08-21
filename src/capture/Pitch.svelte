@@ -1,15 +1,15 @@
 <script>
   import { createEventDispatcher } from 'svelte';
 
-  export let contestType = 'clean';   // 'clean' | 'break' | 'foul' | 'out'
-  export let landing = {x: NaN, y: NaN};
-  export let pickup  = {x: NaN, y: NaN};
-  export let overlays = [];           // [{x,y,outcome,contest_type,target}]
+  // overlays: [{ x,y, ct:'clean'|'break'|'foul'|'out', side:'us'|'opp', win:boolean, idx?:number }]
+  export let overlays = [];
+  export let landing = { x: NaN, y: NaN };     // tap preview
+  export let showLabels = true;                // numeric labels for recency
 
-  const W = 90, H = 145;  // metres
-  const CX = W/2;
-  const SMALL_W=14, SMALL_D=4.5, LARGE_W=19, LARGE_D=13;
-  const R_D=13, R_40=40;
+  const W = 90, H = 145;                       // metres
+  const CX = W / 2;
+  const SMALL_W = 14, SMALL_D = 4.5, LARGE_W = 19, LARGE_D = 13;
+  const R_D = 13, R_40 = 40;
 
   const dispatch = createEventDispatcher();
   let svgEl;
@@ -17,23 +17,18 @@
   function clientToNorm(evt){
     const rect = svgEl.getBoundingClientRect();
     const x = (evt.clientX - rect.left) / rect.width;
-    const y = (evt.clientY - rect.top)  / rect.height;
+    const y = (evt.clientY - rect.top) / rect.height;
     return { x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) };
   }
+  function onClick(e){ dispatch('landed', clientToNorm(e)); }
 
-  function onClick(e){
-    const p = clientToNorm(e);
-    const hasLanding = Number.isFinite(landing.x) && Number.isFinite(landing.y);
-    const hasPickup = Number.isFinite(pickup.x) && Number.isFinite(pickup.y);
-    if (!hasLanding) {
-      dispatch('landed', p);
-    } else if (contestType === 'break' && !hasPickup) {
-      dispatch('picked', p);
-    } else {
-      // restart
-      dispatch('landed', p);
-      dispatch('picked', {x: NaN, y: NaN});
-    }
+  const RING_US = '#2563eb';   // blue ring for Us
+  const RING_OPP = '#f59e0b';  // amber ring for Opposition
+  const strokeForSide = s => s === 'us' ? RING_US : RING_OPP;
+  const fillForWin = win => win ? '#10b981' : '#ef4444'; // green win / red loss
+
+  function triPath(cx, cy, r){
+    return `M ${cx} ${cy - r} L ${cx - r} ${cy + r/2} L ${cx + r} ${cy + r/2} Z`;
   }
 </script>
 
@@ -41,7 +36,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <svg bind:this={svgEl} tabindex="0" viewBox="0 0 {W} {H}" on:click={onClick}
      style="width:100%; background:var(--pitch); border:1px solid var(--border); border-radius:6px">
-  <!-- grid lines -->
+  <!-- grid -->
   <g stroke="var(--grid)" stroke-width="0.3">
     <line x1={W/3} y1="0" x2={W/3} y2={H} />
     <line x1={2*W/3} y1="0" x2={2*W/3} y2={H} />
@@ -75,17 +70,32 @@
 
   <!-- overlays -->
   {#each overlays as o (o)}
-    <circle cx={o.x*W} cy={o.y*H} r="1.3" fill="hsl(160 60% 35%)" opacity="0.9">
-      <title>{o.target ? `${o.target} — ` : ''}{o.outcome} ({o.contest_type})</title>
-    </circle>
+    {#if o.ct === 'clean'}
+      <circle cx={o.x*W} cy={o.y*H} r="1.7" fill={fillForWin(o.win)} stroke={strokeForSide(o.side)} stroke-width="0.5">
+        <title>{o.side==='us'?'Us':'Opp'} · Clean · {o.win?'Win':'Loss'}</title>
+      </circle>
+    {:else if o.ct === 'break'}
+      <rect x={o.x*W-1.4} y={o.y*H-1.4} width="2.8" height="2.8"
+            transform={`rotate(45 ${o.x*W} ${o.y*H})`} fill={fillForWin(o.win)}
+            stroke={strokeForSide(o.side)} stroke-width="0.5">
+        <title>{o.side==='us'?'Us':'Opp'} · Break · {o.win?'Win':'Loss'}</title>
+      </rect>
+    {:else if o.ct === 'out'}
+      <rect x={o.x*W-1.5} y={o.y*H-1.5} width="3" height="3" fill={fillForWin(o.win)}
+            stroke={strokeForSide(o.side)} stroke-width="0.5">
+        <title>{o.side==='us'?'Us':'Opp'} · Sideline · {o.win?'Win':'Loss'}</title>
+      </rect>
+    {:else if o.ct === 'foul'}
+      <path d={triPath(o.x*W, o.y*H, 1.8)} fill={fillForWin(o.win)} stroke={strokeForSide(o.side)} stroke-width="0.5">
+        <title>{o.side==='us'?'Us':'Opp'} · Foul · {o.win?'Win':'Loss'}</title>
+      </path>
+    {/if}
+    {#if showLabels && o.idx}
+      <text x={o.x*W} y={o.y*H+0.9} text-anchor="middle" font-size="2.6" fill="#fff" stroke="#111" stroke-width="0.2">{o.idx}</text>
+    {/if}
   {/each}
 
-  <!-- active markers -->
   {#if Number.isNaN(landing.x) === false}
-    <circle cx={landing.x*W} cy={landing.y*H} r="1.8" fill="#0a5" />
-  {/if}
-  {#if contestType==='break' && Number.isNaN(pickup.x) === false}
-    <circle cx={pickup.x*W} cy={pickup.y*H} r="1.8" fill="#222" />
-    <line x1={landing.x*W} y1={landing.y*H} x2={pickup.x*W} y2={pickup.y*H} stroke="#222" stroke-width="0.6" />
+    <circle cx={landing.x*W} cy={landing.y*H} r="2.1" fill="#0a5" />
   {/if}
 </svg>
