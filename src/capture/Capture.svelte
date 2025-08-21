@@ -2,130 +2,201 @@
   import Pitch from './Pitch.svelte';
   import { events, meta } from '../stores.js';
   import { onMount } from 'svelte';
-  import { jerseyNums, toMetersX, toMetersY, depthFromKickerGoal, sideBand, depthBand, zoneCode } from './field.js';
+  import {
+    jerseyNums,
+    toMetersX, toMetersY,
+    depthFromKickerGoal, sideBand, depthBand, zoneCode
+  } from './field.js';
 
+  // Contest options
   const CONTESTS = [
-    { key:'clean', label:'Clean' },
-    { key:'break', label:'Break' },
-    { key:'foul',  label:'Foul'  },
-    { key:'out',   label:'Sideline' }
+    { key: 'clean', label: 'Clean'   },
+    { key: 'break', label: 'Break'   },
+    { key: 'foul',  label: 'Foul'    },
+    { key: 'out',   label: 'Sideline'}
   ];
 
-  let side='us', contest='clean', win=true;
-  let landing={x:NaN,y:NaN};
-  let targetPlayer='', oppReceiver='';
-  let overlayFilter='', showStats=true;
+  // --- UI state ---
+  let side = 'us';             // 'us' | 'opp'
+  let contest = 'clean';
+  let win = true;
 
-  // wake lock (optional)
-  let lock=null;
-  async function ensureWake(){ if(!$meta.wake_lock || !('wakeLock' in navigator)) return; try{ lock=await navigator.wakeLock.request('screen'); }catch{} }
-  onMount(()=>{ ensureWake(); document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && (!lock || lock.released)) ensureWake(); }); });
-  $: $meta;
+  let landing = { x: NaN, y: NaN };   // tap preview (normalized 0..1)
+  let targetPlayer = '';              // our receivers
+  let oppReceiver = '';               // opposition receivers
 
-  function onLanding(e){ landing=e.detail; }
+  let overlayFilter = '';             // filter overlays by player/receiver
+  let showStats = true;               // show KPI tables
 
-  // UAT: make Clear Points visibly do something—remove ALL points for the current side (after confirm)
-  function clearPoints(){
-    landing={x:NaN,y:NaN};
-    if (side==='us') targetPlayer=''; else oppReceiver='';
-    const count = $events.filter(e=>e.side===side).length;
-    if (count>0 && confirm(`Remove ${count} ${side==='us'?'our':'opposition'} kickout point(s)?`)){
+  // Orientation helper: home (us) kicks left→right; opposition kicks right→left
+  const goalAtLeftFor = (s) => s === 'us';
+
+  // --- optional wake lock for live use ---
+  let lock = null;
+  async function ensureWake() {
+    if (!$meta.wake_lock || !('wakeLock' in navigator)) return;
+    try { lock = await navigator.wakeLock.request('screen'); } catch {}
+  }
+  onMount(() => {
+    ensureWake();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && (!lock || lock.released)) ensureWake();
+    });
+  });
+  $: $meta; // keep reactive linkage
+
+  // --- pitch interaction ---
+  function onLanding(e) { landing = e.detail; }
+
+  // Clear points: visibly resets preview and (confirm) removes all points for the current side
+  function clearPoints() {
+    landing = { x: NaN, y: NaN };
+    if (side === 'us') targetPlayer = ''; else oppReceiver = '';
+    const count = $events.filter(e => e.side === side).length;
+    if (count > 0 && confirm(`Remove ${count} ${side === 'us' ? 'our' : 'opposition'} kickout point(s)?`)) {
       events.update(list => list.filter(e => e.side !== side));
     }
     navigator.vibrate?.(10);
   }
 
-  function validate(){
-    if (Number.isNaN(landing.x)||Number.isNaN(landing.y)) return 'Tap the pitch to set landing.';
-    if (side==='us'  && !targetPlayer) return 'Tap a receiver number (1–25).';
-    if (side==='opp' && !oppReceiver)  return 'Tap an opposition receiver number (1–25).';
+  function validate() {
+    if (Number.isNaN(landing.x) || Number.isNaN(landing.y)) return 'Tap the pitch to set landing.';
+    if (side === 'us'  && !targetPlayer) return 'Tap a receiver number (1–25).';
+    if (side === 'opp' && !oppReceiver)  return 'Tap an opposition receiver number (1–25).';
     return '';
   }
 
-  const GOAL_AT_LEFT = true;
+  // Build and classify event with correct kicking orientation per side
+  function buildEvent() {
+    const goalAtLeft = goalAtLeftFor(side);          // us: true (L→R), opp: false (R→L)
+    const d = depthFromKickerGoal(landing.x, goalAtLeft);
 
-  function buildEvent(){
-    const d = depthFromKickerGoal(landing.x, GOAL_AT_LEFT);
     return {
       id: Date.now(),
       created_at: new Date().toISOString(),
-      match_date: new Date().toISOString().slice(0,10),
-      team: $meta.team, opponent: $meta.opponent,
-      side, contest_type: contest, win,
-      x: landing.x, y: landing.y,
-      x_m: toMetersX(landing.x), y_m: toMetersY(landing.y),
-      side_band: sideBand(landing.y), depth_band: depthBand(d),
-      zone_code: zoneCode(landing.x, landing.y, GOAL_AT_LEFT),
-      kicking_goal_top: GOAL_AT_LEFT,
-      target_player: side==='us' ? (targetPlayer||'') : '',
-      opponent_receiver: side==='opp' ? (oppReceiver||'') : ''
+      match_date: new Date().toISOString().slice(0, 10),
+
+      team: $meta.team,
+      opponent: $meta.opponent,
+
+      side,                           // 'us' | 'opp'
+      contest_type: contest,          // 'clean' | 'break' | 'foul' | 'out'
+      win,                            // boolean
+
+      // raw normalized coords
+      x: landing.x,
+      y: landing.y,
+
+      // metre conversions
+      x_m: toMetersX(landing.x),
+      y_m: toMetersY(landing.y),
+
+      // classification (now respecting direction per side)
+      side_band:  sideBand(landing.y),
+      depth_band: depthBand(d),
+      zone_code:  zoneCode(landing.x, landing.y, goalAtLeft),
+
+      // retained field; value means "is our goal on the left for this event?"
+      kicking_goal_top: goalAtLeft,
+
+      // receiver labels
+      target_player:     side === 'us'  ? (targetPlayer || '') : '',
+      opponent_receiver: side === 'opp' ? (oppReceiver  || '') : ''
     };
   }
 
-  function saveEvent(){
-    const err=validate(); if (err){ alert(err); return; }
+  function saveEvent() {
+    const err = validate();
+    if (err) { alert(err); return; }
     events.update(list => [buildEvent(), ...list]);
-    landing={x:NaN,y:NaN}; targetPlayer=''; oppReceiver='';
+    landing = { x: NaN, y: NaN };
+    targetPlayer = '';
+    oppReceiver = '';
     navigator.vibrate?.(20);
   }
-  function undoLast(){ events.update(list => list.slice(1)); }
 
-  function exportCSV(){
-    const headers=['id','created_at','match_date','team','opponent','side','contest_type','win','x','y','x_m','y_m','side_band','depth_band','zone_code','kicking_goal_top','target_player','opponent_receiver'];
-    const rows=[headers.join(',')].concat(
-      $events.map(e=>headers.map(h=>{
-        let v=e[h]; if(h==='x_m'||h==='y_m') v=Math.round(Number(v||0));
-        return (typeof v==='number'||typeof v==='boolean')?String(v):'"'+String(v??'').replace(/"/g,'""')+'"';
+  function undoLast() { events.update(list => list.slice(1)); }
+
+  function exportCSV() {
+    const headers = [
+      'id','created_at','match_date','team','opponent',
+      'side','contest_type','win','x','y','x_m','y_m',
+      'side_band','depth_band','zone_code','kicking_goal_top',
+      'target_player','opponent_receiver'
+    ];
+    const rows = [headers.join(',')].concat(
+      $events.map(e => headers.map(h => {
+        let v = e[h];
+        if (h === 'x_m' || h === 'y_m') v = Math.round(Number(v || 0)); // round metres for export
+        return (typeof v === 'number' || typeof v === 'boolean')
+          ? String(v)
+          : '"' + String(v ?? '').replace(/"/g, '""') + '"';
       }).join(','))
     ).join('\n');
-    const url=URL.createObjectURL(new Blob([rows],{type:'text/csv;charset=utf-8;'}));
-    const a=document.createElement('a'); a.href=url; a.download='kickouts.csv'; a.click(); URL.revokeObjectURL(url);
+
+    const url = URL.createObjectURL(new Blob([rows], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'kickouts.csv'; a.click();
+    URL.revokeObjectURL(url);
   }
 
-  // overlays & stats
-  const norm = s => (s||'').trim().toLowerCase();
-  $: sideEventsAll = $events.filter(e=>e.side===side);
-  $: filteredForOverlay = side==='us'
-      ? sideEventsAll.filter(e => overlayFilter ? norm(e.target_player)===norm(overlayFilter) : true)
-      : sideEventsAll.filter(e => overlayFilter ? norm(e.opponent_receiver)===norm(overlayFilter) : true);
-  $: overlays = filteredForOverlay.map(e=>({ x:e.x, y:e.y, ct:e.contest_type, side:e.side, win:!!e.win }));
+  // --- overlays for the pitch (current side, optional filter) ---
+  const norm = s => (s || '').trim().toLowerCase();
+  $: sideEventsAll = $events.filter(e => e.side === side);
+  $: filteredForOverlay = side === 'us'
+    ? sideEventsAll.filter(e => overlayFilter ? norm(e.target_player)     === norm(overlayFilter) : true)
+    : sideEventsAll.filter(e => overlayFilter ? norm(e.opponent_receiver) === norm(overlayFilter) : true);
+  $: overlays = filteredForOverlay.map(e => ({ x: e.x, y: e.y, ct: e.contest_type, side: e.side, win: !!e.win }));
 
-  $: ourPlayerStats = (()=> {
-    const map=new Map(); let total=0;
-    for(const e of $events){ if(e.side!=='us') continue; const k=norm(e.target_player); if(!k) continue;
-      total++; const m=map.get(k)||{label:e.target_player||'—',tot:0,win:0}; m.tot++; if(e.win) m.win++; map.set(k,m);
+  // --- KPI tables (player/receiver aggregates) ---
+  $: ourPlayerStats = (() => {
+    const map = new Map(); let total = 0;
+    for (const e of $events) {
+      if (e.side !== 'us') continue;
+      const k = norm(e.target_player); if (!k) continue;
+      total++;
+      const m = map.get(k) || { label: e.target_player || '—', tot: 0, win: 0 };
+      m.tot++; if (e.win) m.win++; map.set(k, m);
     }
-    const rows=Array.from(map.values()).map(m=>({...m, share:total?Math.round(100*m.tot/total):0})).sort((a,b)=>b.tot-a.tot);
-    return {total, rows};
+    const rows = Array.from(map.values())
+      .map(m => ({ ...m, share: total ? Math.round(100 * m.tot / total) : 0 }))
+      .sort((a, b) => b.tot - a.tot);
+    return { total, rows };
   })();
 
-  $: oppReceiverStats = (()=> {
-    const map=new Map(); let total=0;
-    for(const e of $events){ if(e.side!=='opp') continue; const k=norm(e.opponent_receiver); if(!k) continue;
-      total++; const m=map.get(k)||{label:e.opponent_receiver||'—',tot:0,win:0}; m.tot++; if(e.win) m.win++; map.set(k,m);
+  $: oppReceiverStats = (() => {
+    const map = new Map(); let total = 0;
+    for (const e of $events) {
+      if (e.side !== 'opp') continue;
+      const k = norm(e.opponent_receiver); if (!k) continue;
+      total++;
+      const m = map.get(k) || { label: e.opponent_receiver || '—', tot: 0, win: 0 };
+      m.tot++; if (e.win) m.win++; map.set(k, m);
     }
-    const rows=Array.from(map.values()).map(m=>({...m, share:total?Math.round(100*m.tot/total):0})).sort((a,b)=>b.tot-a.tot);
-    return {total, rows};
+    const rows = Array.from(map.values())
+      .map(m => ({ ...m, share: total ? Math.round(100 * m.tot / total) : 0 }))
+      .sort((a, b) => b.tot - a.tot);
+    return { total, rows };
   })();
 
-  const isChipActive = (n)=> side==='us'? String(n)===targetPlayer : String(n)===oppReceiver;
-  const chooseChip  = (n)=> { if(side==='us') targetPlayer=String(n); else oppReceiver=String(n); };
+  // chips
+  const isChipActive = (n) => side === 'us' ? String(n) === targetPlayer : String(n) === oppReceiver;
+  const chooseChip  = (n) => { if (side === 'us') targetPlayer = String(n); else oppReceiver = String(n); };
 </script>
 
-<!-- Header row: Us/Opp + Result + Contest -->
+<!-- Top row: side + result + contest -->
 <div class="row">
   <div class="seg">
     <div class="segbtns">
-      <button class:active={side==='us'}  on:click={()=>{ side='us'; clearPoints(); }}>Us</button>
-      <button class:active={side==='opp'} on:click={()=>{ side='opp'; clearPoints(); }}>Opposition</button>
+      <button class:active={side==='us'}  on:click={() => { side='us';  clearPoints(); }}>Us</button>
+      <button class:active={side==='opp'} on:click={() => { side='opp'; clearPoints(); }}>Opposition</button>
     </div>
   </div>
 
   <div class="seg">
     <span class="seglabel">Result</span>
     <div class="segbtns">
-      <button class:active={win===true}  on:click={()=> win=true }>Win</button>
-      <button class:active={win===false} on:click={()=> win=false }>Loss</button>
+      <button class:active={win===true}  on:click={() => win = true}>Win</button>
+      <button class:active={win===false} on:click={() => win = false}>Loss</button>
     </div>
   </div>
 
@@ -133,13 +204,13 @@
     <span class="seglabel">Contest</span>
     <div class="segbtns">
       {#each CONTESTS as c}
-        <button class:active={contest===c.key} on:click={()=>{ contest=c.key; }}>{c.label}</button>
+        <button class:active={contest===c.key} on:click={() => { contest = c.key; }}>{c.label}</button>
       {/each}
     </div>
   </div>
 </div>
 
-<!-- Chips -->
+<!-- Receiver chips -->
 <div class="controls">
   <div class="seg">
     <span class="seglabel">{side==='us' ? 'Receivers (tap)' : 'Opp receivers (tap)'}</span>
@@ -149,7 +220,7 @@
           class="chip"
           class:active={isChipActive(n)}
           aria-pressed={isChipActive(n)}
-          on:click={()=>chooseChip(n)}
+          on:click={() => chooseChip(n)}
         >{n}</button>
       {/each}
     </div>
@@ -159,11 +230,11 @@
 <!-- Filters -->
 <div class="controls">
   <input bind:value={overlayFilter} placeholder={side==='us' ? 'All players' : 'All opp receivers'} />
-  <button on:click={()=>overlayFilter=''}>Clear filter</button>
-  <button class="ghost" on:click={()=>showStats=!showStats}>{showStats?'Hide':'Show'} stats</button>
+  <button on:click={() => overlayFilter=''}>Clear filter</button>
+  <button class="ghost" on:click={() => showStats = !showStats}>{showStats ? 'Hide' : 'Show'} stats</button>
 </div>
 
-<!-- Pitch + stacked legend (left edge) -->
+<!-- Pitch + legend -->
 <div class="pitch-wrap">
   <Pitch {overlays} {landing} on:landed={onLanding} />
   <div class="pitch-legend">
@@ -178,13 +249,19 @@
 
 {#if showStats}
   <div class="kpi">
-    {#if side==='us'}
+    {#if side === 'us'}
       <div class="kpi-title">By player</div>
       <table class="kpi-table">
         <thead><tr><th>Player</th><th>Att</th><th>Wins</th><th>Win %</th><th>% of kicks</th></tr></thead>
         <tbody>
           {#each ourPlayerStats.rows as p}
-            <tr><td>{p.label}</td><td>{p.tot}</td><td>{p.win}</td><td>{p.tot?Math.round(100*p.win/p.tot):0}%</td><td>{p.share}%</td></tr>
+            <tr>
+              <td>{p.label}</td>
+              <td>{p.tot}</td>
+              <td>{p.win}</td>
+              <td>{p.tot ? Math.round(100 * p.win / p.tot) : 0}%</td>
+              <td>{p.share}%</td>
+            </tr>
           {/each}
         </tbody>
       </table>
@@ -194,7 +271,13 @@
         <thead><tr><th>Receiver</th><th>Contests</th><th>Wins</th><th>Win %</th><th>% of kicks</th></tr></thead>
         <tbody>
           {#each oppReceiverStats.rows as p}
-            <tr><td>{p.label}</td><td>{p.tot}</td><td>{p.win}</td><td>{p.tot?Math.round(100*p.win/p.tot):0}%</td><td>{p.share}%</td></tr>
+            <tr>
+              <td>{p.label}</td>
+              <td>{p.tot}</td>
+              <td>{p.win}</td>
+              <td>{p.tot ? Math.round(100 * p.win / p.tot) : 0}%</td>
+              <td>{p.share}%</td>
+            </tr>
           {/each}
         </tbody>
       </table>
@@ -202,6 +285,7 @@
   </div>
 {/if}
 
+<!-- Actions -->
 <div class="actions-bar">
   <button on:click={clearPoints}>Clear points</button>
   <button class="danger" on:click={undoLast}>Undo</button>
@@ -226,17 +310,18 @@
   .primary{ background:#111; color:#fff; border-color:#111; }
   .danger{ border-color:#b33; color:#b33; }
 
- .chips-row{ display:flex; gap:6px; flex-wrap:wrap; }
-.chip{
-  min-width:34px; height:34px; border-radius:10px;
-  border:1px solid #d1d5db; background:#fff; color:#111;
-  transition: background .12s, color .12s, border-color .12s, box-shadow .12s;
-}
-.chip.active,
-.chip[aria-pressed="true"]{
-  background:#111; color:#fff; border-color:#111;
-  box-shadow:0 0 0 2px rgba(17,17,17,.08) inset;
-}
+  .chips-row{ display:flex; gap:6px; flex-wrap:wrap; }
+  .chip{
+    min-width:34px; height:34px; border-radius:10px;
+    border:1px solid #d1d5db; background:#fff; color:#111;
+    transition: background .12s, color .12s, border-color .12s, box-shadow .12s;
+  }
+  .chip.active,
+  .chip[aria-pressed="true"]{
+    background:#111; color:#fff; border-color:#111;
+    box-shadow:0 0 0 2px rgba(17,17,17,.08) inset;
+  }
+
   .pitch-wrap{ position:relative; }
   .pitch-legend{
     position:absolute; top:10px; left:12px;
