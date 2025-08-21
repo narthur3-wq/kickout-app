@@ -1,11 +1,12 @@
 <script>
   import { onMount } from 'svelte';
 
-  // ---- Utilities ------------------------------------------------------------
+  // small helper
   const pct = (num, den) => (den ? Math.round((num / den) * 100) : 0);
 
-  let all = [];      // all events
-  let filtered = []; // working copy
+  // storage
+  let all = [];
+  let filtered = [];
 
   onMount(() => {
     try {
@@ -16,13 +17,13 @@
       const data = JSON.parse(raw);
       all = Array.isArray(data) ? data : [];
       filtered = all;
-    } catch (e) {
+    } catch {
       all = [];
       filtered = [];
     }
   });
 
-  // ---- Derived (reactive) data ---------------------------------------------
+  // derived
   $: ours = filtered.filter((p) => p.side === 'us');
   $: theirs = filtered.filter((p) => p.side === 'opp');
 
@@ -39,14 +40,14 @@
   $: oppBreakW = oppBreaks.filter((p) => p.win).length;
 
   function topNTargets(points, n = 5) {
-    const tally = new Map();
+    const m = new Map();
     for (const p of points) {
-      const k = p.rcv ?? '—';
-      const prev = tally.get(k) ?? { att: 0, win: 0 };
-      tally.set(k, { att: prev.att + 1, win: prev.win + (p.win ? 1 : 0) });
+      const key = p.rcv ?? '—';
+      const prev = m.get(key) ?? { att: 0, win: 0 };
+      m.set(key, { att: prev.att + 1, win: prev.win + (p.win ? 1 : 0) });
     }
-    return [...tally.entries()]
-      .map(([k, v]) => ({ key: k, ...v, wPct: pct(v.win, v.att) }))
+    return [...m.entries()]
+      .map(([key, v]) => ({ key, ...v, wPct: pct(v.win, v.att) }))
       .sort((a, b) => b.att - a.att || b.wPct - a.wPct)
       .slice(0, n);
   }
@@ -65,6 +66,7 @@
       .map(([opp, v]) => ({ opp, ...v, wPct: pct(v.win, v.att) }))
       .sort((a, b) => b.att - a.att || b.wPct - a.wPct);
   }
+
   $: tableUsByOpp = byOpponent(ours);
   $: tableOppByOpp = byOpponent(theirs);
 </script>
@@ -116,7 +118,9 @@
     <h3>Our breaks — win %</h3>
     <p class="kpi">
       <strong>{pct(oursBreakW, oursBreaks.length)}%</strong>
-      <span class="muted"> {oursBreakW} W / {oursBreaks.length - oursBreakW} L ({oursBreaks.length} breaks)</span>
+      <span class="muted">
+        {oursBreakW} W / {oursBreaks.length - oursBreakW} L ({oursBreaks.length} breaks)
+      </span>
     </p>
   </div>
 
@@ -124,7 +128,9 @@
     <h3>Opposition breaks — win %</h3>
     <p class="kpi">
       <strong>{pct(oppBreakW, oppBreaks.length)}%</strong>
-      <span class="muted"> {oppBreakW} W / {oppBreaks.length - oppBreakW} L ({oppBreaks.length} breaks)</span>
+      <span class="muted">
+        {oppBreakW} W / {oppBreaks.length - oppBreakW} L ({oppBreaks.length} breaks)
+      </span>
     </p>
   </div>
 
