@@ -1,463 +1,289 @@
-<script lang="ts">
-  /**
-   * Review.svelte — self-contained, production-safe.
-   * - No {@const ...} in markup (works on Vercel).
-   * - Lazy loads html2canvas only when "Download PNG" is clicked.
-   * - Reads data from localStorage('kickouts_v1'). Safe if empty.
-   * - Simple filters + KPIs + breakdowns (opponent, receiver, zones).
-   */
-
-  // ---- Configuration --------------------------------------------------------
-  const STORAGE_KEY = 'kickouts_v1'; // change if your Live tab uses a different key
-
-  // ---- Types (adjust to your schema if required) ----------------------------
-  type Side = 'us' | 'opp';
-  type Contest = 'clean' | 'break' | 'foul' | 'sideline';
-  interface Kickout {
-    // geometry
-    x: number;        // 0..90 field metres (left->right)
-    y: number;        // 0..145 field metres (top->bottom)
-    // tags
-    side: Side;       // 'us' | 'opp'
-    ct: Contest;      // 'clean' | 'break' | 'foul' | 'sideline'
-    win: boolean;     // result (we won the ball?)
-    // optional metadata
-    receiver?: number | string; // jersey number or name
-    opponent?: string;          // opponent team
-    zone?: string;              // your zone code if present
-    ts?: number;                // timestamp
-  }
+<script>
+  import { onMount } from 'svelte';
 
   // ---- Utilities ------------------------------------------------------------
-  const pct = (n: number, d: number) => (d ? Math.round((n / d) * 100) + '%' : '0%');
-  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+  const pct = (num, den) => (den ? Math.round((num / den) * 100) : 0);
 
-  const parseSafe = <T,>(txt: string | null, fallback: T): T => {
-    if (!txt) return fallback;
+  // Defensive copy from localStorage (works on vercel/SSR because it's inside onMount)
+  let all = [];            // all events
+  let filtered = [];       // filtered view on page (date/opponent/type toggles can be added later)
+
+  onMount(() => {
     try {
-      const v = JSON.parse(txt);
-      return Array.isArray(v) ? (v as T) : fallback;
-    } catch {
-      return fallback;
+      // Try a couple of common keys we've used in this project
+      const raw =
+        localStorage.getItem('kickouts_v1') ??
+        localStorage.getItem('kickouts') ??
+        '[]';
+      const data = JSON.parse(raw);
+      // Normalise a little so downstream code doesn't explode if some fields are missing
+      all = Array.isArray(data)
+        ? data.map((p, i) => ({
+            id: p.id ?? i,
+            side: p.side ?? 'us',         // 'us' | 'opp'
+            win: !!p.win,                 // boolean
+            ct: p.ct ?? 'clean',          // 'clean' | 'break' | 'foul' | 'out'
+            rcv: p.rcv ?? p.target ?? null, // receiver/target jersey number if present
+            t: p.t ?? null,               // timestamp if present
+            opp: p.opp ?? p.opponent ?? '', // opponent if present
+          }))
+        : [];
+    } catch (e) {
+      all = [];
     }
-  };
-
-  function loadAll(): Kickout[] {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const arr = parseSafe<Kickout[]>(raw, []);
-    // sanitise coordinates (don’t trust persisted values blindly)
-    for (const k of arr) {
-      k.x = clamp(Number(k.x ?? 0), 0, 90);
-      k.y = clamp(Number(k.y ?? 0), 0, 145);
-    }
-    return arr;
-  }
-
-  // simple group-by returning array of [key, rows]
-  function groupBy<T, K extends string | number | undefined>(
-    rows: T[],
-    keySel: (r: T) => K
-  ): Array<[K extends undefined ? '—' : K, T[]]> {
-    const m = new Map<any, T[]>();
-    for (const r of rows) {
-      const k = keySel(r) ?? '—';
-      m.set(k, [...(m.get(k) ?? []), r]);
-    }
-    return Array.from(m.entries()) as any;
-  }
-
-  // sort helpers
-  const byDesc = <T,>(sel: (x: T) => number) => (a: T, b: T) => sel(b) - sel(a);
-
-  // ---- State ----------------------------------------------------------------
-  let all: Kickout[] = loadAll();
-
-  // re-load when another tab saves
-  const onStorage = (e: StorageEvent) => {
-    if (e.key === STORAGE_KEY) {
-      all = loadAll();
-    }
-  };
-  if (typeof window !== 'undefined') {
-    window.addEventListener('storage', onStorage);
-  }
-
-  // filters
-  let fSide: 'all' | Side = 'all';
-  let fContest: 'all' | Contest = 'all';
-
-  // derived: filtered rows
-  $: filtered = all.filter((k) => {
-    if (fSide !== 'all' && k.side !== fSide) return false;
-    if (fContest !== 'all' && k.ct !== fContest) return false;
-    return true;
+    filtered = all; // no filters yet (kept for future)
   });
 
-  // derived: ours / opp
-  $: ours = filtered.filter((k) => k.side === 'us');
-  $: opp  = filtered.filter((k) => k.side === 'opp');
+  // ---- Derived (reactive) data ---------------------------------------------
+  // split by side
+  $: ours = filtered.filter((p) => p.side === 'us');
+  $: theirs = filtered.filter((p) => p.side === 'opp');
 
-  // KPI counts
-  $: oursWins   = ours.filter((k) => k.win).length;
-  $: oursTotal  = ours.length;
-  $: oursLosses = Math.max(oursTotal - oursWins, 0);
+  // win/loss breakdown
+  $: oursW = ours.filter((p) => p.win).length;
+  $: oursL = ours.length - oursW;
 
-  $: oppWins   = opp.filter((k) => k.win).length;
-  $: oppTotal  = opp.length;
-  $: oppLosses = Math.max(oppTotal - oppWins, 0);
+  $: oppW = theirs.filter((p) => p.win).length; // opposition wins on *their* kickouts
+  $: oppL = theirs.length - oppW;
 
-  // breakdowns
-  $: byOpponent = groupBy(filtered, (k) => k.opponent).sort(
-    byDesc(([_, rows]) => rows.length)
-  );
-  $: byReceiver = groupBy(filtered, (k) => k.receiver as any).sort(
-    byDesc(([_, rows]) => rows.length)
-  );
-  $: byZone     = groupBy(filtered, (k) => k.zone).sort(
-    byDesc(([_, rows]) => rows.length)
-  );
+  // breaks only (coach asked to focus on breaks more than “clean”)
+  $: oursBreaks = ours.filter((p) => p.ct === 'break');
+  $: oursBreakW = oursBreaks.filter((p) => p.win).length;
 
-  // ---- Exporters ------------------------------------------------------------
-  function toCsv(rows: Kickout[]): string {
-    const heads = [
-      'ts', 'side', 'contest', 'win', 'x', 'y', 'receiver', 'opponent', 'zone'
-    ];
-    const esc = (v: any) =>
-      v == null ? '' : String(v).includes(',') || String(v).includes('"')
-        ? `"${String(v).replace(/"/g, '""')}"`
-        : String(v);
-    const body = rows
-      .map((r) =>
-        [
-          r.ts ?? '',
-          r.side ?? '',
-          r.ct ?? '',
-          r.win ? 1 : 0,
-          r.x ?? '',
-          r.y ?? '',
-          r.receiver ?? '',
-          r.opponent ?? '',
-          r.zone ?? ''
-        ]
-          .map(esc)
-          .join(',')
-      )
-      .join('\n');
-    return heads.join(',') + '\n' + body + '\n';
+  $: oppBreaks = theirs.filter((p) => p.ct === 'break');
+  $: oppBreakW = oppBreaks.filter((p) => p.win).length;
+
+  // simple “top targets” (by jersey/receiver number if present)
+  function topNTargets(points, n = 5) {
+    const tally = new Map();
+    for (const p of points) {
+      const k = p.rcv ?? '—';
+      const prev = tally.get(k) ?? { att: 0, win: 0 };
+      tally.set(k, { att: prev.att + 1, win: prev.win + (p.win ? 1 : 0) });
+    }
+    return [...tally.entries()]
+      .map(([k, v]) => ({ key: k, ...v, wPct: pct(v.win, v.att) }))
+      .sort((a, b) => b.att - a.att || b.wPct - a.wPct)
+      .slice(0, n);
   }
 
-  function downloadCsv() {
-    const csv = toCsv(filtered);
+  $: topUs = topNTargets(ours);
+  $: topOpp = topNTargets(theirs);
+
+  // group by opponent (very light – just counts & win%)
+  function byOpponent(points) {
+    const m = new Map();
+    for (const p of points) {
+      const k = p.opp || '—';
+      const prev = m.get(k) ?? { att: 0, win: 0 };
+      m.set(k, { att: prev.att + 1, win: prev.win + (p.win ? 1 : 0) });
+    }
+    return [...m.entries()]
+      .map(([opp, v]) => ({ opp, ...v, wPct: pct(v.win, v.att) }))
+      .sort((a, b) => b.att - a.att || b.wPct - a.wPct);
+  }
+  $: tableUsByOpp = byOpponent(ours);
+  $: tableOppByOpp = byOpponent(theirs);
+
+  // export helpers ------------------------------------------------------------
+  function exportCSV() {
+    const rows = [
+      ['side', 'win', 'ct', 'rcv', 'opp', 't'],
+      ...all.map((p) => [p.side, p.win ? 1 : 0, p.ct, p.rcv ?? '', p.opp ?? '', p.t ?? '']),
+    ];
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
+    a.href = url;
     a.download = 'kickouts.csv';
     a.click();
-    URL.revokeObjectURL(a.href);
+    URL.revokeObjectURL(url);
   }
 
-  async function downloadPng() {
-    // Lazy import — page still works if the lib is missing
-    let html2canvas: any;
-    try {
-      ({ default: html2canvas } = await import('html2canvas'));
-    } catch {
-      alert(
-        'html2canvas is not installed in production.\n\nAdd "html2canvas": "^1.4.1" to dependencies to enable PNG export.'
-      );
-      return;
-    }
-    const node = document.getElementById('review-root');
-    if (!node) return;
-    const canvas = await html2canvas(node, {
-      backgroundColor: getComputedStyle(document.documentElement)
-        .getPropertyValue('--page-bg')
-        .trim() || '#ffffff',
-      scale: window.devicePixelRatio || 1
-    });
+  // optional: export dashboard screenshot without breaking SSR
+  async function exportPNG() {
+    // dynamic import so builds don’t choke
+    const { default: html2canvas } = await import('html2canvas');
+    const el = document.getElementById('review-root');
+    if (!el) return;
+    const canvas = await html2canvas(el, { backgroundColor: null, scale: 2 });
+    const url = canvas.toDataURL('image/png');
     const a = document.createElement('a');
-    a.href = canvas.toDataURL('image/png');
-    a.download = 'kickouts.png';
+    a.href = url;
+    a.download = 'kickout-review.png';
     a.click();
   }
-
-  // ---- clean-up -------------------------------------------------------------
-  import { onDestroy } from 'svelte';
-  onDestroy(() => {
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('storage', onStorage);
-    }
-  });
 </script>
 
-<!-- =========================  VIEW  ====================================== -->
-<div class="page" id="review-root">
-  <header class="toolbar">
-    <div class="filters">
-      <div class="group">
-        <label>Side</label>
-        <div class="seg">
-          <button class:selected={fSide === 'all'} on:click={() => (fSide = 'all')}>All</button>
-          <button class:selected={fSide === 'us'} on:click={() => (fSide = 'us')}>Us</button>
-          <button class:selected={fSide === 'opp'} on:click={() => (fSide = 'opp')}>Opposition</button>
-        </div>
-      </div>
-
-      <div class="group">
-        <label>Contest</label>
-        <div class="seg">
-          <button class:selected={fContest === 'all'} on:click={() => (fContest = 'all')}>All</button>
-          <button class:selected={fContest === 'clean'} on:click={() => (fContest = 'clean')}>Clean</button>
-          <button class:selected={fContest === 'break'} on:click={() => (fContest = 'break')}>Break</button>
-          <button class:selected={fContest === 'foul'} on:click={() => (fContest = 'foul')}>Foul</button>
-          <button class:selected={fContest === 'sideline'} on:click={() => (fContest = 'sideline')}>Sideline</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="actions">
-      <button on:click={downloadCsv} class="ghost">Export CSV</button>
-      <button on:click={downloadPng} class="primary">Download PNG</button>
-    </div>
-  </header>
-
-  <section class="kpis">
-    <div class="card">
-      <h3>Our kickouts — win rate</h3>
-      <p class="big">{pct(oursWins, oursTotal)}</p>
-      <p>{oursWins} W / {oursLosses} L <span class="muted">({oursTotal} total)</span></p>
-    </div>
-
-    <div class="card">
-      <h3>Opposition kickouts — win rate</h3>
-      <p class="big">{pct(oppWins, oppTotal)}</p>
-      <p>{oppWins} W / {oppLosses} L <span class="muted">({oppTotal} total)</span></p>
-    </div>
-  </section>
-
-  <section class="grid">
-    <div class="card span-2">
-      <div class="title">By opponent</div>
-      {#if byOpponent.length === 0}
-        <p class="empty">No data to show.</p>
-      {:else}
-        <table class="kpi">
-          <thead>
-            <tr>
-              <th>Opponent</th>
-              <th>Total</th>
-              <th>Win %</th>
-              <th>Wins</th>
-              <th>Losses</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each byOpponent as [name, rows]}
-              {#key name}
-                <tr>
-                  <td>{name}</td>
-                  <td>{rows.length}</td>
-                  <td>{pct(rows.filter(r => r.win).length, rows.length)}</td>
-                  <td>{rows.filter(r => r.win).length}</td>
-                  <td>{rows.length - rows.filter(r => r.win).length}</td>
-                </tr>
-              {/key}
-            {/each}
-          </tbody>
-        </table>
-      {/if}
-    </div>
-
-    <div class="card span-2">
-      <div class="title">Top receivers</div>
-      {#if byReceiver.length === 0}
-        <p class="empty">No data to show.</p>
-      {:else}
-        <table class="kpi">
-          <thead>
-            <tr>
-              <th>Player</th>
-              <th>Total</th>
-              <th>Win %</th>
-              <th>Wins</th>
-              <th>Losses</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each byReceiver.slice(0, 15) as [name, rows]}
-              {#key name}
-                <tr>
-                  <td>{name}</td>
-                  <td>{rows.length}</td>
-                  <td>{pct(rows.filter(r => r.win).length, rows.length)}</td>
-                  <td>{rows.filter(r => r.win).length}</td>
-                  <td>{rows.length - rows.filter(r => r.win).length}</td>
-                </tr>
-              {/key}
-            {/each}
-          </tbody>
-        </table>
-      {/if}
-    </div>
-
-    <div class="card span-2">
-      <div class="title">Zones</div>
-      {#if byZone.length === 0}
-        <p class="empty">No data to show.</p>
-      {:else}
-        <table class="kpi">
-          <thead>
-            <tr>
-              <th>Zone</th>
-              <th>Total</th>
-              <th>Win %</th>
-              <th>Wins</th>
-              <th>Losses</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each byZone as [z, rows]}
-              {#key z}
-                <tr>
-                  <td>{z}</td>
-                  <td>{rows.length}</td>
-                  <td>{pct(rows.filter(r => r.win).length, rows.length)}</td>
-                  <td>{rows.filter(r => r.win).length}</td>
-                  <td>{rows.length - rows.filter(r => r.win).length}</td>
-                </tr>
-              {/key}
-            {/each}
-          </tbody>
-        </table>
-      {/if}
-    </div>
-  </section>
-
-  {#if filtered.length === 0}
-    <div class="empty-state">
-      <p>No kickouts found. Capture some on the Live tab, then return here.</p>
-    </div>
-  {/if}
-</div>
-
 <style>
-  :root {
-    --page-bg: #ffffff;
-    --card-bg: #f7f9fb;
-    --muted: #6b7280;
-    --text: #0f172a;
-    --border: #e5e7eb;
-    --brand: #0ea5e9;
-    --brand-ink: #0b67a3;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --page-bg: #0b1520;
-      --card-bg: #0f1b2a;
-      --muted: #9aa5b1;
-      --text: #f3f4f6;
-      --border: #243143;
-      --brand: #38bdf8;
-      --brand-ink: #1e90d0;
-    }
-  }
-
-  .page {
-    background: var(--page-bg);
-    color: var(--text);
+  .wrap {
+    max-width: 1200px;
+    margin: 0 auto;
     padding: 1rem;
-    min-height: 100%;
-  }
-
-  .toolbar {
-    display: flex;
-    gap: 1rem;
-    align-items: end;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    margin-bottom: 1rem;
-  }
-
-  .filters {
-    display: flex;
-    gap: 1.5rem;
-    flex-wrap: wrap;
-  }
-  .group { display: grid; gap: .25rem; }
-  .group label { font-size: .85rem; color: var(--muted); }
-
-  .seg { display: inline-flex; padding: .25rem; background: var(--card-bg); border-radius: .5rem; gap: .25rem; }
-  .seg button {
-    border: 1px solid var(--border);
-    background: transparent;
-    padding: .35rem .6rem;
-    border-radius: .4rem;
-    cursor: pointer;
-    color: var(--text);
-  }
-  .seg button.selected {
-    background: var(--brand);
-    color: white;
-    border-color: transparent;
-  }
-
-  .actions { display: flex; gap: .5rem; }
-  .actions .ghost, .actions .primary {
-    border-radius: .5rem;
-    padding: .5rem .75rem;
-    border: 1px solid var(--border);
-    background: var(--card-bg);
-    cursor: pointer;
-    color: var(--text);
-  }
-  .actions .primary {
-    background: var(--brand);
-    border-color: transparent;
-    color: white;
-  }
-
-  .kpis {
     display: grid;
-    grid-template-columns: repeat(2, minmax(220px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1rem;
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(320px, 1fr));
+    grid-template-columns: 1fr 1fr;
     gap: 1rem;
   }
-
   .card {
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: .75rem;
-    padding: 1rem;
+    background: var(--card, #fff);
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 14px;
   }
-  .card .title { font-weight: 600; margin-bottom: .5rem; }
-  .card .big  { font-size: 2rem; font-weight: 700; margin: .25rem 0; }
-  .muted { color: var(--muted); }
-
-  .span-2 { grid-column: span 2; }
-
-  table.kpi {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: .95rem;
-  }
-  table.kpi th, table.kpi td {
-    padding: .5rem .6rem;
-    border-bottom: 1px solid var(--border);
-    text-align: left;
-  }
-  table.kpi thead th { color: var(--muted); font-weight: 600; }
-
-  .empty, .empty-state {
-    color: var(--muted);
-    padding: .5rem 0;
-  }
-  .empty-state {
-    text-align: center;
-    padding: 1.5rem 0;
+  h2,h3 { margin: 0 0 .5rem 0; }
+  .kpi { font-size: 0.95rem; }
+  .muted { color: #6b7280; font-weight: 500; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+  .right { text-align: right; }
+  .btnrow { display:flex; gap:.5rem; margin: 1rem auto; max-width: 1200px; padding:0 1rem; }
+  .btn { border: 1px solid #d1d5db; background:#fff; border-radius:8px; padding:.5rem .75rem; cursor:pointer; }
+  .btn:hover { background:#f9fafb; }
+  @media (max-width: 900px){
+    .wrap{ grid-template-columns: 1fr; }
   }
 </style>
+
+<div class="btnrow">
+  <button class="btn" on:click={exportCSV}>Export CSV</button>
+  <button class="btn" on:click={exportPNG}>Save dashboard PNG</button>
+</div>
+
+<div id="review-root" class="wrap">
+  <!-- Overall win/loss (our kickouts) -->
+  <div class="card">
+    <h3>Our kickouts — win rate</h3>
+    <p class="kpi">
+      <strong>{pct(oursW, ours.length)}%</strong>
+      <span class="muted"> {oursW} W / {oursL} L ({ours.length} total)</span>
+    </p>
+  </div>
+
+  <!-- Opposition kickouts -->
+  <div class="card">
+    <h3>Opposition kickouts — win rate</h3>
+    <p class="kpi">
+      <strong>{pct(oppW, theirs.length)}%</strong>
+      <span class="muted"> {oppW} W / {oppL} L ({theirs.length} total)</span>
+    </p>
+  </div>
+
+  <!-- Breaks (us) -->
+  <div class="card">
+    <h3>Our breaks — win %</h3>
+    <p class="kpi">
+      <strong>{pct(oursBreakW, oursBreaks.length)}%</strong>
+      <span class="muted"> {oursBreakW} W / {oursBreaks.length - oursBreakW} L ({oursBreaks.length} breaks)</span>
+    </p>
+  </div>
+
+  <!-- Breaks (opp) -->
+  <div class="card">
+    <h3>Opposition breaks — win %</h3>
+    <p class="kpi">
+      <strong>{pct(oppBreakW, oppBreaks.length)}%</strong>
+      <span class="muted"> {oppBreakW} W / {oppBreaks.length - oppBreakW} L ({oppBreaks.length} breaks)</span>
+    </p>
+  </div>
+
+  <!-- Top 5 targets (us) -->
+  <div class="card">
+    <h3>Top 5 — our targets</h3>
+    {#if topUs.length}
+      <table>
+        <thead>
+          <tr><th>Player</th><th class="right">Attempts</th><th class="right">Win %</th></tr>
+        </thead>
+        <tbody>
+          {#each topUs as r}
+            <tr>
+              <td>#{r.key}</td>
+              <td class="right">{r.att}</td>
+              <td class="right">{r.wPct}%</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {:else}
+      <p class="muted">No data.</p>
+    {/if}
+  </div>
+
+  <!-- Top 5 targets (opposition) -->
+  <div class="card">
+    <h3>Top 5 — opposition receivers</h3>
+    {#if topOpp.length}
+      <table>
+        <thead>
+          <tr><th>Player</th><th class="right">Attempts</th><th class="right">Win %</th></tr>
+        </thead>
+        <tbody>
+          {#each topOpp as r}
+            <tr>
+              <td>#{r.key}</td>
+              <td class="right">{r.att}</td>
+              <td class="right">{r.wPct}%</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {:else}
+      <p class="muted">No data.</p>
+    {/if}
+  </div>
+
+  <!-- By opponent (our kickouts) -->
+  <div class="card">
+    <h3>By opponent (our kickouts)</h3>
+    {#if tableUsByOpp.length}
+      <table>
+        <thead>
+          <tr>
+            <th>Opponent</th>
+            <th class="right">Total</th>
+            <th class="right">Win %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each tableUsByOpp as r}
+            <tr>
+              <td>{r.opp}</td>
+              <td class="right">{r.att}</td>
+              <td class="right">{r.wPct}%</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {:else}
+      <p class="muted">No data.</p>
+    {/if}
+  </div>
+
+  <!-- By opponent (opposition kickouts) -->
+  <div class="card">
+    <h3>By opponent (opposition kickouts)</h3>
+    {#if tableOppByOpp.length}
+      <table>
+        <thead>
+          <tr>
+            <th>Opponent</th>
+            <th class="right">Total</th>
+            <th class="right">Win %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each tableOppByOpp as r}
+            <tr>
+              <td>{r.opp}</td>
+              <td class="right">{r.att}</td>
+              <td class="right">{r.wPct}%</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {:else}
+      <p class="muted">No data.</p>
+    {/if}
+  </div>
+</div>
