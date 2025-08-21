@@ -23,7 +23,7 @@
     }
   });
 
-  // derived
+  // derived (reactive)
   $: ours = filtered.filter((p) => p.side === 'us');
   $: theirs = filtered.filter((p) => p.side === 'opp');
 
@@ -86,14 +86,14 @@
     border-radius: 10px;
     padding: 14px;
   }
-  h2,h3 { margin: 0 0 .5rem 0; }
+  h2, h3 { margin: 0 0 .5rem 0; }
   .kpi { font-size: 0.95rem; }
   .muted { color: #6b7280; font-weight: 500; }
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
   .right { text-align: right; }
   @media (max-width: 900px){
-    .wrap{ grid-template-columns: 1fr; }
+    .wrap { grid-template-columns: 1fr; }
   }
 </style>
 
