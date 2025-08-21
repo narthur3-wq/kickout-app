@@ -1,12 +1,21 @@
 <script>
   import { createEventDispatcher } from 'svelte';
 
-  // overlays: [{ x,y, ct:'clean'|'break'|'foul'|'out', side:'us'|'opp', win:boolean, idx?:number }]
+  /**
+   * overlays: Array<{
+   *   x:number, y:number,               // 0..1 normalised
+   *   ct:'clean'|'break'|'foul'|'out',  // contest type
+   *   side:'us'|'opp',
+   *   win:boolean,
+   *   idx?:number                       // recency label (1..N)
+   * }>
+   */
   export let overlays = [];
-  export let landing = { x: NaN, y: NaN };     // tap preview
-  export let showLabels = true;                // numeric labels for recency
+  export let landing = { x: NaN, y: NaN }; // current tap preview
+  export let showLabels = true;
 
-  const W = 90, H = 145;                       // metres
+  // Pitch geometry (metres)
+  const W = 90, H = 145;
   const CX = W / 2;
   const SMALL_W = 14, SMALL_D = 4.5, LARGE_W = 19, LARGE_D = 13;
   const R_D = 13, R_40 = 40;
@@ -32,11 +41,16 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<svg bind:this={svgEl} tabindex="0" viewBox="0 0 {W} {H}" on:click={onClick}
-     style="width:100%; background:var(--pitch); border:1px solid var(--border); border-radius:6px">
-  <!-- grid -->
+<svg
+  bind:this={svgEl}
+  viewBox="0 0 {W} {H}"
+  role="button"
+  tabindex="0"
+  on:click={onClick}
+  on:keydown={(e)=>{ if (e.key==='Enter' || e.key===' ') { e.preventDefault(); onClick(e); } }}
+  style="width:100%; background:var(--pitch); border:1px solid var(--border); border-radius:6px"
+>
+  <!-- vertical thirds + horizontal guides -->
   <g stroke="var(--grid)" stroke-width="0.3">
     <line x1={W/3} y1="0" x2={W/3} y2={H} />
     <line x1={2*W/3} y1="0" x2={2*W/3} y2={H} />
@@ -50,26 +64,26 @@
 
   <!-- rectangles -->
   <g stroke="#222" stroke-width="0.6" fill="none">
-    <rect x={CX-LARGE_W/2} y="0" width={LARGE_W} height={LARGE_D} />
-    <rect x={CX-SMALL_W/2} y="0" width={SMALL_W} height={SMALL_D} />
-    <rect x={CX-LARGE_W/2} y={H-LARGE_D} width={LARGE_W} height={LARGE_D} />
-    <rect x={CX-SMALL_W/2} y={H-SMALL_D} width={SMALL_W} height={SMALL_D} />
+    <rect x={CX-LARGE_W/2} y="0"             width={LARGE_W} height={LARGE_D} />
+    <rect x={CX-SMALL_W/2} y="0"             width={SMALL_W} height={SMALL_D} />
+    <rect x={CX-LARGE_W/2} y={H-LARGE_D}     width={LARGE_W} height={LARGE_D} />
+    <rect x={CX-SMALL_W/2} y={H-SMALL_D}     width={SMALL_W} height={SMALL_D} />
   </g>
 
   <!-- 13m D arcs -->
   <g stroke="#444" stroke-width="0.7" fill="none">
-    <path d="M {CX-R_D} 20 A {R_D} {R_D} 0 0 0 {CX+R_D} 20" />
-    <path d="M {CX-R_D} {H-20} A {R_D} {R_D} 0 0 1 {CX+R_D} {H-20}" />
+    <path d={`M ${CX-R_D} 20 A ${R_D} ${R_D} 0 0 0 ${CX+R_D} 20`} />
+    <path d={`M ${CX-R_D} ${H-20} A ${R_D} ${R_D} 0 0 1 ${CX+R_D} ${H-20}`} />
   </g>
 
   <!-- 40m dashed arcs -->
   <g stroke="#666" stroke-width="0.6" stroke-dasharray="3 3" fill="none">
-    <path d="M {CX-R_40} 0 A {R_40} {R_40} 0 0 0 {CX+R_40} 0" />
-    <path d="M {CX-R_40} {H} A {R_40} {R_40} 0 0 1 {CX+R_40} {H}" />
+    <path d={`M ${CX-R_40} 0 A ${R_40} ${R_40} 0 0 0 ${CX+R_40} 0`} />
+    <path d={`M ${CX-R_40} ${H} A ${R_40} ${R_40} 0 0 1 ${CX+R_40} ${H}`} />
   </g>
 
   <!-- overlays -->
-  {#each overlays as o (o)}
+  {#each overlays as o}
     {#if o.ct === 'clean'}
       <circle cx={o.x*W} cy={o.y*H} r="1.7" fill={fillForWin(o.win)} stroke={strokeForSide(o.side)} stroke-width="0.5">
         <title>{o.side==='us'?'Us':'Opp'} · Clean · {o.win?'Win':'Loss'}</title>
@@ -95,6 +109,7 @@
     {/if}
   {/each}
 
+  <!-- active tap preview -->
   {#if Number.isNaN(landing.x) === false}
     <circle cx={landing.x*W} cy={landing.y*H} r="2.1" fill="#0a5" />
   {/if}
