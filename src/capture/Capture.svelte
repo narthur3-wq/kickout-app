@@ -2,7 +2,11 @@
   import Pitch from './Pitch.svelte';
   import { events, meta } from '../stores.js';
   import { onMount } from 'svelte';
-  import { jerseyNums, toMetersX, toMetersY, depthFromKickerGoal, sideBand, depthBand, zoneCode } from './field.js';
+  import {
+    jerseyNums,
+    toMetersX, toMetersY,
+    depthFromKickerGoal, sideBand, depthBand, zoneCode
+  } from './field.js';
 
   const SIDES = ['us','opp'];
   const CONTESTS = [
@@ -17,14 +21,14 @@
   let win=true;
 
   let landing={x:NaN,y:NaN};
-  let targetPlayer='';
-  let presserPlayer='';
-  let oppReceiver='';
+  let targetPlayer='';   // when we kick
+  let presserPlayer='';  // when they kick
+  let oppReceiver='';    // optional
 
   let showNumbers=true;
   let overlayFilter='';
 
-  // Wake-lock
+  // Wake-lock (optional, guarded)
   let lock=null;
   async function ensureWake() {
     if (!$meta.wake_lock || !('wakeLock' in navigator)) return;
@@ -37,7 +41,7 @@
     });
   });
 
-  $: $meta;
+  $: $meta; // keep store reactive in this component
 
   function onLanding(e){ landing=e.detail; }
   function clearPoints(){ landing={x:NaN,y:NaN}; }
@@ -94,13 +98,14 @@
     const a=document.createElement('a'); a.href=url; a.download='kickouts.csv'; a.click(); URL.revokeObjectURL(url);
   }
 
-  // Overlay + KPIs
+  // ---------- overlays & KPIs ----------
   const norm = s => (s||'').trim().toLowerCase();
 
   $: sideEventsAll = $events.filter(e=>e.side===side);
+
   $: filteredForOverlay = side==='us'
-      ? sideEventsAll.filter(e => overlayFilter ? norm(e.target_player)===norm(overlayFilter) : true)
-      : sideEventsAll.filter(e => overlayFilter ? (norm(e.presser_player)===norm(overlayFilter) || norm(e.opponent_receiver)===norm(overlayFilter)) : true);
+    ? sideEventsAll.filter(e => overlayFilter ? norm(e.target_player)===norm(overlayFilter) : true)
+    : sideEventsAll.filter(e => overlayFilter ? (norm(e.presser_player)===norm(overlayFilter) || norm(e.opponent_receiver)===norm(overlayFilter)) : true);
 
   $: overlays = filteredForOverlay.map((e,i)=>({
     x:e.x, y:e.y, idx: filteredForOverlay.length - i,
@@ -125,11 +130,48 @@
     return Array.from(map.values()).sort((a,b)=>b.tot-a.tot);
   })();
 
-  // choices for datalists
+  // datalist choices
   $: ourReceiverChoices = Array.from(new Set($events.filter(e=>e.side==='us').map(e=>e.target_player).filter(Boolean))).sort();
-  $: presserChoices = Array.from(new Set($events.filter(e=>e.side==='opp').map(e=>e.presser_player).filter(Boolean))).sort();
+  $: presserChoices     = Array.from(new Set($events.filter(e=>e.side==='opp').map(e=>e.presser_player).filter(Boolean))).sort();
   $: oppReceiverChoices = Array.from(new Set($events.filter(e=>e.side==='opp').map(e=>e.opponent_receiver).filter(Boolean))).sort();
 </script>
 
-<!-- (template + styles omitted for brevity since identical to prior message) -->
-<!-- Use the same <div class="container"> … </div> and <style> … </style> content I provided above. -->
+<div class="container">
+  <h1>Kickout — Live</h1>
+
+  <div class="controls">
+    <div class="seg">
+      <label>Kicking team</label>
+      <div class="segbtns">
+        {#each SIDES as s}
+          <button class:active={side===s} on:click={()=>{ side=s; clearPoints(); }}>{s==='us'?'Us':'Opposition'}</button>
+        {/each}
+      </div>
+    </div>
+    <label><input type="checkbox" bind:checked={$meta.kicking_goal_top}/> Kicking goal at top</label>
+    <label>Team <input bind:value={$meta.team} placeholder="Our team" /></label>
+    <label>Opponent <input bind:value={$meta.opponent} placeholder="Opposition" /></label>
+  </div>
+
+  <div class="controls">
+    <div class="seg">
+      <label>Contest</label>
+      <div class="segbtns">
+        {#each CONTESTS as c}
+          <button class:active={contest===c.key} on:click={()=>{ contest=c.key; }}>{c.label}</button>
+        {/each}
+      </div>
+    </div>
+    <div class="seg">
+      <label>Result</label>
+      <div class="segbtns">
+        <button class:active={win===true}  on:click={()=> win=true }>Win</button>
+        <button class:active={win===false} on:click={()=> win=false }>Loss</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    {#if side==='us'}
+      <div class="seg">
+        <label>Re
