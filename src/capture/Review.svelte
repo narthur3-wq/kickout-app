@@ -4,56 +4,40 @@
   // ---- Utilities ------------------------------------------------------------
   const pct = (num, den) => (den ? Math.round((num / den) * 100) : 0);
 
-  // Defensive copy from localStorage (works on vercel/SSR because it's inside onMount)
-  let all = [];            // all events
-  let filtered = [];       // filtered view on page (date/opponent/type toggles can be added later)
+  let all = [];      // all events
+  let filtered = []; // working copy
 
   onMount(() => {
     try {
-      // Try a couple of common keys we've used in this project
       const raw =
         localStorage.getItem('kickouts_v1') ??
         localStorage.getItem('kickouts') ??
         '[]';
       const data = JSON.parse(raw);
-      // Normalise a little so downstream code doesn't explode if some fields are missing
-      all = Array.isArray(data)
-        ? data.map((p, i) => ({
-            id: p.id ?? i,
-            side: p.side ?? 'us',         // 'us' | 'opp'
-            win: !!p.win,                 // boolean
-            ct: p.ct ?? 'clean',          // 'clean' | 'break' | 'foul' | 'out'
-            rcv: p.rcv ?? p.target ?? null, // receiver/target jersey number if present
-            t: p.t ?? null,               // timestamp if present
-            opp: p.opp ?? p.opponent ?? '', // opponent if present
-          }))
-        : [];
+      all = Array.isArray(data) ? data : [];
+      filtered = all;
     } catch (e) {
       all = [];
+      filtered = [];
     }
-    filtered = all; // no filters yet (kept for future)
   });
 
   // ---- Derived (reactive) data ---------------------------------------------
-  // split by side
   $: ours = filtered.filter((p) => p.side === 'us');
   $: theirs = filtered.filter((p) => p.side === 'opp');
 
-  // win/loss breakdown
   $: oursW = ours.filter((p) => p.win).length;
   $: oursL = ours.length - oursW;
 
-  $: oppW = theirs.filter((p) => p.win).length; // opposition wins on *their* kickouts
+  $: oppW = theirs.filter((p) => p.win).length;
   $: oppL = theirs.length - oppW;
 
-  // breaks only (coach asked to focus on breaks more than “clean”)
   $: oursBreaks = ours.filter((p) => p.ct === 'break');
   $: oursBreakW = oursBreaks.filter((p) => p.win).length;
 
   $: oppBreaks = theirs.filter((p) => p.ct === 'break');
   $: oppBreakW = oppBreaks.filter((p) => p.win).length;
 
-  // simple “top targets” (by jersey/receiver number if present)
   function topNTargets(points, n = 5) {
     const tally = new Map();
     for (const p of points) {
@@ -70,7 +54,6 @@
   $: topUs = topNTargets(ours);
   $: topOpp = topNTargets(theirs);
 
-  // group by opponent (very light – just counts & win%)
   function byOpponent(points) {
     const m = new Map();
     for (const p of points) {
@@ -84,36 +67,6 @@
   }
   $: tableUsByOpp = byOpponent(ours);
   $: tableOppByOpp = byOpponent(theirs);
-
-  // export helpers ------------------------------------------------------------
-  function exportCSV() {
-    const rows = [
-      ['side', 'win', 'ct', 'rcv', 'opp', 't'],
-      ...all.map((p) => [p.side, p.win ? 1 : 0, p.ct, p.rcv ?? '', p.opp ?? '', p.t ?? '']),
-    ];
-    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'kickouts.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  // optional: export dashboard screenshot without breaking SSR
-  async function exportPNG() {
-    // dynamic import so builds don’t choke
-    const { default: html2canvas } = await import('html2canvas');
-    const el = document.getElementById('review-root');
-    if (!el) return;
-    const canvas = await html2canvas(el, { backgroundColor: null, scale: 2 });
-    const url = canvas.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'kickout-review.png';
-    a.click();
-  }
 </script>
 
 <style>
@@ -137,21 +90,12 @@
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
   .right { text-align: right; }
-  .btnrow { display:flex; gap:.5rem; margin: 1rem auto; max-width: 1200px; padding:0 1rem; }
-  .btn { border: 1px solid #d1d5db; background:#fff; border-radius:8px; padding:.5rem .75rem; cursor:pointer; }
-  .btn:hover { background:#f9fafb; }
   @media (max-width: 900px){
     .wrap{ grid-template-columns: 1fr; }
   }
 </style>
 
-<div class="btnrow">
-  <button class="btn" on:click={exportCSV}>Export CSV</button>
-  <button class="btn" on:click={exportPNG}>Save dashboard PNG</button>
-</div>
-
 <div id="review-root" class="wrap">
-  <!-- Overall win/loss (our kickouts) -->
   <div class="card">
     <h3>Our kickouts — win rate</h3>
     <p class="kpi">
@@ -160,7 +104,6 @@
     </p>
   </div>
 
-  <!-- Opposition kickouts -->
   <div class="card">
     <h3>Opposition kickouts — win rate</h3>
     <p class="kpi">
@@ -169,7 +112,6 @@
     </p>
   </div>
 
-  <!-- Breaks (us) -->
   <div class="card">
     <h3>Our breaks — win %</h3>
     <p class="kpi">
@@ -178,7 +120,6 @@
     </p>
   </div>
 
-  <!-- Breaks (opp) -->
   <div class="card">
     <h3>Opposition breaks — win %</h3>
     <p class="kpi">
@@ -187,7 +128,6 @@
     </p>
   </div>
 
-  <!-- Top 5 targets (us) -->
   <div class="card">
     <h3>Top 5 — our targets</h3>
     {#if topUs.length}
@@ -210,7 +150,6 @@
     {/if}
   </div>
 
-  <!-- Top 5 targets (opposition) -->
   <div class="card">
     <h3>Top 5 — opposition receivers</h3>
     {#if topOpp.length}
@@ -233,17 +172,12 @@
     {/if}
   </div>
 
-  <!-- By opponent (our kickouts) -->
   <div class="card">
     <h3>By opponent (our kickouts)</h3>
     {#if tableUsByOpp.length}
       <table>
         <thead>
-          <tr>
-            <th>Opponent</th>
-            <th class="right">Total</th>
-            <th class="right">Win %</th>
-          </tr>
+          <tr><th>Opponent</th><th class="right">Total</th><th class="right">Win %</th></tr>
         </thead>
         <tbody>
           {#each tableUsByOpp as r}
@@ -260,17 +194,12 @@
     {/if}
   </div>
 
-  <!-- By opponent (opposition kickouts) -->
   <div class="card">
     <h3>By opponent (opposition kickouts)</h3>
     {#if tableOppByOpp.length}
       <table>
         <thead>
-          <tr>
-            <th>Opponent</th>
-            <th class="right">Total</th>
-            <th class="right">Win %</th>
-          </tr>
+          <tr><th>Opponent</th><th class="right">Total</th><th class="right">Win %</th></tr>
         </thead>
         <tbody>
           {#each tableOppByOpp as r}
