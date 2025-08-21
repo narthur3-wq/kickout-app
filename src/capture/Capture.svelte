@@ -145,7 +145,12 @@
     <span class="seglabel">{side==='us' ? 'Receivers (tap)' : 'Opp receivers (tap)'}</span>
     <div class="chips-row">
       {#each jerseyNums as n}
-        <button class="chip" class:active={isChipActive(n)} on:click={()=>chooseChip(n)}>{n}</button>
+        <button
+          class="chip"
+          class:active={isChipActive(n)}
+          aria-pressed={isChipActive(n)}
+          on:click={()=>chooseChip(n)}
+        >{n}</button>
       {/each}
     </div>
   </div>
@@ -221,10 +226,17 @@
   .primary{ background:#111; color:#fff; border-color:#111; }
   .danger{ border-color:#b33; color:#b33; }
 
-  .chips-row{ display:flex; gap:6px; flex-wrap:wrap; }
-  .chip{ min-width:34px; height:34px; border-radius:10px; }
-  .chip.active{ background:#111; color:#fff; border-color:#111; }
-
+ .chips-row{ display:flex; gap:6px; flex-wrap:wrap; }
+.chip{
+  min-width:34px; height:34px; border-radius:10px;
+  border:1px solid #d1d5db; background:#fff; color:#111;
+  transition: background .12s, color .12s, border-color .12s, box-shadow .12s;
+}
+.chip.active,
+.chip[aria-pressed="true"]{
+  background:#111; color:#fff; border-color:#111;
+  box-shadow:0 0 0 2px rgba(17,17,17,.08) inset;
+}
   .pitch-wrap{ position:relative; }
   .pitch-legend{
     position:absolute; top:10px; left:12px;
