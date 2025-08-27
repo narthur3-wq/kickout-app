@@ -2,16 +2,17 @@
   import { onDestroy } from 'svelte';
   export let message = '';
   export let timeout = 2000;
+
   let visible = false;
-  let t;
+  let timer;
 
   $: if (message) {
     visible = true;
-    clearTimeout(t);
-    t = setTimeout(()=> visible=false, timeout);
+    clearTimeout(timer);
+    timer = setTimeout(() => (visible = false), timeout);
   }
 
-  onDestroy(()=> clearTimeout(t));
+  onDestroy(() => clearTimeout(timer));
 </script>
 
 {#if visible}
