@@ -1,219 +1,346 @@
 <script>
-  import { get } from 'svelte/store';
   import Pitch from './Pitch.svelte';
   import { events, meta } from '../stores.js';
-  import Toast from '../lib/Toast.svelte';
-  import { jerseyNums, zoneCode } from './field.js';
+  import { onMount } from 'svelte';
+  import {
+    jerseyNums,
+    toMetersX, toMetersY,
+    depthFromKickerGoal, sideBand, depthBand, zoneCode
+  } from './field.js';
 
-  // UI state
-  let side = 'us'; // 'us' | 'opp'
-  let landing = { nx: NaN, ny: NaN };
-  let result = ''; // 'win' | 'loss'
-  let contest = ''; // 'clean' | 'break' | 'foul' | 'out'
-  let targetPlayer = '';
-  let oppReceiver = '';
-  let inlineError = '';
-  let toastMsg = '';
-  let undoLocked = false;
+  // Contest options
+  const CONTESTS = [
+    { key: 'clean', label: 'Clean'   },
+    { key: 'break', label: 'Break'   },
+    { key: 'foul',  label: 'Foul'    },
+    { key: 'out',   label: 'Sideline'}
+  ];
 
-  // computed
-  $: goalAtLeft = side === 'us';
+  // --- UI state ---
+  let side = 'us';             // 'us' | 'opp'
+  let contest = 'clean';
+  let win = true;
 
-  function resetInputs() {
-    landing = { nx: NaN, ny: NaN };
-    result = '';
-    contest = '';
-    targetPlayer = '';
-    oppReceiver = '';
-    inlineError = '';
+  let landing = { x: NaN, y: NaN };   // tap preview (normalized 0..1)
+  let targetPlayer = '';              // our receivers
+  let oppReceiver = '';               // opposition receivers
+
+  let overlayFilter = '';             // filter overlays by player/receiver
+  let showStats = true;               // show KPI tables
+
+  // Orientation helper: home (us) kicks left→right; opposition kicks right→left
+  const goalAtLeftFor = (s) => s === 'us';
+
+  // --- optional wake lock for live use ---
+  let lock = null;
+  async function ensureWake() {
+    if (!$meta.wake_lock || !('wakeLock' in navigator)) return;
+    try { lock = await navigator.wakeLock.request('screen'); } catch {}
   }
+  onMount(() => {
+    ensureWake();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && (!lock || lock.released)) ensureWake();
+    });
+  });
+  $: $meta; // keep reactive linkage
 
-  function switchSide(s) {
-    side = s;
-    // only reset in-progress input; do NOT clear recorded events
-    resetInputs();
+  // --- pitch interaction ---
+  function onLanding(e) { landing = e.detail; }
+
+  // Clear points: visibly resets preview and (confirm) removes all points for the current side
+  function clearPoints() {
+    landing = { x: NaN, y: NaN };
+    if (side === 'us') targetPlayer = ''; else oppReceiver = '';
+    const count = $events.filter(e => e.side === side).length;
+    if (count > 0 && confirm(`Remove ${count} ${side === 'us' ? 'our' : 'opposition'} kickout point(s)?`)) {
+      events.update(list => list.filter(e => e.side !== side));
+    }
+    navigator.vibrate?.(10);
   }
 
   function validate() {
-    if (Number.isNaN(landing.nx) || Number.isNaN(landing.ny)) return 'Tap the pitch to set landing';
-    if (!result) return 'Choose Win or Loss';
+    if (Number.isNaN(landing.x) || Number.isNaN(landing.y)) return 'Tap the pitch to set landing.';
+    if (side === 'us'  && !targetPlayer) return 'Tap a receiver number (1–25).';
+    if (side === 'opp' && !oppReceiver)  return 'Tap an opposition receiver number (1–25).';
     return '';
   }
 
-  function save() {
-    inlineError = validate();
-    if (inlineError) return;
+  // Build and classify event with correct kicking orientation per side
+  function buildEvent() {
+    const goalAtLeft = goalAtLeftFor(side);          // us: true (L→R), opp: false (R→L)
+    const d = depthFromKickerGoal(landing.x, goalAtLeft);
 
-    const e = {
-      id: crypto.randomUUID(),
-      ts: Date.now(),
-      side,
-      win: result === 'win',
-      result,
-      contest_type: contest || 'clean',
-      target: side === 'us' ? targetPlayer : oppReceiver,
-      nx: landing.nx,
-      ny: landing.ny,
-      zone: zoneCode(landing.nx, landing.ny, goalAtLeft),
+    return {
+      id: Date.now(),
+      created_at: new Date().toISOString(),
+      match_date: new Date().toISOString().slice(0, 10),
+
+      team: $meta.team,
+      opponent: $meta.opponent,
+
+      side,                           // 'us' | 'opp'
+      contest_type: contest,          // 'clean' | 'break' | 'foul' | 'out'
+      win,                            // boolean
+
+      // raw normalized coords
+      x: landing.x,
+      y: landing.y,
+
+      // metre conversions
+      x_m: toMetersX(landing.x),
+      y_m: toMetersY(landing.y),
+
+      // classification (now respecting direction per side)
+      side_band:  sideBand(landing.y),
+      depth_band: depthBand(d),
+      zone_code:  zoneCode(landing.x, landing.y, goalAtLeft),
+
+      // retained field; value means "is our goal on the left for this event?"
+      kicking_goal_top: goalAtLeft,
+
+      // receiver labels
+      target_player:     side === 'us'  ? (targetPlayer || '') : '',
+      opponent_receiver: side === 'opp' ? (oppReceiver  || '') : ''
     };
-
-    events.update(arr => [...arr, e]);
-    toastMsg = `Saved: ${side === 'us' ? 'OUR' : 'OPP'} — ${result.toUpperCase()} ${contest ? '/ ' + contest : ''}`;
-    resetInputs();
   }
 
-  function clearPoints() {
-    if (!confirm('Remove all kickout points for this side?')) return;
-    const cur = get(events);
-    events.set(cur.filter(e => e.side !== side));
-    toastMsg = `Cleared ${side === 'us' ? 'OUR' : 'OPP'} points`;
+  function saveEvent() {
+    const err = validate();
+    if (err) { alert(err); return; }
+    events.update(list => [buildEvent(), ...list]);
+    landing = { x: NaN, y: NaN };
+    targetPlayer = '';
+    oppReceiver = '';
+    navigator.vibrate?.(20);
   }
 
-  function undoLast() {
-    if (undoLocked) return;
+  function undoLast() { events.update(list => list.slice(1)); }
 
-    const cur = get(events);
-    // find last event for current side
-    const idx = [...cur]
-      .map((e, i) => ({ e, i }))
-      .reverse()
-      .find(p => p.e.side === side)?.i;
+  function exportCSV() {
+    const headers = [
+      'id','created_at','match_date','team','opponent',
+      'side','contest_type','win','x','y','x_m','y_m',
+      'side_band','depth_band','zone_code','kicking_goal_top',
+      'target_player','opponent_receiver'
+    ];
+    const rows = [headers.join(',')].concat(
+      $events.map(e => headers.map(h => {
+        let v = e[h];
+        if (h === 'x_m' || h === 'y_m') v = Math.round(Number(v || 0)); // round metres for export
+        return (typeof v === 'number' || typeof v === 'boolean')
+          ? String(v)
+          : '"' + String(v ?? '').replace(/"/g, '""') + '"';
+      }).join(','))
+    ).join('\n');
 
-    if (idx == null) {
-      toastMsg = 'Nothing to undo for this side';
-      return;
+    const url = URL.createObjectURL(new Blob([rows], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'kickouts.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // --- overlays for the pitch (current side, optional filter) ---
+  const norm = s => (s || '').trim().toLowerCase();
+  $: sideEventsAll = $events.filter(e => e.side === side);
+  $: filteredForOverlay = side === 'us'
+    ? sideEventsAll.filter(e => overlayFilter ? norm(e.target_player)     === norm(overlayFilter) : true)
+    : sideEventsAll.filter(e => overlayFilter ? norm(e.opponent_receiver) === norm(overlayFilter) : true);
+  $: overlays = filteredForOverlay.map(e => ({ x: e.x, y: e.y, ct: e.contest_type, side: e.side, win: !!e.win }));
+
+  // --- KPI tables (player/receiver aggregates) ---
+  $: ourPlayerStats = (() => {
+    const map = new Map(); let total = 0;
+    for (const e of $events) {
+      if (e.side !== 'us') continue;
+      const k = norm(e.target_player); if (!k) continue;
+      total++;
+      const m = map.get(k) || { label: e.target_player || '—', tot: 0, win: 0 };
+      m.tot++; if (e.win) m.win++; map.set(k, m);
     }
+    const rows = Array.from(map.values())
+      .map(m => ({ ...m, share: total ? Math.round(100 * m.tot / total) : 0 }))
+      .sort((a, b) => b.tot - a.tot);
+    return { total, rows };
+  })();
 
-    const removed = cur[idx];
-    events.set(cur.filter((_, i) => i !== idx));
+  $: oppReceiverStats = (() => {
+    const map = new Map(); let total = 0;
+    for (const e of $events) {
+      if (e.side !== 'opp') continue;
+      const k = norm(e.opponent_receiver); if (!k) continue;
+      total++;
+      const m = map.get(k) || { label: e.opponent_receiver || '—', tot: 0, win: 0 };
+      m.tot++; if (e.win) m.win++; map.set(k, m);
+    }
+    const rows = Array.from(map.values())
+      .map(m => ({ ...m, share: total ? Math.round(100 * m.tot / total) : 0 }))
+      .sort((a, b) => b.tot - a.tot);
+    return { total, rows };
+  })();
 
-    toastMsg =
-      `Undid last ${side === 'us' ? 'OUR' : 'OPP'} event` +
-      (removed ? `: ${removed.result}, ${removed.contest_type}${removed.target ? `, #${removed.target}` : ''}` : '');
-
-    // throttle double clicks
-    undoLocked = true;
-    setTimeout(() => (undoLocked = false), 300);
-  }
+  // chips
+  const isChipActive = (n) => side === 'us' ? String(n) === targetPlayer : String(n) === oppReceiver;
+  const chooseChip  = (n) => { if (side === 'us') targetPlayer = String(n); else oppReceiver = String(n); };
 </script>
 
-<div class="grid md:grid-cols-[1fr_320px] gap-4">
-  <!-- LEFT: main capture -->
-  <section class="card p-3 md:p-4">
-    <div class="flex items-center gap-2 mb-3">
-      <span class="text-sm text-gray-600">Side:</span>
-
-      <div class="inline-flex rounded-lg border border-gray-300 overflow-hidden">
-        <button
-          class="px-3 py-1.5 text-sm {side==='us' ? 'bg-accent text-white' : 'bg-white'}"
-          on:click={() => switchSide('us')}
-        >
-          Our team
-        </button>
-        <button
-          class="px-3 py-1.5 text-sm {side==='opp' ? 'bg-accent text-white' : 'bg-white'}"
-          on:click={() => switchSide('opp')}
-        >
-          Opposition
-        </button>
-      </div>
-
-      <div class="ml-auto flex items-center gap-2">
-        <button class="btn btn-neutral" on:click={undoLast} disabled={undoLocked}>↩️ Undo</button>
-        <button class="btn btn-danger" on:click={clearPoints}>Clear points</button>
-      </div>
+<!-- Top row: side + result + contest -->
+<div class="row">
+  <div class="seg">
+    <div class="segbtns">
+      <button class:active={side==='us'}  on:click={() => { side='us';  clearPoints(); }}>Us</button>
+      <button class:active={side==='opp'} on:click={() => { side='opp'; clearPoints(); }}>Opposition</button>
     </div>
+  </div>
 
-    <Pitch bind:value={landing} {goalAtLeft} />
-
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-      <!-- Outcome -->
-      <div class="col-span-2">
-        <div class="text-sm font-semibold mb-1">Outcome</div>
-        <div class="flex gap-2">
-          <button class="btn {result==='win' ? 'btn-primary' : ''}" on:click={() => (result = 'win')}>✅ Win</button>
-          <button class="btn {result==='loss' ? 'btn-primary' : ''}" on:click={() => (result = 'loss')}>✕ Loss</button>
-        </div>
-      </div>
-
-      <!-- Contest type -->
-      <div>
-        <div class="text-sm font-semibold mb-1">Contest type</div>
-        <select class="w-full border border-gray-300 rounded-lg px-2 py-2" bind:value={contest}>
-          <option value="">Choose…</option>
-          <option value="clean">Clean</option>
-          <option value="break">Break</option>
-          <option value="foul">Foul</option>
-          <option value="out">Sideline</option>
-        </select>
-      </div>
-
-      <!-- Receiver -->
-      <div>
-        {#if side === 'us'}
-          <div class="text-sm font-semibold mb-1">Select receiver</div>
-          <select class="w-full border border-gray-300 rounded-lg px-2 py-2" bind:value={targetPlayer}>
-            <option value="">—</option>
-            {#each jerseyNums as n}
-              <option value={n}>{n}</option>
-            {/each}
-          </select>
-        {:else}
-          <div class="text-sm font-semibold mb-1">Select opposition receiver</div>
-          <input
-            class="w-full border border-gray-300 rounded-lg px-2 py-2"
-            placeholder="e.g., #9"
-            bind:value={oppReceiver}
-          />
-        {/if}
-      </div>
+  <div class="seg">
+    <span class="seglabel">Result</span>
+    <div class="segbtns">
+      <button class:active={win===true}  on:click={() => win = true}>Win</button>
+      <button class:active={win===false} on:click={() => win = false}>Loss</button>
     </div>
+  </div>
 
-    {#if inlineError}
-      <div class="mt-2 text-sm text-red-600">{inlineError}</div>
-    {/if}
-
-    <div class="mt-3 flex items-center gap-2">
-      <button class="btn btn-primary" on:click={save}>Save</button>
-      <span class="text-sm text-gray-500">Use “Coach view” tab for analysis</span>
+  <div class="seg">
+    <span class="seglabel">Contest</span>
+    <div class="segbtns">
+      {#each CONTESTS as c}
+        <button class:active={contest===c.key} on:click={() => { contest = c.key; }}>{c.label}</button>
+      {/each}
     </div>
-  </section>
-
-  <!-- RIGHT: session meta -->
-  <aside class="card p-3 md:p-4">
-    <h3 class="font-semibold mb-2">Session</h3>
-
-    <label class="block mb-2">
-      <span class="text-sm text-gray-600">Our team</span>
-      <input
-        class="w-full border border-gray-300 rounded-lg px-2 py-2"
-        bind:value={$meta.team}
-        placeholder="Clontarf"
-      />
-    </label>
-
-    <label class="block mb-2">
-      <span class="text-sm text-gray-600">Opponent</span>
-      <input
-        class="w-full border border-gray-300 rounded-lg px-2 py-2"
-        bind:value={$meta.opponent}
-        placeholder="Opposition"
-      />
-    </label>
-
-    <div class="flex items-center gap-2">
-      <span class="text-sm text-gray-600">Kicking direction</span>
-      <button
-        class="btn btn-neutral"
-        on:click={() => meta.update(m => ({ ...m, kicking_goal_top: !m.kicking_goal_top }))}
-      >
-        { $meta.kicking_goal_top ? 'Goal at left' : 'Goal at right' }
-      </button>
-    </div>
-
-    <div class="mt-3 text-sm text-gray-600">Events: {$events.length}</div>
-  </aside>
+  </div>
 </div>
 
-<!-- Toast (auto-hides) -->
-<Toast message={toastMsg} />
+<!-- Receiver chips -->
+<div class="controls">
+  <div class="seg">
+    <span class="seglabel">{side==='us' ? 'Receivers (tap)' : 'Opp receivers (tap)'}</span>
+    <div class="chips-row">
+      {#each jerseyNums as n}
+        <button
+          class="chip"
+          class:active={isChipActive(n)}
+          aria-pressed={isChipActive(n)}
+          on:click={() => chooseChip(n)}
+        >{n}</button>
+      {/each}
+    </div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="controls">
+  <input bind:value={overlayFilter} placeholder={side==='us' ? 'All players' : 'All opp receivers'} />
+  <button on:click={() => overlayFilter=''}>Clear filter</button>
+  <button class="ghost" on:click={() => showStats = !showStats}>{showStats ? 'Hide' : 'Show'} stats</button>
+</div>
+
+<!-- Pitch + legend -->
+<div class="pitch-wrap">
+  <Pitch {overlays} {landing} on:landed={onLanding} />
+  <div class="pitch-legend">
+    <div class="lg-row"><span class="marker">C</span><span>Clean</span></div>
+    <div class="lg-row"><span class="marker">B</span><span>Break</span></div>
+    <div class="lg-row"><span class="marker">F</span><span>Foul</span></div>
+    <div class="lg-row"><span class="marker">S</span><span>Sideline</span></div>
+    <div class="lg-row"><span class="swatch win"></span><span>Win</span></div>
+    <div class="lg-row"><span class="swatch loss"></span><span>Loss</span></div>
+  </div>
+</div>
+
+{#if showStats}
+  <div class="kpi">
+    {#if side === 'us'}
+      <div class="kpi-title">By player</div>
+      <table class="kpi-table">
+        <thead><tr><th>Player</th><th>Att</th><th>Wins</th><th>Win %</th><th>% of kicks</th></tr></thead>
+        <tbody>
+          {#each ourPlayerStats.rows as p}
+            <tr>
+              <td>{p.label}</td>
+              <td>{p.tot}</td>
+              <td>{p.win}</td>
+              <td>{p.tot ? Math.round(100 * p.win / p.tot) : 0}%</td>
+              <td>{p.share}%</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {:else}
+      <div class="kpi-title">By opposition receiver (their wins)</div>
+      <table class="kpi-table">
+        <thead><tr><th>Receiver</th><th>Contests</th><th>Wins</th><th>Win %</th><th>% of kicks</th></tr></thead>
+        <tbody>
+          {#each oppReceiverStats.rows as p}
+            <tr>
+              <td>{p.label}</td>
+              <td>{p.tot}</td>
+              <td>{p.win}</td>
+              <td>{p.tot ? Math.round(100 * p.win / p.tot) : 0}%</td>
+              <td>{p.share}%</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {/if}
+  </div>
+{/if}
+
+<!-- Actions -->
+<div class="actions-bar">
+  <button on:click={clearPoints}>Clear points</button>
+  <button class="danger" on:click={undoLast}>Undo</button>
+  <button class="primary" on:click={saveEvent}>Save</button>
+  <button on:click={exportCSV}>Export CSV</button>
+</div>
+
+<style>
+  .row{ display:grid; grid-template-columns:auto 1fr 1fr; gap:8px 10px; align-items:end; margin:6px 0 6px; }
+  .controls{ display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; margin:6px 0 8px; }
+
+  .seg{ display:flex; flex-direction:column; gap:4px; }
+  .seglabel{ font-weight:700; margin-bottom:2px; }
+  .segbtns{ display:flex; gap:6px; }
+  .segbtns button{ border-radius:999px; padding:6px 12px; border:1px solid #d1d5db; background:#fff; cursor:pointer; box-shadow:0 1px 0 rgba(0,0,0,.02); }
+  .segbtns .active{ background:#111; color:#fff; border-color:#111; }
+
+  input{ padding:6px 10px; border:1px solid #d1d5db; border-radius:10px; }
+  button{ padding:6px 12px; border:1px solid #d1d5db; border-radius:10px; background:#fff; cursor:pointer; }
+  button:hover{ background:#f6f6f6; }
+  .ghost{ background:#fff; border-color:#e5e7eb; }
+  .primary{ background:#111; color:#fff; border-color:#111; }
+  .danger{ border-color:#b33; color:#b33; }
+
+  .chips-row{ display:flex; gap:6px; flex-wrap:wrap; }
+  .chip{
+    min-width:34px; height:34px; border-radius:10px;
+    border:1px solid #d1d5db; background:#fff; color:#111;
+    transition: background .12s, color .12s, border-color .12s, box-shadow .12s;
+  }
+  .chip.active,
+  .chip[aria-pressed="true"]{
+    background:#111; color:#fff; border-color:#111;
+    box-shadow:0 0 0 2px rgba(17,17,17,.08) inset;
+  }
+
+  .pitch-wrap{ position:relative; }
+  .pitch-legend{
+    position:absolute; top:10px; left:12px;
+    display:flex; flex-direction:column; gap:6px;
+    background:rgba(255,255,255,.95); color:#111;
+    padding:8px 10px; border-radius:12px; border:1px solid #e5e7eb;
+    box-shadow:0 2px 4px rgba(0,0,0,.06);
+    pointer-events:none; font-size:13px; min-width:120px;
+  }
+  .lg-row{ display:flex; align-items:center; gap:8px; }
+  .marker{ display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%; border:2px solid #94a3b8; background:#111; color:#fff; font-weight:900; }
+  .swatch{ width:16px; height:16px; border-radius:50%; border:1px solid #94a3b8; }
+  .swatch.win{ background:#1B5E20; }
+  .swatch.loss{ background:#ef4444; }
+
+  .kpi{ margin:10px 0; }
+  .kpi-title{ font-weight:700; margin:6px 0 4px; }
+  .kpi-table{ border-collapse:collapse; font-size:13px; min-width:420px; }
+  .kpi-table th,.kpi-table td{ border:1px solid #e5e7eb; padding:6px 8px; text-align:center; }
+
+  .actions-bar{ position:sticky; bottom:0; background:#fff; border-top:1px solid #eee; padding:8px; display:flex; gap:8px; justify-content:flex-end; z-index:5; }
+</style>
