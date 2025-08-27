@@ -1,57 +1,53 @@
 <script>
   import Capture from './capture/Capture.svelte';
+
+  // Lazy tabs (safe even if files are missing)
   let CoachView = null, Review = null;
   let tab = 'live';
 
-  async function loadCoach() {
+  async function loadCoach(){
     if (!CoachView) {
-      try {
-        CoachView = (await import('./capture/CoachView.svelte')).default;
-      } catch (e) {
-        console.error(e);
-      }
+      try { CoachView = (await import('./capture/CoachView.svelte')).default; }
+      catch { CoachView = { $$render:()=>'Coach view not available' }; }
     }
     tab = 'coach';
   }
-
-  async function loadReview() {
+  async function loadReview(){
     if (!Review) {
-      try {
-        Review = (await import('./capture/Review.svelte')).default;
-      } catch (e) {
-        console.error(e);
-      }
+      try { Review = (await import('./capture/Review.svelte')).default; }
+      catch { Review = { $$render:()=>'Review not available' }; }
     }
     tab = 'review';
   }
 </script>
 
-<header class="w-full bg-white border-b border-gray-200 sticky top-0 z-20">
-  <div class="max-w-5xl mx-auto flex items-center gap-3 p-3">
-    <!-- Crest intentionally removed to rule out invalid handler issues -->
-    <h1 class="text-lg font-semibold">Kickout App</h1>
-    <nav class="ml-auto flex items-center gap-2">
-      <button class="btn {tab === 'live' ? 'btn-primary' : ''}" on:click={() => (tab = 'live')}>Live</button>
-      <button class="btn {tab === 'coach' ? 'btn-primary' : ''}" on:click={loadCoach}>Coach view</button>
-      <button class="btn {tab === 'review' ? 'btn-primary' : ''}" on:click={loadReview}>Review</button>
-    </nav>
-  </div>
-</header>
+<!-- Simple, non-sticky tabs -->
+<nav class="tabs">
+  <button class:active={tab==='live'}   on:click={()=>tab='live'}>Live</button>
+  <button class:active={tab==='coach'}  on:click={loadCoach}>Coach view</button>
+  <button class:active={tab==='review'} on:click={loadReview}>Review</button>
+</nav>
 
-<main class="max-w-5xl mx-auto p-3">
-  {#if tab === 'live'}
+<main class="app-main">
+  {#if tab==='live'}
     <Capture />
-  {:else if tab === 'coach'}
-    {#if CoachView}
-      <svelte:component this={CoachView} />
-    {:else}
-      <div class="p-4">Loading…</div>
-    {/if}
-  {:else if tab === 'review'}
-    {#if Review}
-      <svelte:component this={Review} />
-    {:else}
-      <div class="p-4">Loading…</div>
-    {/if}
+  {:else if tab==='coach' && CoachView}
+    <svelte:component this={CoachView}/>
+  {:else if tab==='review' && Review}
+    <svelte:component this={Review}/>
   {/if}
 </main>
+
+<style>
+  .tabs{
+    position: static;   /* not sticky -> won’t cover content when scrolling */
+    top: auto;
+    z-index: auto;
+    display:flex; gap:8px; padding:10px 12px; background:#fff; border-bottom:1px solid #eee;
+  }
+  .tabs button{
+    border:1px solid #d1d5db; border-radius:999px; padding:6px 12px; background:#fff; cursor:pointer;
+  }
+  .tabs button.active{ background:#111; color:#fff; border-color:#111; }
+  .app-main{ padding:10px 12px; }
+</style>
