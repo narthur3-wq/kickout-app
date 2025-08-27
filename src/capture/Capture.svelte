@@ -159,4 +159,4 @@
   </aside>
 </div>
 
-<Toast {message}={toastMsg} />
+<Toast message={toastMsg} />
