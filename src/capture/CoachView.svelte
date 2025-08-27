@@ -1,28 +1,34 @@
 <script>
   import { events } from '../stores.js';
-  import { derived } from 'svelte/store';
 
-  const fmt = (n)=> new Intl.NumberFormat().format(n);
-  const pct = (n,d)=> d? Math.round((n/d)*100) : 0;
+  const fmt = (n) => new Intl.NumberFormat().format(n);
+  const pct = (n, d) => (d ? Math.round((n / d) * 100) : 0);
 
-  // Derived splits
-  const our = derived(events, $e => $e.filter(ev=>ev.side==='us'));
-  const opp = derived(events, $e => $e.filter(ev=>ev.side==='opp'));
-  const all = derived(events, $e => $e);
+  // Reactive slices of data
+  $: all = $events;
+  $: ourList = $events.filter((e) => e.side === 'us');
+  $: oppList = $events.filter((e) => e.side === 'opp');
 
-  const agg = (list)=> {
+  function agg(list) {
     const total = list.length;
-    const wins = list.filter(e=>e.win).length;
+    const wins = list.filter((e) => e.win).length;
     const losses = total - wins;
-    const byZone = new Map();
+    const byZone = {};
     for (const e of list) {
       const z = e.zone || '—';
-      const m = byZone.get(z) || { att:0, win:0 };
-      m.att++; if (e.win) m.win++;
-      byZone.set(z,m);
+      byZone[z] ??= { att: 0, win: 0 };
+      byZone[z].att++;
+      if (e.win) byZone[z].win++;
     }
     return { total, wins, losses, byZone };
-  };
+  }
+
+  // Computed aggregates
+  $: our = agg(ourList);
+  $: opp = agg(oppList);
+  $: overall = agg(all);
+  $: headline = `Our kickouts at ${pct(our.wins, our.total)}% win (${(pct(our.wins, our.total) - pct(opp.wins, opp.total)) >= 0 ? '+' : ''}${pct(our.wins, our.total) - pct(opp.wins, opp.total)}% vs opp)`;
+  $: zones = Object.keys(overall.byZone).sort();
 </script>
 
 <section class="grid gap-4">
@@ -30,48 +36,25 @@
   <div class="grid md:grid-cols-3 gap-3">
     <div class="card p-4">
       <h3 class="text-sm text-gray-600 mb-1">Our kickouts</h3>
-      {#await our}
-        <div>—</div>
-      {:then list}
-        {@const a = agg(list)}
-        <div class="text-2xl font-semibold">{pct(a.wins,a.total)}%</div>
-        <div class="text-sm text-gray-600">{fmt(a.wins)} / {fmt(a.total)} won</div>
-      {/await}
+      <div class="text-2xl font-semibold">{pct(our.wins, our.total)}%</div>
+      <div class="text-sm text-gray-600">{fmt(our.wins)} / {fmt(our.total)} won</div>
     </div>
     <div class="card p-4">
       <h3 class="text-sm text-gray-600 mb-1">Opposition kickouts</h3>
-      {#await opp}
-        <div>—</div>
-      {:then list}
-        {@const a = agg(list)}
-        <div class="text-2xl font-semibold">{pct(a.wins,a.total)}%</div>
-        <div class="text-sm text-gray-600">{fmt(a.wins)} / {fmt(a.total)} won</div>
-      {/await}
+      <div class="text-2xl font-semibold">{pct(opp.wins, opp.total)}%</div>
+      <div class="text-sm text-gray-600">{fmt(opp.wins)} / {fmt(opp.total)} won</div>
     </div>
     <div class="card p-4">
       <h3 class="text-sm text-gray-600 mb-1">Overall</h3>
-      {#await all}
-        <div>—</div>
-      {:then list}
-        {@const a = agg(list)}
-        <div class="text-2xl font-semibold">{pct(a.wins,a.total)}%</div>
-        <div class="text-sm text-gray-600">{fmt(a.wins)} / {fmt(a.total)} won</div>
-      {/await}
+      <div class="text-2xl font-semibold">{pct(overall.wins, overall.total)}%</div>
+      <div class="text-sm text-gray-600">{fmt(overall.wins)} / {fmt(overall.total)} won</div>
     </div>
   </div>
 
   <!-- Headline -->
-  {#await Promise.all([our,opp])}
-    <div class="card p-4">—</div>
-  {:then res}
-    {@const [ourList, oppList] = res}
-    {@const a = agg(ourList)}
-    {@const b = agg(oppList)}
-    {@const headline = `Our kickouts at ${pct(a.wins,a.total)}% win (${(pct(a.wins,a.total)-pct(b.wins,b.total))>=0?'+':''}${pct(a.wins,a.total)-pct(b.wins,b.total)}% vs opp)`}
-    <div class="card p-4">
-      <div class="text-base font-semibold">{headline}</div>
-    </div>
-  {/await}
+  <div class="card p-4">
+    <div class="text-base font-semibold">{headline}</div>
+  </div>
 
   <!-- Zone grid -->
   <div class="card p-4">
@@ -81,23 +64,19 @@
       <div class="text-xs text-gray-600">Grey = no attempts</div>
     </div>
 
-    {#await all}
-      <div>—</div>
-    {:then list}
-      {@const zones = Array.from(new Set(list.map(e=>e.zone))).sort()}
-      {#if zones.length===0}
-        <div class="text-sm text-gray-600">No attempts yet.</div>
-      {:else}
-        <div class="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {#each zones as z}
-            {@const m = list.filter(e=>e.zone===z)}
-            {@const a = agg(m)}
-            {@const winP = a.total? (a.wins/a.total)*100 : 0}
-            {@const lossP = a.total? ((a.total-a.wins)/a.total)*100 : 0}
+    {#if zones.length === 0}
+      <div class="text-sm text-gray-600">No attempts yet.</div>
+    {:else}
+      <div class="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
+        {#each zones as z}
+          {#key z}
+            {@const m = overall.byZone[z]}
+            {@const winP = m.att ? (m.win / m.att) * 100 : 0}
+            {@const lossP = m.att ? ((m.att - m.win) / m.att) * 100 : 0}
             <div class="border border-gray-200 rounded-lg p-3">
               <div class="flex items-center justify-between mb-2">
                 <div class="font-semibold">{z}</div>
-                <div class="text-sm text-gray-600">{fmt(a.total)} att</div>
+                <div class="text-sm text-gray-600">{fmt(m.att)} att</div>
               </div>
               <div class="h-2 w-full bg-gray-100 rounded overflow-hidden">
                 <div class="h-full" style="width:{winP}%; background:#16A34A"></div>
@@ -105,9 +84,9 @@
               </div>
               <div class="mt-1 text-xs text-gray-600">{Math.round(winP)}% win · {Math.round(lossP)}% loss</div>
             </div>
-          {/each}
-        </div>
-      {/if}
-    {/then}
+          {/key}
+        {/each}
+      </div>
+    {/if}
   </div>
 </section>
