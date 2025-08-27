@@ -4,7 +4,6 @@
   // overlays: [{ x,y, ct:'clean'|'break'|'foul'|'out', side:'us'|'opp', win:boolean }]
   export let overlays = [];
   export let landing = { x: NaN, y: NaN };
-  export let goalLeft = true; // orientation indicator
 
   // Landscape geometry (metres)
   const W = 145, H = 90, CY = H/2;
@@ -19,7 +18,7 @@
   const L20 = 20, L45 = 45;
   const R40 = 40;          // 40 m arc
 
-  // Palette
+  // UAT palette
   const COLOR_TURF   = '#C8E6C9';
   const COLOR_LINE   = '#ffffff';
   const COLOR_GRID   = 'rgba(255,255,255,.25)';
@@ -28,13 +27,14 @@
   // Markers
   const RING_US  = '#2563eb';
   const RING_OPP = '#f59e0b';
-  const FILL_WIN = '#1B5E20';
-  const FILL_LOS = '#ef4444';
-  const TXT      = '#fff';
+  const FILL_WIN = '#1B5E20';  // dark green
+  const FILL_LOS = '#ef4444';  // red
+  const TXT      = '#fff';     // letters inside markers
 
   const dispatch = createEventDispatcher();
   let svgEl;
 
+  // precise client→SVG mapping
   function clientToNorm(evt){
     const pt = svgEl.createSVGPoint();
     pt.x = evt.clientX; pt.y = evt.clientY;
@@ -54,7 +54,7 @@
   role="button" tabindex="0"
   on:click={onClick}
   on:keydown={(e)=>{ if (e.key==='Enter' || e.key===' ') { e.preventDefault(); onClick(e); } }}
-  style="width:100%; height:auto; max-height:62vh; display:block; border-radius:12px; background:{COLOR_TURF}; cursor:crosshair"
+  style="width:100%; height:auto; max-height:62vh; display:block; border:1px solid {COLOR_BORDER}; border-radius:12px; background:{COLOR_TURF}; cursor:crosshair"
 >
   <!-- turf -->
   <rect x="0" y="0" width={W} height={H} fill={COLOR_TURF} />
@@ -84,14 +84,14 @@
   <rect x={W-SMALL_D} y={CY-SMALL_W/2} width={SMALL_D} height={SMALL_W} fill="none" stroke={COLOR_LINE} stroke-width="1.4" vector-effect="non-scaling-stroke" />
 
   <!-- D arcs off 21 m line (UAT) -->
-  <path d={`M ${L21} ${CY-R_D} A ${R_D} ${R_D} 0 0 1 ${L21} ${CY+R_D}`}   fill="none" stroke={COLOR_LINE} stroke-width="1.3" vector-effect="non-scaling-stroke" />
+  <path d={`M ${L21} ${CY-R_D} A ${R_D} ${R_D} 0 0 1 ${L21} ${CY+R_D}`} fill="none" stroke={COLOR_LINE} stroke-width="1.3" vector-effect="non-scaling-stroke" />
   <path d={`M ${W-L21} ${CY-R_D} A ${R_D} ${R_D} 0 0 0 ${W-L21} ${CY+R_D}`} fill="none" stroke={COLOR_LINE} stroke-width="1.3" vector-effect="non-scaling-stroke" />
 
   <!-- 40 m arcs -->
-  <path d={`M 0 ${CY-R40} A ${R40} ${R40} 0 0 1 0 ${CY+R40}`}   fill="none" stroke={COLOR_LINE} stroke-width="1.1" vector-effect="non-scaling-stroke" />
-  <path d={`M ${W} ${CY-R40} A ${R40} ${R40} 0 0 0 ${W} ${CY+R40}`} fill="none" stroke={COLOR_LINE} stroke-width="1.1" vector-effect="non-scaling-stroke" />
+  <path d={`M 0 ${CY-R40} A ${R40} ${R40} 0 0 1 0 ${CY+R40}`}             fill="none" stroke={COLOR_LINE} stroke-width="1.1" vector-effect="non-scaling-stroke" />
+  <path d={`M ${W} ${CY-R40} A ${R40} ${R40} 0 0 0 ${W} ${CY+R40}`}       fill="none" stroke={COLOR_LINE} stroke-width="1.1" vector-effect="non-scaling-stroke" />
 
-  <!-- markers -->
+  <!-- markers: circle fill is WIN/LOSS, ring shows side, letter is white -->
   {#each overlays as o}
     <g transform={`translate(${o.x*W} ${o.y*H})`}>
       <circle r="2.6" fill={o.win ? FILL_WIN : FILL_LOS} stroke={ring(o.side)} stroke-width="1.4" vector-effect="non-scaling-stroke" />
@@ -102,14 +102,6 @@
 
   <!-- tap preview -->
   {#if !Number.isNaN(landing.x)}
-    <g transform={`translate(${landing.x*W} ${landing.y*H})`}>
-      <circle r="2.2" fill="#2563EB" stroke="white" stroke-width="1.0" vector-effect="non-scaling-stroke" />
-    </g>
+    <circle cx={landing.x*W} cy={landing.y*H} r="2.2" fill={FILL_WIN} />
   {/if}
-
-  <!-- orientation badge -->
-  <g transform="translate(4 6)">
-    <rect rx="2.5" ry="2.5" width="34" height="8" fill="white" stroke="#e5e7eb" stroke-width="0.6"/>
-    <text x="17" y="5.5" text-anchor="middle" font-size="3.2" fill="#111827">{goalLeft ? '← Our Kick' : 'Our Kick →'}</text>
-  </g>
 </svg>
