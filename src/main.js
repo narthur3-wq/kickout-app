@@ -1,6 +1,8 @@
 import './styles/ui.css';
-import './app.css'; // keep if you have it
-import App from './App.svelte';
+import App from './components/App.svelte';
 
-const app = new App({ target: document.getElementById('app') });
+const app = new App({
+  target: document.getElementById('app')
+});
+
 export default app;

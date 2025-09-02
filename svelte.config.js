@@ -1,11 +1,12 @@
-// svelte.config.js
-import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+/** @type {import('svelte').Config} */
+const dev = process.env.NODE_ENV !== 'production';
 
-export default {
-  preprocess: vitePreprocess(),
+const config = {
   compilerOptions: {
-    compatibility: {
-      componentApi: 4   // allow `new App({ target })` style
-    }
+    dev,
+    // allow `new App({ target })` on Svelte 5
+    compatibility: { componentApi: 4 }
   }
 };
+
+export default config;

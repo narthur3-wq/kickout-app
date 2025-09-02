@@ -1,65 +1,146 @@
+/* Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Teko:wght@500;600;700&display=swap');
+
+/* ========================
+   Design tokens
+======================== */
 :root{
-  --bg:#f7f8f9;
-  --card:#ffffff;
-  --ink:#0b0b0c;
-  --muted:#6b7280;
-  --line:#e5e7eb;
-  --accent:#0f1b4c;        /* Clontarf navy */
-  --accent-ink:#ffffff;
-  --radius:16px;
-  --radius-sm:12px;
-  --shadow:0 6px 22px rgba(15, 27, 76, .08);
+  --accent:#0660aa;            /* crest blue */
+  --green:#16a34a; --red:#dc2626; --amber:#f59e0b; --border:#e5e7eb;
+  --muted:#6b7280; --bg:#f6f7f9; --panel:#ffffff;
+  --shadow:0 10px 20px rgba(0,0,0,.06), 0 2px 6px rgba(0,0,0,.05);
+  --radius:14px; --gap:12px; --gap-lg:16px;
+
+  /* Pitch lines: thin, solid, high-contrast white */
+  --pitch-line:#ffffffd9;      /* ~85% white */
+  --pitch-strong:#ffffffff;    /* 100% white */
 }
 
+/* ========================
+   Base / Typography
+======================== */
 *{box-sizing:border-box}
 html,body,#app{height:100%}
 body{
   margin:0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans";
-  background:var(--bg);
-  color:var(--ink);
+  font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
+  color:#111; background:var(--bg);
+}
+:where(h1,h2,h3){
+  margin:.2em 0 .6em 0;line-height:1.1;font-weight:700;
+  font-family:Teko, Inter, ui-sans-serif, system-ui;
+  letter-spacing:.2px;
+}
+h1{font-size:clamp(26px, 3.2vw, 36px)}
+h2{font-size:clamp(20px, 2.6vw, 28px)}
+h3{font-size:clamp(18px, 2.0vw, 22px)}
+.lead{font-size:clamp(15px, 1.6vw, 18px); color:#222}
+.muted{color:var(--muted)}
+
+/* ========================
+   Layout
+======================== */
+.wrap{padding:16px;max-width:1280px;margin:0 auto}
+.grid{display:grid;gap:var(--gap)}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow)}
+.live-grid{display:grid;gap:var(--gap)}
+@media(min-width:900px){
+  .live-grid{grid-template-columns:minmax(320px, 380px) 1fr; align-items:start}
+  .sticky-panel{position:sticky; top:84px; z-index:1}
 }
 
-.container{ max-width:1200px; margin:24px auto; padding:0 16px; }
-.tabs{ display:flex; gap:10px; margin:8px 0 20px; flex-wrap:wrap; }
-.tabs button{ border:1px solid var(--line); background:#fff; border-radius:999px; padding:8px 14px; font-weight:700; cursor:pointer; }
-.tabs button.active{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+/* ========================
+   Tabs / Buttons / Pills
+======================== */
+.topbar{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--panel);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50;box-shadow:var(--shadow)}
+.brand{display:flex;gap:10px;align-items:center;font-weight:900}
+.brand img{height:28px;width:auto}
+.tabs{display:flex;gap:8px;flex-wrap:wrap}
+.tabs button{padding:10px 16px;border:1px solid var(--border);border-radius:999px;background:#fff;font-weight:800;cursor:pointer}
+.tabs button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tabs button:focus{outline:2px solid color-mix(in srgb, var(--accent) 30%, transparent);outline-offset:2px}
 
-.seg{ display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; background:#fff; }
-.seg>button{ border:0; background:transparent; padding:6px 12px; font-weight:700; cursor:pointer; }
-.seg>button+button{ border-left:1px solid var(--line) }
-.seg>button.active{ background:var(--accent); color:var(--accent-ink); }
+.seg{display:flex;flex-wrap:wrap;gap:6px;border:1px solid var(--border);border-radius:999px;padding:4px;background:#fff}
+.seg>button{padding:.5rem .9rem;border:0;background:transparent;border-radius:999px;cursor:pointer;font-weight:800}
+.seg>button.active{background:var(--accent);color:#fff}
 
-.row{ display:grid; grid-template-columns:1fr; gap:16px; margin-bottom:16px; }
-@media (min-width:880px){
-  .row.grid-4-1{grid-template-columns:repeat(4,1fr) 1fr}
-  .row.grid-3{grid-template-columns:repeat(3,1fr)}
-  .row.grid-2{grid-template-columns:repeat(2,1fr)}
+/* Toolbar buttons */
+.btn{padding:.6rem 1rem;border-radius:10px;font-weight:800;border:1px solid var(--border);background:#fff;cursor:pointer}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn:focus{outline:2px solid color-mix(in srgb, var(--accent) 30%, transparent);outline-offset:2px}
+.btn:active{transform:translateY(1px)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* ========================
+   Pitch visuals — 145 x 90
+======================== */
+.pitch{position:relative;width:100%;aspect-ratio:145/90;background:#d9edd6;border:1px solid #0000;border-radius:12px;overflow:hidden}
+.svg{position:absolute;inset:0;width:100%;height:100%;shape-rendering:geometricPrecision}
+.ovl{position:absolute;transform:translate(-50%,-50%);pointer-events:auto;user-select:none;font-size:12px}
+.mark{
+  width:20px;height:20px;border-radius:999px;background:#fff;border:3px solid #111;
+  box-shadow:0 1px 2px rgba(0,0,0,.25);display:grid;place-items:center;
+  font-size:11px;font-weight:800;line-height:1;color:#111
+}
+.mark[data-color="win"]{border-color:var(--green)}
+.mark[data-color="loss"]{border-color:var(--red)}
+.mark[data-color="neutral"]{border-color:var(--muted)}
+
+/* Team shapes (used when Team view = Both) */
+.mark[data-shape="diamond"]{transform:translate(-50%,-50%) rotate(45deg)}
+.mark[data-shape="diamond"] > span{transform:rotate(-45deg);display:inline-block}
+
+/* Shots outcome colouring (adds to shape) */
+.shot.goal{background:var(--green);border-color:var(--green);color:#fff}
+.shot.point{background:transparent;border-color:var(--green)}
+.shot.two{border-color:#0660aa;box-shadow:0 0 0 3px color-mix(in srgb, #0660aa 30%, transparent)}
+.shot.wide{border-color:var(--red)}
+.shot.short{border-color:var(--muted);background:var(--muted)}
+.shot.blocked{border-color:var(--amber)}
+
+/* ========================
+   Legend
+======================== */
+.legend{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.legend .chip{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--border);border-radius:999px;padding:6px 10px;background:#fff}
+.legend .dot{width:12px;height:12px;border-radius:999px;border:3px solid currentColor;display:inline-block}
+.legend .dot.fill{background:currentColor}
+.legend .sym{font-weight:900;display:inline-grid;place-items:center;width:16px;height:16px;border:2px solid currentColor;border-radius:999px}
+
+/* Keyboard focus */
+.pitch-interactive:focus{outline:3px solid color-mix(in srgb, var(--accent) 35%, transparent);outline-offset:2px;border-radius:12px}
+
+/* ========================
+   Player numbers (seg style)
+======================== */
+.player-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.player-grid button{
+  padding:.55rem .2rem;border:1px solid var(--border);border-radius:12px;background:#fff;cursor:pointer;font-weight:800
+}
+.player-grid button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* --- Global table alignment polish ------------------------------------ */
+/* First column = left (labels), all other columns = centered (numbers).  */
+/* Works for every table inside a .card (Turnovers, Kickouts, Shots, etc) */
+.card table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
-.tile{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; }
-.k{font-weight:700; font-size:.9rem; color:var(--muted);}
-.v{font-size:2rem; font-weight:800; margin-top:6px;}
-.s{font-size:.85rem; color:var(--muted); margin-top:2px}
+.card table th:first-child,
+.card table td:first-child {
+  text-align: left;
+}
 
-.kpi-table{ width:100%; border-collapse:separate; border-spacing:0; font-size:.95rem; }
-.kpi-table thead th{ text-align:left; color:var(--muted); font-weight:700; padding:10px 12px; border-bottom:1px solid var(--line); }
-.kpi-table tbody td{ padding:10px 12px; border-bottom:1px solid var(--line); }
-.kpi-table tbody tr:last-child td{ border-bottom:0 }
+.card table th:not(:first-child),
+.card table td:not(:first-child) {
+  text-align: center;
+}
 
-.h{ font-weight:900; font-size:1.25rem; margin:18px 0 10px; }
-
-.pitch-card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:12px; }
-
-.meta{color:var(--muted); font-weight:700; margin-bottom:8px}
-.legend{ position:absolute; right:12px; bottom:12px; background:#fff; border:1px solid var(--line); border-radius:999px; padding:6px 10px; display:flex; gap:10px; align-items:center; box-shadow:var(--shadow); }
-.legend .lg{ width:12px; height:12px; border-radius:2px; display:inline-block; background:#9ca3af; }
-.legend .lg-two{ border-radius:50%; background:#1e88e5; }
-.legend .lg-win{ border-radius:50%; background:#16a34a; }
-.legend .lg-wide{ background:#e11d48; }
-.legend .lg-short{ background:#9ca3af; }
-.legend .lg-block{ background:#f59e0b; }
-.legend .lg-us{ background:#111; }
-.legend .lg-opp{ background:repeating-linear-gradient(90deg, #111 0 4px, transparent 4px 8px); }
-.legend .lg-play{ background:#111; }
-.legend .lg-free{ background:transparent; border:2px solid #111; border-radius:50%; width:12px; height:12px; }
+/* Optional: keep numbers from looking cramped */
+.card table th,
+.card table td {
+  padding: 10px 14px;
+  vertical-align: middle;
+}

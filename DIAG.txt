@@ -1,0 +1,135 @@
+## ENV
+v22.17.0
+9.8.1
+
+## DEPENDENCIES (top level)
+kickout-app@0.0.0 /workspaces/kickout-app
+├── @sveltejs/vite-plugin-svelte@6.1.3
+├── @testing-library/svelte@5.2.8
+├── @types/estree@1.0.8
+├── autoprefixer@10.4.21
+├── eslint-config-prettier@10.1.8
+├── eslint-plugin-svelte@2.46.1
+├── eslint@9.33.0
+├── jsdom@24.1.3
+├── postcss@8.5.6
+├── prettier-plugin-svelte@3.4.0
+├── prettier@3.6.2
+├── svelte@5.38.2
+├── tailwindcss@3.4.17
+├── vite@7.1.3
+└── vitest@2.1.9
+
+
+## SVELTE-CHECK
+Need to install the following packages:
+svelte-check@4.3.1
+Ok to proceed? (y) /workspaces/kickout-app/src/capture/Pitch.svelte:5:14
+Warn: Component has unused export property 'dark'. If it is for external reference only, please consider using `export const dark`
+https://svelte.dev/e/export_let_unused (svelte)
+
+/workspaces/kickout-app/src/capture/Pitch.svelte:6:14
+Warn: Component has unused export property 'orientation_left'. If it is for external reference only, please consider using `export const orientation_left`
+https://svelte.dev/e/export_let_unused (svelte)
+
+/workspaces/kickout-app/src/capture/Pitch.svelte:68:50
+Error: Property 'x' does not exist on type 'never'. (js)
+
+/workspaces/kickout-app/src/capture/Pitch.svelte:69:50
+Error: Property 'y' does not exist on type 'never'. (js)
+
+/workspaces/kickout-app/src/capture/CoachKickouts.svelte:2:20
+Error: Module '"../stores.js"' has no exported member 'meta'. (js)
+
+/workspaces/kickout-app/src/capture/CoachShots.svelte:38:23
+Error: This comparison appears to be unintentional because the types 'string' and 'number' have no overlap. (js)
+
+/workspaces/kickout-app/src/capture/CoachShots.svelte:38:57
+Error: Type 'number' is not assignable to type 'string'. (js)
+
+/workspaces/kickout-app/src/capture/CoachShots.svelte:39:23
+Error: This comparison appears to be unintentional because the types 'string' and 'number' have no overlap. (js)
+
+/workspaces/kickout-app/src/capture/CoachShots.svelte:39:57
+Error: Type 'number' is not assignable to type 'string'. (js)
+
+/workspaces/kickout-app/src/capture/CoachTurnovers.svelte:39:23
+Error: This comparison appears to be unintentional because the types 'string' and 'number' have no overlap. (js)
+
+/workspaces/kickout-app/src/capture/CoachTurnovers.svelte:39:57
+Error: Type 'number' is not assignable to type 'string'. (js)
+
+/workspaces/kickout-app/src/capture/CoachTurnovers.svelte:40:23
+Error: This comparison appears to be unintentional because the types 'string' and 'number' have no overlap. (js)
+
+/workspaces/kickout-app/src/capture/CoachTurnovers.svelte:40:57
+Error: Type 'number' is not assignable to type 'string'. (js)
+
+/workspaces/kickout-app/src/App.svelte:4:12
+Error: Module '"./stores.js"' has no exported member 'meta'. (js)
+
+/workspaces/kickout-app/src/lib/supabaseClient.js:1:30
+Error: Cannot find module '@supabase/supabase-js' or its corresponding type declarations. 
+
+/workspaces/kickout-app/src/capture/Review.svelte:89:3
+Warn: Unused CSS selector "h2"
+https://svelte.dev/e/css_unused_selector (svelte)
+
+/workspaces/kickout-app/src/capture/components/ShotMap.svelte:3:12
+Error: Module '"../../stores.js"' has no exported member 'meta'. (js)
+
+/workspaces/kickout-app/src/capture/components/TurnoverMap.svelte:3:12
+Error: Module '"../../stores.js"' has no exported member 'meta'. (js)
+
+/workspaces/kickout-app/src/capture/components/ZoneBars.svelte:16:3
+Warn: Unused CSS selector ".loss"
+https://svelte.dev/e/css_unused_selector (svelte)
+
+====================================
+svelte-check found 15 errors and 4 warnings in 10 files
+
+## BUILD
+
+> kickout-app@0.0.0 build
+> vite build
+
+vite v7.1.3 building for production...
+transforming...
+10:13:30 PM [vite-plugin-svelte] src/capture/Pitch.svelte:5:13 Component has unused export property 'dark'. If it is for external reference only, please consider using `export const dark`
+https://svelte.dev/e/export_let_unused
+3:   export let overlays = [];         // optional: array of markers, e.g. [{x:0.5,y:0.5,color:'red'}]
+4:   export let landing = null;        // optional: { x, y }
+5:   export let dark = false;          // optional: invert line colors if needed
+                    ^
+6:   export let orientation_left = false; // optional: just a display flag for your label, no transform applied here
+7: </script>
+10:13:30 PM [vite-plugin-svelte] src/capture/Pitch.svelte:6:13 Component has unused export property 'orientation_left'. If it is for external reference only, please consider using `export const orientation_left`
+https://svelte.dev/e/export_let_unused
+4:   export let landing = null;        // optional: { x, y }
+5:   export let dark = false;          // optional: invert line colors if needed
+6:   export let orientation_left = false; // optional: just a display flag for your label, no transform applied here
+                                ^
+7: </script>
+8: 
+✓ 121 modules transformed.
+✗ Build failed in 950ms
+error during build:
+src/capture/CoachKickouts.svelte (2:19): "meta" is not exported by "src/stores.js", imported by "src/capture/CoachKickouts.svelte".
+file: /workspaces/kickout-app/src/capture/CoachKickouts.svelte:2:19
+
+1: <script>
+2:   import { events, meta } from '$lib/stores.js';
+                      ^
+3:   import { zoneFromCanonical, clamp01 } from '$lib/util.js'
+
+    at getRollupError (file:///workspaces/kickout-app/node_modules/rollup/dist/es/shared/parseAst.js:401:41)
+    at error (file:///workspaces/kickout-app/node_modules/rollup/dist/es/shared/parseAst.js:397:42)
+    at Module.error (file:///workspaces/kickout-app/node_modules/rollup/dist/es/shared/node-entry.js:16877:16)
+    at Module.traceVariable (file:///workspaces/kickout-app/node_modules/rollup/dist/es/shared/node-entry.js:17329:29)
+    at ModuleScope.findVariable (file:///workspaces/kickout-app/node_modules/rollup/dist/es/shared/node-entry.js:14999:39)
+    at FunctionScope.findVariable (file:///workspaces/kickout-app/node_modules/rollup/dist/es/shared/node-entry.js:5620:38)
+    at FunctionBodyScope.findVariable (file:///workspaces/kickout-app/node_modules/rollup/dist/es/shared/node-entry.js:5620:38)
+    at ReturnValueScope.findVariable (file:///workspaces/kickout-app/node_modules/rollup/dist/es/shared/node-entry.js:5620:38)
+    at FunctionBodyScope.findVariable (file:///workspaces/kickout-app/node_modules/rollup/dist/es/shared/node-entry.js:5620:38)
+    at Identifier.bind (file:///workspaces/kickout-app/node_modules/rollup/dist/es/shared/node-entry.js:5394:40)
+build exited nonzero (captured above)
