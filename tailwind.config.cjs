@@ -1,5 +1,7 @@
+/** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ["./index.html","./src/**/*.{svelte,js,ts}"],
+  content: ["./src/**/*.{svelte,js,ts}"],
+  corePlugins: { preflight: false }, // keeps your pitch/buttons untouched
   theme: { extend: {} },
   plugins: [],
 };
