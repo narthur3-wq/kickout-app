@@ -2,7 +2,7 @@ import { writable, derived, get } from 'svelte/store';
 
 /** Meta / UI state */
 export const current_side = writable('us');       // 'us' | 'opp'
-export const half = writable(1);                  // 1 | 2
+export const half = writable(1);                  // 1 | 2 | 'all'
 export const orientation_left = writable(true);   // true = Left, false = Right
 
 export const orientationLabel = derived(orientation_left, v => (v ? 'Left' : 'Right'));
@@ -11,7 +11,9 @@ export function setSide(side) {
   current_side.set(side === 'opp' ? 'opp' : 'us');
 }
 export function setHalf(h) {
-  half.set(h === 2 ? 2 : 1);
+  // allow 1, 2, 'all'
+  if (h === 'all') half.set('all');
+  else half.set(h === 2 ? 2 : 1);
 }
 export function toggleOrientation() {
   orientation_left.update(v => !v);

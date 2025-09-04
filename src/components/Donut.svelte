@@ -1,59 +1,53 @@
 <script>
-  // value in [0..1], countA/countB optional label (e.g., wins/attempts)
+  // Props: pass raw counts (value = wins, total = wins + losses)
   export let value = 0;
-  export let label = '';        // e.g., 'Kickout win rate'
-  export let caption = '';      // small caption under the % (e.g., '0/0 wins')
+  export let total = 0;
 
-  const size = 120;             // px
-  const stroke = 10;            // ring thickness
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  $: dash = Math.max(0, Math.min(1, value)) * c;
-  $: gap  = c - dash;
+  // presentation
+  export let size = 96;        // px
+  export let thickness = 10;   // ring thickness
+
+  // compute ratio safely
+  $: ratio = total > 0 ? Math.max(0, Math.min(1, value / total)) : 0;
+  $: pct = Math.round(ratio * 100);
+
+  // circle geometry
+  const r = (size - thickness) / 2;   // radius of the ring center line
+  const c = 2 * Math.PI * r;          // circumference
+  $: dash = c * ratio;                // drawn arc length
+  $: gap  = c - dash;                 // remaining gap
+
+  // accessibility label
+  $: label = `${pct}% (${value}/${total})`;
 </script>
 
-<div class="donut">
-  <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-    <g transform={`translate(${size/2}, ${size/2})`}>
-      <!-- track -->
-      <circle r={r} fill="none" stroke="var(--ring-track, #ecf0f3)" stroke-width={stroke} />
-      <!-- arc -->
-      <circle
-        r={r} fill="none"
-        stroke="var(--ring-arc, var(--accent))"
-        stroke-width={stroke}
-        stroke-linecap="round"
-        stroke-dasharray={`${dash} ${gap}`}
-        transform="rotate(-90)"
-      />
-    </g>
-  </svg>
-
-  <div class="center">
-    <div class="value">{Math.round(value*100)}%</div>
-    {#if caption}<div class="cap">{caption}</div>{/if}
-  </div>
-
-  {#if label}
-    <div class="title">{label}</div>
-  {/if}
-</div>
+<svg
+  class="donut"
+  width={size}
+  height={size}
+  viewBox={`0 0 ${size} ${size}`}
+  role="img"
+  aria-label={label}
+>
+  <!-- base ring -->
+  <circle
+    cx={size/2} cy={size/2} r={r}
+    fill="none"
+    stroke="var(--donut-bg, #e5e7eb)"
+    stroke-width={thickness}
+  />
+  <!-- progress arc; rotated so it starts at 12 o'clock -->
+  <circle
+    cx={size/2} cy={size/2} r={r}
+    fill="none"
+    stroke="var(--donut-fg, #0c66ff)"
+    stroke-width={thickness}
+    stroke-linecap="round"
+    stroke-dasharray={`${dash} ${gap}`}
+    transform={`rotate(-90 ${size/2} ${size/2})`}
+  />
+</svg>
 
 <style>
-  .donut{
-    position:relative;
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    gap:16px;
-  }
-  .center{
-    position:absolute; inset:0;
-    display:flex; flex-direction:column;
-    align-items:center; justify-content:center;
-    pointer-events:none;
-  }
-  .value{ font-size:28px; font-weight:800; line-height:1; }
-  .cap{ font-size:12px; opacity:.7; margin-top:4px; }
-  .title{ position:absolute; top:-10px; left:0; right:0; text-align:center; font-weight:800; }
+  .donut { display: block; }
 </style>

@@ -47,6 +47,7 @@
     <div class="seg" aria-label="Half">
       <button class:active={$half===1} on:click={()=>setHalf(1)}>H1</button>
       <button class:active={$half===2} on:click={()=>setHalf(2)}>H2</button>
+      <button class:active={$half==='all'} on:click={()=>setHalf('all')}>All</button>
     </div>
     <button class="btn" on:click={flipOrientation}>Flip</button>
     <button class="btn" on:click={doUndo}>Undo</button>

@@ -52,10 +52,13 @@
         )
       ) then p}
         <div class="ovl {m.class ?? ''}" style="left:{p.x*100}%; top:{p.y*100}%;">
+
+          <!-- Bigger glyphs + 'with-label' class for legibility -->
           <div
-            class="mark"
+            class="mark {m.label ? 'with-label' : ''}"
             data-color={m.dataColor ?? null}
             data-shape={m.shape ?? null}
+            aria-hidden="true"
           >
             <span>{m.label ?? ''}</span>
           </div>
@@ -75,30 +78,42 @@
     pointer-events: none;
   }
 
+  /* === Glyphs ========================================================= */
   .mark {
-    width: 14px; height: 14px;
+    /* larger base size */
+    width: 18px; height: 18px;
     border-radius: 999px;
-    border: 2px solid #fff;
-    background: #2b6cb0; /* default */
+    border: 2.5px solid #fff;               /* white halo */
+    background: var(--accent);              /* unified brand blue */
     display: grid; place-items: center;
-    font: 700 8px/1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font: 800 11px/1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     color: #fff;
-    box-shadow: 0 0 0 1px rgba(0,0,0,.15);
+    /* subtle drop shadow + hairline ring for contrast on pitch lines */
+    box-shadow: 0 1.5px 3px rgba(0,0,0,.25), 0 0 0 1px rgba(0,0,0,.08);
+  }
+  .mark.with-label { width: 22px; height: 22px; }
+  .mark > span {
+    /* make letters/numbers pop on any background */
+    text-shadow: 0 1px 1px rgba(0,0,0,.55);
   }
 
-  .mark[data-shape="diamond"] { transform: rotate(45deg); border-radius: 2px; }
+  /* diamond marks for opposition */
+  .mark[data-shape="diamond"] { transform: rotate(45deg); border-radius: 3px; }
   .mark[data-shape="diamond"] > span { transform: rotate(-45deg); }
 
-  .mark[data-color="win"]     { background: #16a34a; }
-  .mark[data-color="loss"]    { background: #dc2626; }
-  .mark[data-color="neutral"] { background: #6b7280; }
+  /* outcomes (kickouts use data-color) */
+  .mark[data-color="win"]     { background: var(--green); }
+  .mark[data-color="loss"]    { background: var(--red); }
+  .mark[data-color="neutral"] { background: var(--muted); }
 
-  .ovl.ko .mark { width: 16px; height: 16px; }
-  .shot.goal    .mark { background: #16a34a; }
-  .shot.wide    .mark { background: #6b7280; }
-  .shot.blocked .mark { background: #0ea5e9; }
-  .shot.two     .mark {
-    background: color-mix(in srgb, #0660aa 30%, transparent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, #0660aa 30%, transparent);
-  }
+  /* make kickout glyphs a touch bigger still */
+  .ovl.ko .mark { width: 22px; height: 22px; }
+
+  /* Shots – consistent with global palette */
+  .shot.goal    .mark { background: var(--green); border-color: #fff; color:#fff; }
+  .shot.point   .mark { background: transparent; border-color: var(--green); color: var(--green); }
+  .shot.two     .mark { background: transparent; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); color: var(--accent); }
+  .shot.wide    .mark { background: transparent; border-color: var(--red); color: var(--red); }
+  .shot.short   .mark { background: var(--muted); border-color: var(--muted); color:#fff; }
+  .shot.blocked .mark { background: transparent; border-color: var(--amber); color: var(--amber); }
 </style>

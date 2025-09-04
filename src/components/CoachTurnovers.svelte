@@ -1,90 +1,86 @@
 <script>
-  import { pending } from '$lib/stores.js';
+  import Pitch from './Pitch.svelte';
+  import Legend from './Legend.svelte';
+  import TogglePills from './TogglePills.svelte';
+  import { events as pending, half } from '$lib/stores.js';
 
-  // Helpers
-  const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
+  // US perspective only
+  let outcomes = { gain: true, loss: true };           // labels shown as Win/Loss
+  let causes   = { forced: true, unforced: true };
 
-  // We present turnovers from Us perspective:
-  // gain = we win the ball, loss = we lose the ball.
-  // cause = forced/unforced (only relevant to losses).
-  function tally(list) {
-    const gain = list.filter((e) => e.outcome === 'gain').length;
-    const loss = list.filter((e) => e.outcome === 'loss').length;
-    const forced = list.filter((e) => e.outcome === 'loss' && e.cause === 'forced').length;
-    const unforced = list.filter((e) => e.outcome === 'loss' && e.cause === 'unforced').length;
-    return { gain, loss, forced, unforced, rate: pct(gain, gain + loss) };
+  const safe = (a) => Array.isArray(a) ? a : [];
+  $: tosThisHalf = safe($pending).filter(
+    (e) => e.type === 'turnover' && ($half === 'all' ? true : e.half === $half) && e.side === 'us'
+  );
+
+  // ✅ pass filters so Svelte tracks dependencies
+  function keepByFilters(e, outcomes, causes) {
+    if (!outcomes[e.outcome]) return false;
+    const c = e.cause || 'forced';
+    if (!causes[c]) return false;
+    return true;
   }
 
-  $: all = ($pending || []).filter((e) => e.type === 'turnover' && e.side === 'us');
+  $: marks = tosThisHalf
+    .filter(e => keepByFilters(e, outcomes, causes))
+    .map((e) => ({
+      x: e.nx,
+      y: e.ny,
+      dataColor: e.outcome === 'gain' ? 'win' : 'loss',
+      label: (e.cause?.[0] || '').toUpperCase(),
+      shape: null,
+      savedOrientationLeft: e.savedOrientationLeft
+    }));
 
-  $: h1 = tally(all.filter((e) => e.half === 'H1'));
-  $: h2 = tally(all.filter((e) => e.half === 'H2'));
-  $: total = tally(all);
+  function tally(outcomes, causes) {
+    const rows = tosThisHalf.filter(e => keepByFilters(e, outcomes, causes));
+    const win  = rows.filter((e) => e.outcome === 'gain').length;
+    const loss = rows.filter((e) => e.outcome === 'loss').length;
+    const forced   = rows.filter((e) => e.cause === 'forced').length;
+    const unforced = rows.filter((e) => e.cause === 'unforced').length;
+    const denom = win + loss;
+    const pct = denom ? Math.round((win / denom) * 100) : 0;
+    return { total: rows.length, win, loss, forced, unforced, pct };
+  }
+  $: usTally = tally(outcomes, causes);
 </script>
 
-<div class="card">
-  <h2 class="card-title">Turnovers — H1 / H2 / Total <span class="muted">(Us)</span></h2>
+<div class="to-grid">
+  <div class="card sidebar">
+    <TogglePills ariaLabel="Outcome"
+      bind:model={outcomes}
+      items={[{key:'gain',label:'Win'},{key:'loss',label:'Loss'}]} />
 
-  <div class="table-wrap">
-    <table class="t numcol">
-      <thead>
-        <tr>
-          <th></th>
-          <th>Gain</th>
-          <th>Loss</th>
-          <th>%</th>
-          <th>F</th>
-          <th>U</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <th>H1</th>
-          <td>{h1.gain}</td>
-          <td>{h1.loss}</td>
-          <td>{h1.rate}%</td>
-          <td>{h1.forced}</td>
-          <td>{h1.unforced}</td>
-        </tr>
-        <tr>
-          <th>H2</th>
-          <td>{h2.gain}</td>
-          <td>{h2.loss}</td>
-          <td>{h2.rate}%</td>
-          <td>{h2.forced}</td>
-          <td>{h2.unforced}</td>
-        </tr>
-      </tbody>
-      <tfoot>
-        <tr>
-          <th>Total</th>
-          <td><strong>{total.gain}</strong></td>
-          <td><strong>{total.loss}</strong></td>
-          <td><strong>{total.rate}%</strong></td>
-          <td><strong>{total.forced}</strong></td>
-          <td><strong>{total.unforced}</strong></td>
-        </tr>
-      </tfoot>
-    </table>
+    <TogglePills ariaLabel="Cause"
+      bind:model={causes}
+      items={[{key:'forced',label:'forced'},{key:'unforced',label:'unforced'}]} dense />
+
+    <Legend title="Legend" showTeam={false} showOutcome={true} showContest={false} showCause={true} dense />
+
+    <div class="mini-sum">
+      <h4>Us (this half)</h4>
+      <div><b>{usTally.win}</b> wins ({usTally.pct}%)</div>
+      <div><b>{usTally.loss}</b> losses</div>
+      <div class="byc">F:{usTally.forced} • U:{usTally.unforced}</div>
+    </div>
   </div>
 
-  <p class="note">Us perspective only (Opp is the mirror: Opp gain ≅ Us loss)</p>
+  <div class="card pitch-panel">
+    <Pitch {marks} />
+  </div>
 </div>
 
 <style>
-  .card { background: #fff; border-radius: 16px; padding: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
-  .card-title { margin: 0 0 12px; }
-  .muted { color: #6b7280; font-weight: 500; }
-
-  .table-wrap { overflow-x: auto; }
-  table.t { width: 100%; border-collapse: collapse; }
-  table.t th, table.t td { padding: 10px 12px; border-bottom: 1px solid #eef1f4; }
-  table.t thead th { font-weight: 600; color: #374151; background: #f7f8fb; }
-  table.t tfoot th, table.t tfoot td { background: #f5f7fb; }
-
-  /* Center all numeric columns, keep the first col left-aligned. */
-  table.t.numcol th, table.t.numcol td { text-align: center; }
-  table.t.numcol th:first-child, table.t.numcol td:first-child { text-align: left; }
-
-  .note { margin-top: 10px; color: #6b7280; }
+  .to-grid {
+    display: grid;
+    grid-template-columns: 330px 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 1100px) { .to-grid { grid-template-columns: 1fr; } }
+  .card { background:#fff; border:1px solid #e6ebf1; border-radius:14px; padding:12px; }
+  .sidebar :global(.seg) { margin-bottom:10px; }
+  .mini-sum { margin-top:12px; }
+  .mini-sum h4 { margin:6px 0; }
+  .mini-sum .byc { color:#708090; font-size:12px; margin-top:4px; }
+  .pitch-panel { padding:8px; }
 </style>
