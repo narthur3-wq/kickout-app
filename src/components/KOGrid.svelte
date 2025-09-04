@@ -34,6 +34,6 @@
   .cell[data-h="1"]{ background:rgba(37,99,235,.06) }
   .cell[data-h="2"]{ background:rgba(37,99,235,.12) }
   .cell[data-h="3"]{ background:rgba(37,99,235,.18) }
-  .a{font-size:12px; color:var(--muted); font-weight:700}
+  .a{font-size:12px; color:var(--neutral); font-weight:700}
   .p{font-weight:900}
 </style>

@@ -34,7 +34,7 @@
   .ic{font-size:18px}
   .lbl{font-weight:800; color:var(--ink)}
   .val{font-weight:900; font-size:28px; line-height:1}
-  .sub{color:var(--muted); font-size:12px; font-weight:700; margin-left:6px}
-  .empty{color:var(--muted); font-weight:700}
+  .sub{color:var(--neutral); font-size:12px; font-weight:700; margin-left:6px}
+  .empty{color:var(--neutral); font-weight:700}
   .badge{margin-top:4px}
 </style>

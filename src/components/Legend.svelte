@@ -38,8 +38,9 @@
 
   {#if showCause}
     <div class="row">
-      <span class="label">F</span><span>Forced</span>
-      <span class="label">U</span><span>Unforced</span>
+      <span class="label">F</span><span>Forced loss</span>
+      <span class="label">U</span><span>Unforced loss</span>
+      <span class="label">?</span><span>Unknown</span>
     </div>
   {/if}
 

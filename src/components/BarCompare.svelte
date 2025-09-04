@@ -29,5 +29,5 @@
   .tag{font-weight:800}
   .us{color:var(--us)} .opp{color:var(--opp)}
   .val{font-weight:900}
-  .sub{font-size:12px; color:var(--muted); font-weight:700}
+  .sub{font-size:12px; color:var(--neutral); font-weight:700}
 </style>

@@ -100,18 +100,18 @@
   .mark[data-shape="diamond"] > span { transform: rotate(-45deg); }
 
   /* outcomes (kickouts use data-color) */
-  .mark[data-color="win"]     { background: var(--green); }
-  .mark[data-color="loss"]    { background: var(--red); }
-  .mark[data-color="neutral"] { background: var(--muted); }
+  .mark[data-color="win"]     { background: var(--win); }
+  .mark[data-color="loss"]    { background: var(--loss); }
+  .mark[data-color="neutral"] { background: var(--neutral); }
 
   /* make kickout glyphs a touch bigger still */
   .ovl.ko .mark { width: 22px; height: 22px; }
 
   /* Shots – consistent with global palette */
-  .shot.goal    .mark { background: var(--green); border-color: #fff; color:#fff; }
-  .shot.point   .mark { background: transparent; border-color: var(--green); color: var(--green); }
+  .shot.goal    .mark { background: var(--win); border-color: #fff; color:#fff; }
+  .shot.point   .mark { background: transparent; border-color: var(--win); color: var(--win); }
   .shot.two     .mark { background: transparent; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); color: var(--accent); }
-  .shot.wide    .mark { background: transparent; border-color: var(--red); color: var(--red); }
-  .shot.short   .mark { background: var(--muted); border-color: var(--muted); color:#fff; }
+  .shot.wide    .mark { background: transparent; border-color: var(--loss); color: var(--loss); }
+  .shot.short   .mark { background: var(--neutral); border-color: var(--neutral); color:#fff; }
   .shot.blocked .mark { background: transparent; border-color: var(--amber); color: var(--amber); }
 </style>

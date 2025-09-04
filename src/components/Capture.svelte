@@ -23,9 +23,10 @@
     outcome = outcomeOptions[kind][0];
   }
 
-  // show markers for current type + side + (selected) half
+   // show markers for current type + (selected) half
+  // turnovers ignore team selection
   $: marks = ($pending || [])
-    .filter(e => e.type === kind && e.side === $current_side && ( $half === 'all' ? true : e.half === $half ))
+   .filter(e => e.type === kind && (kind==='turnover' || e.side === $current_side) && ( $half === 'all' ? true : e.half === $half ))  
     .map(e => {
       if (e.type === 'kickout') {
         const label = (e.contest?.[0] || 'c').toUpperCase();
@@ -69,7 +70,7 @@
     const captureHalf = ($half === 'all' ? 1 : $half);
 
     const base = {
-      side: $current_side,
+      side: kind === 'turnover' ? 'us' : $current_side,
       half: captureHalf,
       savedOrientationLeft: $orientation_left,
       nx, ny,

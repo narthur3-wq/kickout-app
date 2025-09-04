@@ -9,21 +9,19 @@
 :root{
   /* Brand / teams */
   --accent:#0660aa;         /* primary UI blue */
-  --us:#2563EB;             /* Us (blue) for charts/bars */
-  --opp:#EF4444;            /* Opp (red) for charts/bars */
+  --us:#2B6CB0;             /* Us (blue) for charts/bars */
+  --opp:#E53E3E;            /* Opp (red) for charts/bars */
 
   /* Semantics */
-  --green:#16a34a;          /* positive/success */
-  --red:#dc2626;            /* negative/error  */
-  --positive:#16a34a;
-  --negative:#dc2626;
+  --win:#16A34A;
+  --loss:#DC2626;
+  --neutral:#64748B;
   --amber:#f59e0b;
 
   /* UI neutrals */
   --ink-strong:#111827;
   --ink:#374151;
-  --muted:#6b7280;
-  --border:#e5e7eb;
+    --border:#e5e7eb;
   --bg:#f6f7f9;
   --panel:#ffffff;
 
@@ -56,7 +54,7 @@ h1{font-size:clamp(26px, 3.2vw, 36px)}
 h2{font-size:clamp(20px, 2.6vw, 28px)}
 h3{font-size:clamp(18px, 2.0vw, 22px)}
 .lead{font-size:clamp(15px, 1.6vw, 18px); color:#222}
-.muted{color:var(--muted)}
+.neutral{color:var(--neutral)}
 
 /* ========================
    Layout
@@ -122,9 +120,9 @@ h3{font-size:clamp(18px, 2.0vw, 22px)}
   padding:4px 10px; border-radius:999px;
   border:1px solid var(--border); background:#fff; font-weight:700; color:var(--ink)
 }
-.badge[data-kind="pos"]{ background:color-mix(in srgb, var(--positive) 12%, #fff); border-color:var(--positive); color:#065f46 }
-.badge[data-kind="neg"]{ background:color-mix(in srgb, var(--negative) 12%, #fff); border-color:var(--negative); color:#7f1d1d }
-.badge[data-kind="muted"]{ color:var(--muted) }
+.badge[data-kind="pos"]{ background:color-mix(in srgb, var(--win) 12%, #fff); border-color:var(--win); color:#065f46 }
+.badge[data-kind="neg"]{ background:color-mix(in srgb, var(--loss) 12%, #fff); border-color:var(--loss); color:#7f1d1d }
+.badge[data-kind="neutral"]{ color:var(--neutral) }
 
 /* ========================
    Pitch visuals — 145 x 90
@@ -146,7 +144,7 @@ h3{font-size:clamp(18px, 2.0vw, 22px)}
 /* Outcome colouring (kickouts) */
 .mark[data-color="win"]{ background:var(--green); border-color:#fff; color:#fff }
 .mark[data-color="loss"]{ background:var(--red); border-color:#fff; color:#fff }
-.mark[data-color="neutral"]{ background:var(--muted); border-color:#fff; color:#fff }
+.mark[data-color="neutral"]{ background:var(--neutral); border-color:#fff; color:#fff }
 
 /* Team shapes */
 .mark[data-shape="diamond"]{ transform:rotate(45deg); border-radius:3px }
@@ -161,7 +159,7 @@ h3{font-size:clamp(18px, 2.0vw, 22px)}
   color:var(--accent)
 }
 .shot.wide{ background:transparent; border-color:var(--red); color:var(--red) }
-.shot.short{ background:var(--muted); border-color:var(--muted); color:#fff }
+.shot.short{ background:var(--neutral); border-color:var(--neutral); color:#fff }
 .shot.blocked{ background:transparent; border-color:var(--amber); color:var(--amber) }
 
 /* ========================

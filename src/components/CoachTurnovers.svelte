@@ -4,45 +4,57 @@
   import TogglePills from './TogglePills.svelte';
   import { events as pending, half } from '$lib/stores.js';
 
-  // US perspective only
-  let outcomes = { gain: true, loss: true };           // labels shown as Win/Loss
-  let causes   = { forced: true, unforced: true };
+  // WIN/LOSS perspective only
+  let outcomes = { gain: true, loss: true };
+  let causes   = { forced: true, unforced: true, unknown: true };
 
   const safe = (a) => Array.isArray(a) ? a : [];
   $: tosThisHalf = safe($pending).filter(
-    (e) => e.type === 'turnover' && ($half === 'all' ? true : e.half === $half) && e.side === 'us'
+    (e) => e.type === 'turnover' && ($half === 'all' ? true : e.half === $half)
   );
 
   // ✅ pass filters so Svelte tracks dependencies
   function keepByFilters(e, outcomes, causes) {
     if (!outcomes[e.outcome]) return false;
-    const c = e.cause || 'forced';
-    if (!causes[c]) return false;
-    return true;
+    if (e.outcome === 'loss') {
+      const c = e.cause ?? 'unknown';
+      if (!causes[c]) return false;
+    }
+    return true; // ← this was falling inside the unclosed if
   }
 
   $: marks = tosThisHalf
-    .filter(e => keepByFilters(e, outcomes, causes))
+    .filter((e) => keepByFilters(e, outcomes, causes))
     .map((e) => ({
       x: e.nx,
       y: e.ny,
       dataColor: e.outcome === 'gain' ? 'win' : 'loss',
-      label: (e.cause?.[0] || '').toUpperCase(),
+      label: e.cause ? e.cause[0].toUpperCase() : '?',
       shape: null,
       savedOrientationLeft: e.savedOrientationLeft
     }));
 
-  function tally(outcomes, causes) {
-    const rows = tosThisHalf.filter(e => keepByFilters(e, outcomes, causes));
-    const win  = rows.filter((e) => e.outcome === 'gain').length;
-    const loss = rows.filter((e) => e.outcome === 'loss').length;
-    const forced   = rows.filter((e) => e.cause === 'forced').length;
-    const unforced = rows.filter((e) => e.cause === 'unforced').length;
+  function tally(events, outcomes, causes) {
+    const rows = events.filter((e) => keepByFilters(e, outcomes, causes));
+    let win = 0, loss = 0, forced = 0, unforced = 0, unknown = 0;
+
+    for (const e of rows) {
+      if (e.outcome === 'gain') win++;
+      else if (e.outcome === 'loss') {
+        loss++;
+        const c = e.cause ?? 'unknown';
+        if (c === 'forced') forced++;
+        else if (c === 'unforced') unforced++;
+        else unknown++;
+      }
+    }
+
     const denom = win + loss;
     const pct = denom ? Math.round((win / denom) * 100) : 0;
-    return { total: rows.length, win, loss, forced, unforced, pct };
+    return { total: rows.length, win, loss, forced, unforced, unknown, pct };
   }
-  $: usTally = tally(outcomes, causes);
+
+  $: usTally = tally(tosThisHalf, outcomes, causes);
 </script>
 
 <div class="to-grid">
@@ -51,17 +63,17 @@
       bind:model={outcomes}
       items={[{key:'gain',label:'Win'},{key:'loss',label:'Loss'}]} />
 
-    <TogglePills ariaLabel="Cause"
+    <TogglePills ariaLabel="Loss Cause"
       bind:model={causes}
-      items={[{key:'forced',label:'forced'},{key:'unforced',label:'unforced'}]} dense />
+      items={[{key:'forced',label:'forced'},{key:'unforced',label:'unforced'},{key:'unknown',label:'unknown'}]} dense />
 
     <Legend title="Legend" showTeam={false} showOutcome={true} showContest={false} showCause={true} dense />
 
     <div class="mini-sum">
-      <h4>Us (this half)</h4>
-      <div><b>{usTally.win}</b> wins ({usTally.pct}%)</div>
-      <div><b>{usTally.loss}</b> losses</div>
-      <div class="byc">F:{usTally.forced} • U:{usTally.unforced}</div>
+       <h4>This half</h4>
+      <div><b>{toTally.win}</b> wins ({toTally.pct}%)</div>
+      <div><b>{toTally.loss}</b> losses</div>
+     <div class="byc">F:{usTally.forced} • U:{usTally.unforced} • ?:{usTally.unknown}</div>
     </div>
   </div>
 

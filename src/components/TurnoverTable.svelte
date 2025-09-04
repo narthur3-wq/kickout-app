@@ -4,9 +4,8 @@
   // Helpers
   const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
 
-  // We present turnovers from Us perspective:
-  // gain = we win the ball, loss = we lose the ball.
-  // cause = forced/unforced (only relevant to losses).
+   // Turnovers tracked as wins/losses:
+  // gain = win (we win the ball), loss = loss (we lose the ball).
   function tally(list) {
     const gain = list.filter((e) => e.outcome === 'gain').length;
     const loss = list.filter((e) => e.outcome === 'loss').length;
@@ -15,22 +14,22 @@
     return { gain, loss, forced, unforced, rate: pct(gain, gain + loss) };
   }
 
-  $: all = ($pending || []).filter((e) => e.type === 'turnover' && e.side === 'us');
+  $: all = ($pending || []).filter((e) => e.type === 'turnover');
 
-  $: h1 = tally(all.filter((e) => e.half === 'H1'));
-  $: h2 = tally(all.filter((e) => e.half === 'H2'));
+  $: h1 = tally(all.filter((e) => e.half === 1));
+  $: h2 = tally(all.filter((e) => e.half === 2));
   $: total = tally(all);
 </script>
 
 <div class="card">
-  <h2 class="card-title">Turnovers — H1 / H2 / Total <span class="muted">(Us)</span></h2>
+   <h2 class="card-title">Turnovers — H1 / H2 / Total <span class="muted">(Win/Loss)</span></h2>
 
   <div class="table-wrap">
     <table class="t numcol">
       <thead>
         <tr>
           <th></th>
-          <th>Gain</th>
+          <th>WIN</th>
           <th>Loss</th>
           <th>%</th>
           <th>F</th>
@@ -68,7 +67,7 @@
     </table>
   </div>
 
-  <p class="note">Us perspective only (Opp is the mirror: Opp gain ≅ Us loss)</p>
+  <p class="note">Shown as wins (gains) vs losses.</p>
 </div>
 
 <style>

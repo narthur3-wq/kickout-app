@@ -105,15 +105,15 @@
   $: usTop  = topScorers('us');
   $: oppTop = topScorers('opp');
 
-  // ---------- Turnovers (us-only) ----------
+  // ---------- Turnovers (WIN/LOSS) ----------
   function toAgg(){
-    const rows = safe($pending).filter(e=>e.type==='turnover' && e.side==='us');
+   const rows = safe($pending).filter(e=>e.type==='turnover');
     const H = [1,2].map(h=>{
       const r = rows.filter(e=>e.half===h);
       const gain = r.filter(e=>e.outcome==='gain').length;
       const loss = r.filter(e=>e.outcome==='loss').length;
-      const forced   = r.filter(e=>e.cause==='forced').length;
-      const unforced = r.filter(e=>e.cause==='unforced').length;
+     const forced   = r.filter(e=>e.outcome==='loss' && e.cause==='forced').length;
+      const unforced = r.filter(e=>e.outcome==='loss' && e.cause==='unforced').length;
       const d = gain+loss;
       const pct = d ? Math.round((gain/d)*100) : 0;
       return { gain, loss, pct, forced, unforced };
@@ -159,7 +159,7 @@
 
   // ---------- Simple notes ----------
   $: notes = [
-    (toDiff<0) ? `Turnovers −${Math.abs(toDiff)} (Gain ${toTable.total.gain} / Loss ${toTable.total.loss})` : null,
+    (toDiff<0) ? `Turnovers −${Math.abs(toDiff)} (Win ${toTable.total.gain} / Loss ${toTable.total.loss})` : null,
     (koDelta!=null && koDelta<0) ? `Kickouts trailing by ${Math.abs(koDelta)}%` : null,
     (shotDelta!=null && shotDelta<0) ? `Shot% behind by ${Math.abs(shotDelta)}%` : null
   ].filter(Boolean);
@@ -264,7 +264,7 @@
       <div class="kpi-vals">
         <div class="kpi-val">
           <b>{toDiff===0 ? 'level' : sign(toDiff)}</b>
-          <span>{toTable.total.gain} gain / {toTable.total.loss} loss</span>
+          <span>{toTable.total.gain} win / {toTable.total.loss} loss</span>
         </div>
         <div class="kpi-delta badge" data-kind={toDiff>0 ? 'pos' : toDiff<0 ? 'neg' : 'muted'}>
           {toDiff>0 ? 'positive' : toDiff<0 ? 'negative' : 'even'}
@@ -406,15 +406,16 @@
 
       <!-- Turnovers -->
       <div class="block">
-        <div class="block-h">Turnovers — H1 / H2 / Total (us perspective)</div>
+       <div class="block-h">Turnovers — H1 / H2 / Total (Win/Loss)</div> 
         <table class="turns">
-          <thead><tr><th></th><th>Gain</th><th>Loss</th><th>%</th><th>F</th><th>U</th></tr></thead>
+          <thead><tr><th></th><th>Win</th><th>Loss</th><th>%</th><th>F</th><th>U</th></tr></thead>
           <tbody>
             <tr><td>H1</td><td>{toTable.h1.gain}</td><td>{toTable.h1.loss}</td><td>{toTable.h1.pct}%</td><td>{toTable.h1.forced}</td><td>{toTable.h1.unforced}</td></tr>
             <tr><td>H2</td><td>{toTable.h2.gain}</td><td>{toTable.h2.loss}</td><td>{toTable.h2.pct}%</td><td>{toTable.h2.forced}</td><td>{toTable.h2.unforced}</td></tr>
             <tr class="total"><td>Total</td><td>{toTable.total.gain}</td><td>{toTable.total.loss}</td><td>{toTable.total.pct}%</td><td>{toTable.total.forced}</td><td>{toTable.total.unforced}</td></tr>
           </tbody>
         </table>
+        <div class="small muted">F/U counts among losses</div>
       </div>
     </div>
   </div>
@@ -444,16 +445,17 @@
   .scoreline{ display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:8px; }
   .scoreline .nm{ font-weight:800; color:var(--ink-strong); }
   .scoreline .big{ font-weight:900; font-size:34px; line-height:1; }
-  .scoreline .two{ font-weight:700; color:var(--muted); font-size:14px; margin-left:6px; }
+  .scoreline .two{ font-weight:700; color:var(--neutral); font-size:14px; margin-left:6px; }
   .scoreline .pts{ font-weight:800; color:var(--accent); }
   .scoreline .mid{ text-align:center; }
-  .scoreline .vs{ font-weight:900; color:var(--muted); }
+  .scoreline .vs{ font-weight:900; color:var(--neutral); }
   .diff{
     margin-top:4px; display:inline-block; padding:4px 10px; border-radius:999px;
     font-weight:800; font-size:13px; background:#f3f4f6; color:var(--ink-strong); border:1px solid var(--border);
   }
-  .diff[data-pos="true"]{ background:color-mix(in srgb, var(--green) 18%, #fff); border-color:var(--green); color:#065f46; }
-  .diff[data-neg="true"]{ background:color-mix(in srgb, var(--red) 18%, #fff); border-color:var(--red); color:#7f1d1d; }
+  
+  .diff[data-pos="true"]{ background:color-mix(in srgb, var(--win) 18%, #fff); border-color:var(--win); color:#065f46; }
+  .diff[data-neg="true"]{ background:color-mix(in srgb, var(--loss) 18%, #fff); border-color:var(--loss); color:#7f1d1d; }
   .right{ text-align:right; }
 
   /* KPI strip */
@@ -463,7 +465,7 @@
   .kpi-h{ font-weight:900; margin-bottom:6px; }
   .kpi-vals{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
   .kpi-val b{ font-size:26px; font-weight:900; margin-right:8px; }
-  .kpi-val span{ color:var(--muted); font-weight:700; font-size:12px; }
+  .kpi-val span{ color:var(--neutral); font-weight:700; font-size:12px; }
   .bars{ display:grid; gap:8px; }
   .row{ display:grid; grid-template-columns: 46px 1fr 48px; align-items:center; gap:8px; }
   .label.us{ font-weight:800; color:var(--us); }
@@ -485,9 +487,9 @@
   .cell{ border:1px solid var(--border); border-radius:10px; padding:8px; display:grid; gap:6px; background-clip:padding-box; }
   .cell .att{ font-weight:700; font-size:13px; }
   .cell .bar{ height:10px; background:#e5e7eb; border-radius:999px; overflow:hidden; }
-  .cell .bar > span{ display:block; height:100%; background:var(--green); }
+  .cell .bar > span{ display:block; height:100%; background:var(--win); }
   .cell .wl{ display:flex; justify-content:space-between; font-size:12px; }
-  .cell .w{ color:var(--green); } .cell .l{ color:var(--red); }
+  .cell .w{ color:var(--green); } .cell .l{ color:var(--loss); }
 
   /* Donut row */
   .donutRow{ display:flex; gap:12px; align-items:center; }
