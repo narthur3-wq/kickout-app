@@ -10,7 +10,7 @@
 
   // Standardized colors (match markers on the Pitch)
   const COL = {
-    win: '#1f9d55',     // green
+    win: '#1f9d55',     // red
     loss: '#d64545',    // red
     neutral: '#aab2bd', // grey
     stroke: '#6b7c93',  // outline for shapes

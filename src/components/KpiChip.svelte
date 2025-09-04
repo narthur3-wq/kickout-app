@@ -7,7 +7,7 @@
   export let deltaSuffix = ''; // "%", " KOs", etc.
   export let empty = false;
 
-  $: kind = empty ? 'muted' : (delta > 0 ? 'pos' : (delta < 0 ? 'neg' : 'muted'));
+  $: kind = empty ? 'neutral' : (delta > 0 ? 'pos' : (delta < 0 ? 'neg' : 'neutral'));
   $: arrow = empty ? '' : (delta > 0 ? '▲' : delta < 0 ? '▼' : '•');
 </script>
 

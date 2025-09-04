@@ -23,7 +23,7 @@
       </tr>
     {/each}
     {#if rows.length === 0}
-      <tr><td colspan="5" style="padding:10px" class="muted">No data.</td></tr>
+      <tr><td colspan="5" style="padding:10px" class="neutral">No data.</td></tr>
     {/if}
   </tbody>
 </table>

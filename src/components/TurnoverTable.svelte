@@ -22,7 +22,7 @@
 </script>
 
 <div class="card">
-   <h2 class="card-title">Turnovers — H1 / H2 / Total <span class="muted">(Win/Loss)</span></h2>
+   <h2 class="card-title">Turnovers — H1 / H2 / Total <span class="neutral">(Win/Loss)</span></h2>
 
   <div class="table-wrap">
     <table class="t numcol">
@@ -73,7 +73,7 @@
 <style>
   .card { background: #fff; border-radius: 16px; padding: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
   .card-title { margin: 0 0 12px; }
-  .muted { color: #6b7280; font-weight: 500; }
+  .neutral { color: #6b7280; font-weight: 500; }
 
   .table-wrap { overflow-x: auto; }
   table.t { width: 100%; border-collapse: collapse; }

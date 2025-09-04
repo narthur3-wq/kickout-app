@@ -178,8 +178,8 @@
         </div>
         <TogglePills ariaLabel="Shot source" bind:model={source}
           items={[{key:'play',label:'From play'},{key:'free',label:'Free'}]} />
-        <span class="badge" data-kind="muted">Kicking: {$orientation_left ? 'Left' : 'Right'}</span>
-        <span class="badge" data-kind="muted">Updated {updatedAt}</span>
+        <span class="badge" data-kind="neutral">Kicking: {$orientation_left ? 'Left' : 'Right'}</span>
+        <span class="badge" data-kind="neutral">Updated {updatedAt}</span>
       </div>
     </div>
     <div class="scoreline">
@@ -208,11 +208,11 @@
     <div class="kpi card">
       <div class="kpi-h">Shot conversion</div>
       {#if usShot.tot===0 && oppShot.tot===0}
-        <div class="muted">— No attempts in scope</div>
+        <div class="neutral">— No attempts in scope</div>
       {:else}
         <div class="kpi-vals">
           <div class="kpi-val"><b>{usShot.pct}%</b><span>{usShot.suc}/{usShot.tot}</span></div>
-          <div class="kpi-delta badge" data-kind={shotDelta==null ? 'muted' : (shotDelta>=0 ? 'pos' : 'neg')}>
+          <div class="kpi-delta badge" data-kind={shotDelta==null ? 'neutral' : (shotDelta>=0 ? 'pos' : 'neg')}>
             {shotDelta==null ? 'vs Opp —' : (shotDelta>=0 ? `+${shotDelta}% vs Opp` : `${shotDelta}% vs Opp`)}
           </div>
         </div>
@@ -235,11 +235,11 @@
     <div class="kpi card">
       <div class="kpi-h">Kickout win rate</div>
       {#if usKO.d===0 && oppKO.d===0}
-        <div class="muted">— No kickouts in scope</div>
+        <div class="neutral">— No kickouts in scope</div>
       {:else}
         <div class="kpi-vals">
           <div class="kpi-val"><b>{usKO.pct}%</b><span>{usKO.w}W / {usKO.l}L</span></div>
-          <div class="kpi-delta badge" data-kind={koDelta==null ? 'muted' : (koDelta>=0 ? 'pos' : 'neg')}>
+          <div class="kpi-delta badge" data-kind={koDelta==null ? 'neutral' : (koDelta>=0 ? 'pos' : 'neg')}>
             {koDelta==null ? 'vs Opp —' : (koDelta>=0 ? `+${koDelta}% vs Opp` : `${koDelta}% vs Opp`)}
           </div>
         </div>
@@ -266,7 +266,7 @@
           <b>{toDiff===0 ? 'level' : sign(toDiff)}</b>
           <span>{toTable.total.gain} win / {toTable.total.loss} loss</span>
         </div>
-        <div class="kpi-delta badge" data-kind={toDiff>0 ? 'pos' : toDiff<0 ? 'neg' : 'muted'}>
+        <div class="kpi-delta badge" data-kind={toDiff>0 ? 'pos' : toDiff<0 ? 'neg' : 'neutral'}>
           {toDiff>0 ? 'positive' : toDiff<0 ? 'negative' : 'even'}
         </div>
       </div>
@@ -283,7 +283,7 @@
       <div class="block">
         <div class="block-h">Kickout win rate</div>
         {#if usKO.d===0 && oppKO.d===0}
-          <div class="muted">— No kickouts in scope</div>
+          <div class="neutral">— No kickouts in scope</div>
         {:else}
           <div class="bars">
             <div class="row">
@@ -297,7 +297,7 @@
               <div class="pct">{oppKO.pct}%</div>
             </div>
           </div>
-          <div class="small muted">{usKO.w}W / {usKO.l}L • {usKO.d} attempts (Us) &nbsp;·&nbsp; {oppKO.w}W / {oppKO.l}L • {oppKO.d} attempts (Opp)</div>
+          <div class="small neutral">{usKO.w}W / {usKO.l}L • {usKO.d} attempts (Us) &nbsp;·&nbsp; {oppKO.w}W / {oppKO.l}L • {oppKO.d} attempts (Opp)</div>
         {/if}
       </div>
 
@@ -305,7 +305,7 @@
       <div class="block">
         <div class="block-h">Our kickouts — direction & length</div>
         {#if maxCellAtt===0}
-          <div class="muted">— No attempts</div>
+          <div class="neutral">— No attempts</div>
         {:else}
           <div class="matrix">
             <div></div><div class="ch">Left</div><div class="ch">Centre</div><div class="ch">Right</div>
@@ -327,7 +327,7 @@
               {/each}
             {/each}
           </div>
-          <div class="small muted">Win% excludes neutrals; zones relative to the kicker’s direction.</div>
+          <div class="small neutral">Win% excludes neutrals; zones relative to the kicker’s direction.</div>
         {/if}
       </div>
 
@@ -335,13 +335,13 @@
       <div class="block">
         <div class="block-h">Break win rate</div>
         {#if breakDenom===0}
-          <div class="muted">— No break contests</div>
+          <div class="neutral">— No break contests</div>
         {:else}
           <div class="donutRow">
             <Donut value={breakPct} />
             <div class="donutLabel">
               <div class="bigv">{breakPct}%</div>
-              <div class="muted small">{breakWins}/{breakDenom} wins</div>
+              <div class="neutral small">{breakWins}/{breakDenom} wins</div>
             </div>
           </div>
         {/if}
@@ -355,7 +355,7 @@
       <div class="block">
         <div class="block-h">Conversion (scope & source)</div>
         {#if usShot.tot===0 && oppShot.tot===0}
-          <div class="muted">— No attempts in scope</div>
+          <div class="neutral">— No attempts in scope</div>
         {:else}
           <div class="bars">
             <div class="row">
@@ -369,7 +369,7 @@
               <div class="pct">{oppShot.pct}%</div>
             </div>
           </div>
-          <div class="small muted">{usShot.suc}/{usShot.tot} (Us) • {oppShot.suc}/{oppShot.tot} (Opp)</div>
+          <div class="small neutral">{usShot.suc}/{usShot.tot} (Us) • {oppShot.suc}/{oppShot.tot} (Opp)</div>
         {/if}
       </div>
 
@@ -386,7 +386,7 @@
                 <td>{r.g}</td><td>{r.p}</td><td>{r.t2}</td><td><b>{r.pts}</b></td>
               </tr>
             {/each}
-            {#if usTop.length===0}<tr><td colspan="5" class="muted">—</td></tr>{/if}
+            {#if usTop.length===0}<tr><td colspan="5" class="neutral">—</td></tr>{/if}
             </tbody>
           </table>
           <table class="mini">
@@ -398,7 +398,7 @@
                 <td>{r.g}</td><td>{r.p}</td><td>{r.t2}</td><td><b>{r.pts}</b></td>
               </tr>
             {/each}
-            {#if oppTop.length===0}<tr><td colspan="5" class="muted">—</td></tr>{/if}
+            {#if oppTop.length===0}<tr><td colspan="5" class="neutral">—</td></tr>{/if}
             </tbody>
           </table>
         </div>
@@ -415,7 +415,7 @@
             <tr class="total"><td>Total</td><td>{toTable.total.gain}</td><td>{toTable.total.loss}</td><td>{toTable.total.pct}%</td><td>{toTable.total.forced}</td><td>{toTable.total.unforced}</td></tr>
           </tbody>
         </table>
-        <div class="small muted">F/U counts among losses</div>
+        <div class="small neutral">F/U counts among losses</div>
       </div>
     </div>
   </div>
@@ -424,7 +424,7 @@
   <div class="card">
     <div class="section-h">Coach notes</div>
     {#if notes.length===0}
-      <div class="muted">No auto notes yet for this scope.</div>
+      <div class="neutral">No auto notes yet for this scope.</div>
     {:else}
       <ul class="notes">
         {#each notes as n}<li>{n}</li>{/each}
@@ -489,7 +489,7 @@
   .cell .bar{ height:10px; background:#e5e7eb; border-radius:999px; overflow:hidden; }
   .cell .bar > span{ display:block; height:100%; background:var(--win); }
   .cell .wl{ display:flex; justify-content:space-between; font-size:12px; }
-  .cell .w{ color:var(--green); } .cell .l{ color:var(--loss); }
+  .cell .w{ color:var(--win); } .cell .l{ color:var(--loss); }
 
   /* Donut row */
   .donutRow{ display:flex; gap:12px; align-items:center; }

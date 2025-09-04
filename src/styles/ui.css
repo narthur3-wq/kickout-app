@@ -142,7 +142,7 @@ h3{font-size:clamp(18px, 2.0vw, 22px)}
 .mark > span{ text-shadow:0 1px 1px rgba(0,0,0,.55) }
 
 /* Outcome colouring (kickouts) */
-.mark[data-color="win"]{ background:var(--green); border-color:#fff; color:#fff }
+.mark[data-color="win"]{ background:var(--red); border-color:#fff; color:#fff }
 .mark[data-color="loss"]{ background:var(--red); border-color:#fff; color:#fff }
 .mark[data-color="neutral"]{ background:var(--neutral); border-color:#fff; color:#fff }
 
@@ -151,8 +151,8 @@ h3{font-size:clamp(18px, 2.0vw, 22px)}
 .mark[data-shape="diamond"] > span{ transform:rotate(-45deg); display:inline-block }
 
 /* Shots outcome colouring */
-.shot.goal{ background:var(--green); border-color:var(--green); color:#fff }
-.shot.point{ background:transparent; border-color:var(--green); color:var(--green) }
+.shot.goal{ background:var(--red); border-color:var(--red); color:#fff }
+.shot.point{ background:transparent; border-color:var(--red); color:var(--red) }
 .shot.two{
   background:transparent; border-color:var(--accent);
   box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
