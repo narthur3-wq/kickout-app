@@ -1,8 +1,7 @@
 <script>
   import Pitch from './Pitch.svelte';
   import PlayerKickoutTable from './PlayerKickoutTable.svelte';
-  import Legend from './Legend.svelte';
-  import TogglePills from './TogglePills.svelte';
+   import TogglePills from './TogglePills.svelte';
   import { events as pending, half, orientation_left } from '$lib/stores.js';
   import { classifyKickoutZoneForSide } from '$lib/util.js';
 
@@ -55,23 +54,7 @@
       };
     });
 
-  // -------- Sidebar tallies (our-POV) --------
-  function tallyByKickingSide(side, teamFilter, outcomes, contests) {
-    const rows = koThisHalf.filter((e) => e.side === side).filter(e => keepByFilters(e, teamFilter, outcomes, contests));
-    let wins = 0, losses = 0;
-    const byContest = { clean:0, break:0, foul:0, sideline:0 };
-    for (const r of rows) {
-      if (r.winner_team === 'us') wins++;
-      else if (r.winner_team === 'opp') losses++;
-      byContest[r.contest || 'clean']++;
-    }
-    const denom = wins + losses; // neutrals excluded
-    const pct = denom ? Math.round((wins / denom) * 100) : 0;
-    return { total: rows.length, wins, losses, pct, byContest };
-  }
-  $: usTally  = tallyByKickingSide('us',  teamFilter, outcomes, contests);
-  $: oppTally = tallyByKickingSide('opp', teamFilter, outcomes, contests);
-
+  
   // -------- Per-player tables (receiver wins for the *kicking* side) --------
   function groupByPlayer(side, teamFilter, outcomes, contests) {
     const map = new Map();
@@ -91,8 +74,7 @@
   $: usRows  = groupByPlayer('us',  teamFilter, outcomes, contests);
   $: oppRows = groupByPlayer('opp', teamFilter, outcomes, contests);
 
-  const pct = (n) => (Number.isFinite(n) ? `${n}%` : '—');
-
+  
   // -------- Zone summary (zones relative to the *kicker*) --------
   const LENGTHS  = ['short','medium','long'];
   const LATERALS = ['left','centre','right'];
@@ -133,52 +115,36 @@
 </script>
 
 <div class="ko-grid">
-  <!-- Sidebar -->
-  <div class="card sidebar">
-    <div class="seg" aria-label="Team">
-      <button class:active={teamFilter === 'us'}  on:click={() => (teamFilter = 'us')}>Us</button>
-      <button class:active={teamFilter === 'opp'} on:click={() => (teamFilter = 'opp')}>Opp</button>
-      <button class:active={teamFilter === 'both'} on:click={() => (teamFilter = 'both')}>Both</button>
+   <!-- Filters -->
+  <div class="card filters">
+    <div class="cluster">
+      <span class="label">Team</span>
+      <div class="seg" aria-label="Team">
+        <button class:active={teamFilter === 'us'}  on:click={() => (teamFilter = 'us')}>Us</button>
+        <button class:active={teamFilter === 'opp'} on:click={() => (teamFilter = 'opp')}>Opp</button>
+        <button class:active={teamFilter === 'both'} on:click={() => (teamFilter = 'both')}>Both</button>
+      </div>
     </div>
 
-    <TogglePills ariaLabel="Outcome (our POV)"
-      bind:model={outcomes}
-      items={[{key:'won',label:'Win'},{key:'lost',label:'Loss'}]} />
-
-    <TogglePills ariaLabel="Contest"
-      bind:model={contests}
-      items={[
-        {key:'clean',label:'clean'},
-        {key:'break',label:'break'},
-        {key:'foul',label:'foul'},
-        {key:'sideline',label:'sideline'}
-      ]} dense />
-
-    <Legend
-      title="Legend"
-      showTeam={true}
-      showOutcome={true}
-      showContest={true}
-      showCause={false}
-      dense
-      showOutcomeNeutral={false}
-    />
-
-    <div class="mini-sum">
-      <div>
-        <h4>Us (we kicked)</h4>
-        <div><b>{usTally.wins}</b> wins ({pct(usTally.pct)})</div>
-        <div><b>{usTally.losses}</b> losses</div>
-        <div class="byc">C:{usTally.byContest.clean} • B:{usTally.byContest.break} • F:{usTally.byContest.foul} • S:{usTally.byContest.sideline}</div>
-      </div>
-      <div>
-        <h4>Opp (they kicked)</h4>
-        <div><b>{oppTally.wins}</b> wins ({pct(oppTally.pct)})</div>
-        <div><b>{oppTally.losses}</b> losses</div>
-        <div class="byc">C:{oppTally.byContest.clean} • B:{oppTally.byContest.break} • F:{oppTally.byContest.foul} • S:{oppTally.byContest.sideline}</div>
-      </div>
+     <div class="cluster">
+      <span class="label">Result</span>
+      <TogglePills ariaLabel="Outcome (our POV)"
+        bind:model={outcomes}
+        items={[{key:'won',label:'Win'},{key:'lost',label:'Loss'}]} />
+    </div>
+ <div class="cluster">
+      <span class="label">Context</span>
+      <TogglePills ariaLabel="Contest"
+        bind:model={contests}
+        items={[
+          {key:'clean',label:'clean'},
+          {key:'break',label:'break'},
+          {key:'foul',label:'foul'},
+          {key:'sideline',label:'sideline'}
+        ]} dense />
     </div>
   </div>
+    
 
   <!-- Pitch -->
   <div class="card pitch-panel">
@@ -247,16 +213,15 @@
 </div>
 
 <style>
-  .ko-grid { display:grid; grid-template-columns:330px 1fr; grid-template-rows:auto auto auto auto; gap:16px; }
+.ko-grid { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:auto auto auto auto; gap:16px; }
   @media (max-width:1200px){ .ko-grid { grid-template-columns:1fr; grid-template-rows:auto auto auto auto auto; } }
   .card { background:#fff; border:1px solid #e6ebf1; border-radius:14px; padding:12px; }
-  .sidebar .seg { margin-bottom:10px; }
+  .filters { grid-column:1 / -1; display:flex; gap:16px; flex-wrap:wrap; align-items:center; }
+  .filters .cluster { display:flex; align-items:center; gap:8px; }
+  .filters .label { font-weight:600; }
   .seg button { padding:8px 12px; border-radius:999px; border:1px solid #d8e0ea; background:#f7f9fb; cursor:pointer; }
   .seg button.active { background:#0660aa; color:#fff; border-color:#0660aa; }
-  .mini-sum { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px; }
-  .mini-sum h4 { margin:6px 0; }
-  .mini-sum .byc { color:#708090; font-size:12px; margin-top:4px; }
-  .pitch-panel { padding:8px; }
+  .pitch-panel { padding:8px; grid-column:1 / -1; }
   .tables { grid-column:1 / -1; display:grid; grid-template-columns:1fr 1fr; gap:16px; }
   @media (max-width:960px){ .tables { grid-template-columns:1fr; } }
   .zones h3 { margin:4px 0 10px; }

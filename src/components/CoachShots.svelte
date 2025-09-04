@@ -36,11 +36,15 @@
   $: marks = shotsThisHalf
     .filter(e => keepByFilters(e, teamFilter, outcomes, sourceFilter))
     .map(e => {
-      const cls   = `shot ${e.outcome || ''}`;
-      const label = e.outcome === 'two' ? '2' : '';
-      const shape = e.side === 'opp' ? 'diamond' : null;
+            const label = e.outcome === 'two' ? '2' : '';
+    
       return {
-        x: e.nx, y: e.ny, class: cls, label, shape,
+               x: e.nx,
+        y: e.ny,
+        label,
+        team: e.side,
+        shape: e.outcome,
+        src: e.source,
         savedOrientationLeft: e.savedOrientationLeft
       };
     });
@@ -116,8 +120,16 @@
         { key:'free', label:'Free' }
       ]}
     />
-
-    <Legend title="Legend" showTeam={true} showOutcome={true} showContest={false} showCause={false} dense />
+<Legend
+      title="Legend"
+      showTeam={true}
+      showOutcome={true}
+      showSource={true}
+      showContest={false}
+      showCause={false}
+      dense
+      shotSemantics={true}
+    />    
 
     <div class="mini-sum">
       <div>

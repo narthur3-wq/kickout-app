@@ -43,7 +43,8 @@
       }
       const dataColor = e.outcome==='gain' ? 'win' : 'loss';
       const label = (e.cause?.[0] || 'T').toUpperCase();
-      return { x:e.nx, y:e.ny, dataColor, label, savedOrientationLeft:e.savedOrientationLeft };
+     const shape = e.cause==='unforced' ? 'ring' : null;
+      return { x:e.nx, y:e.ny, dataColor, label, shape, savedOrientationLeft:e.savedOrientationLeft };
     });
 
   // add event at pointer (debounced)

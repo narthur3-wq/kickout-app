@@ -1,4 +1,6 @@
 <script>
+   import PlayerAvatar from './PlayerAvatar.svelte';
+
   export let title = "";
   /** rows: Array<{ player:number, att:number, wins:number }> */
   export let rows = [];
@@ -8,6 +10,10 @@
   $: visible = showAll ? rows : rows.slice(0, limit);
 
   const pct = (w, a) => (a ? Math.round((w / a) * 100) : 0);
+  
+  // maxima for bar widths
+  $: maxAtt = Math.max(1, ...rows.map(r => r.att || 0));
+  $: maxWins = Math.max(1, ...rows.map(r => r.wins || 0));
 </script>
 
 <div class="card">
@@ -23,6 +29,7 @@
   <table class="table">
     <thead>
       <tr>
+       <th class="avatar-col"></th>
         <th class="label">Player</th>
         <th class="num">Att</th>
         <th class="num">Wins</th>
@@ -31,13 +38,20 @@
     </thead>
     <tbody>
       {#if visible.length === 0}
-        <tr class="empty"><td colspan="4">No kickouts yet</td></tr>
+       <tr class="empty"><td colspan="5">No kickouts yet</td></tr>
       {:else}
         {#each visible as r (r.player)}
           <tr>
+            <td><PlayerAvatar player={r.player} /></td>
             <td class="label">{r.player === 0 ? 'TBC' : `#${r.player}`}</td>
-            <td class="num">{r.att}</td>
-            <td class="num">{r.wins}</td>
+            <td class="barcell">
+              <div class="statbar"><span style="width:{(r.att / maxAtt) * 100}%"></span></div>
+              <div class="val">{r.att}</div>
+            </td>
+            <td class="barcell">
+              <div class="statbar"><span style="width:{(r.wins / maxWins) * 100}%"></span></div>
+              <div class="val">{r.wins}</div>
+            </td>
             <td class="num">{pct(r.wins, r.att)}%</td>
           </tr>
         {/each}
@@ -56,7 +70,11 @@
   .table th, .table td { padding:8px 10px; border-bottom:1px solid #eef1f4; }
   .table thead th { background:#f7f9fb; font-weight:600; }
   .table tbody tr:last-child td { border-bottom:none; }
+  .avatar-col { width:32px; }
   .label { text-align:left; }
   .num { text-align:right; }
+  .barcell { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; }
+  .barcell .statbar{ width:100%; }
+  .barcell .val { text-align:right; }
   .empty td { text-align:center; color:#8090a0; }
 </style>

@@ -179,9 +179,9 @@
         <TogglePills ariaLabel="Shot source" bind:model={source}
           items={[{key:'play',label:'From play'},{key:'free',label:'Free'}]} />
         <span class="badge" data-kind="neutral">Kicking: {$orientation_left ? 'Left' : 'Right'}</span>
-        <span class="badge" data-kind="neutral">Updated {updatedAt}</span>
-      </div>
+        </div>
     </div>
+    <div class="updated small">Updated {updatedAt}</div>
     <div class="scoreline">
       <div class="side">
         <div class="nm">Us</div>
@@ -441,17 +441,18 @@
   .headbar .left{ display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
   .headbar .title{ font-weight:900; font-size:20px; }
   .headbar .chips{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .headbar .updated{ color:var(--neutral); justify-self:end; }
 
   .scoreline{ display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:8px; }
   .scoreline .nm{ font-weight:800; color:var(--ink-strong); }
-  .scoreline .big{ font-weight:900; font-size:34px; line-height:1; }
+  .scoreline .big{ font-weight:900; font-size:40px; line-height:1; }
   .scoreline .two{ font-weight:700; color:var(--neutral); font-size:14px; margin-left:6px; }
-  .scoreline .pts{ font-weight:800; color:var(--accent); }
+  .scoreline .pts{ font-weight:800; color:var(--accent); font-size:16px; }
   .scoreline .mid{ text-align:center; }
   .scoreline .vs{ font-weight:900; color:var(--neutral); }
   .diff{
-    margin-top:4px; display:inline-block; padding:4px 10px; border-radius:999px;
-    font-weight:800; font-size:13px; background:#f3f4f6; color:var(--ink-strong); border:1px solid var(--border);
+    margin-top:4px; display:inline-block; padding:6px 12px; border-radius:999px;
+    font-weight:800; font-size:16px; background:#f3f4f6; color:var(--ink-strong); border:1px solid var(--border);
   }
   
   .diff[data-pos="true"]{ background:color-mix(in srgb, var(--win) 18%, #fff); border-color:var(--win); color:#065f46; }

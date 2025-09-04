@@ -6,7 +6,9 @@
   export let showCause = false;     // Forced / Unforced (turnovers)
   export let showContest = false;   // C/B/F/S (kickouts)
   export let showShots = false;     // G/P/2P/W/S/B (shots)
+  export let showSource = false;    // play vs free (shots)
   export let dense = false;         // tighter spacing
+  export let shotSemantics = false; // interpret team/outcome as shots legend
 
   // Standardized colors (match markers on the Pitch)
   const COL = {
@@ -22,17 +24,42 @@
   <h4 class="h">{title}</h4>
 
   {#if showOutcome}
-    <div class="row">
-      <span class="chip" style="--bg:{COL.win}"></span> <span>Win</span>
-      <span class="chip" style="--bg:{COL.loss}"></span> <span>Loss</span>
-      <span class="chip" style="--bg:{COL.neutral}"></span> <span>Neutral</span>
-    </div>
+   {#if shotSemantics}
+      <div class="row">
+        <span class="shape shot goal"></span><span>Goal</span>
+        <span class="shape shot point"></span><span>Point</span>
+        <span class="shape shot two"></span><span>2P</span>
+        <span class="shape shot wide"></span><span>Wide</span>
+        <span class="shape shot short"></span><span>Short</span>
+        <span class="shape shot blocked"></span><span>Blocked</span>
+      </div>
+    {:else}
+      <div class="row">
+        <span class="chip" style="--bg:{COL.win}"></span> <span>Win</span>
+        <span class="chip" style="--bg:{COL.loss}"></span> <span>Loss</span>
+        <span class="chip" style="--bg:{COL.neutral}"></span> <span>Neutral</span>
+      </div>
+    {/if} 
   {/if}
 
   {#if showTeam}
+  {#if shotSemantics}
+      <div class="row">
+        <span class="chip team us"></span><span>Us</span>
+        <span class="chip team opp"></span><span>Opp</span>
+      </div>
+    {:else}
+      <div class="row">
+        <span class="shape circle" title="Us"></span> <span>Us</span>
+        <span class="shape diamond" title="Opp"></span> <span>Opp</span>
+      </div>
+    {/if}
+  {/if}
+
+  {#if shotSemantics && showSource}
     <div class="row">
-      <span class="shape circle" title="Us"></span> <span>Us</span>
-      <span class="shape diamond" title="Opp"></span> <span>Opp</span>
+      <span class="stroke solid"></span><span>From play</span>
+      <span class="stroke dashed"></span><span>Free</span>
     </div>
   {/if}
 
@@ -87,7 +114,10 @@
     border:1px solid #e2e6ea;
     margin-right:2px;
   }
-
+  .chip.team { border-color:var(--bg); }
+  .chip.team.us { --bg: var(--us); }
+  .chip.team.opp { --bg: var(--opp); }
+  
   .shape {
     display:inline-block;
     width:12px; height:12px;
@@ -97,6 +127,12 @@
     background:#fff;
   }
   .shape.diamond { transform:rotate(45deg); border-radius:2px; }
+    .shape.shot { border-color:#6b7c93; }
+  .shape.shot.point { border-radius:0; }
+  .shape.shot.two { transform:rotate(45deg); border-radius:0; }
+  .shape.shot.wide { clip-path: polygon(50% 0, 0 100%, 100% 100%); }
+  .shape.shot.short { clip-path: polygon(0 0, 100% 0, 50% 100%); }
+  .shape.shot.blocked { clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
 
   .label {
     display:inline-grid; place-items:center;
@@ -108,4 +144,11 @@
     font-size:11px; font-weight:700;
     color:#213042;
   }
+  .stroke {
+    display:inline-block;
+    width:20px;
+    border-top:3px solid #6b7c93;
+    margin-right:2px;
+  }
+  .stroke.dashed { border-top-style:dashed; }
 </style>

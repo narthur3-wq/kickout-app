@@ -123,6 +123,7 @@ h3{font-size:clamp(18px, 2.0vw, 22px)}
 .badge[data-kind="pos"]{ background:color-mix(in srgb, var(--win) 12%, #fff); border-color:var(--win); color:#065f46 }
 .badge[data-kind="neg"]{ background:color-mix(in srgb, var(--loss) 12%, #fff); border-color:var(--loss); color:#7f1d1d }
 .badge[data-kind="neutral"]{ color:var(--neutral) }
+.badge[data-kind="muted"]{ background:#f9fafb; border-color:var(--border); color:var(--neutral); font-weight:600 }
 
 /* ========================
    Pitch visuals — 145 x 90
