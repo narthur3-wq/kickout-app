@@ -1,5 +1,6 @@
 <script>
   import Pitch from './Pitch.svelte';
+  import Card from './Card.svelte';
   import { pending, current_side, half, orientation_left, setSide, toast, addPending } from '$lib/stores.js';
   import { toNorm, getClientPoint } from '$lib/coords.js';
   import { clamp01 } from '$lib/util.js';
@@ -104,25 +105,24 @@
 </script>
 
 <style>
-  .live-grid { display:grid; grid-template-columns: 320px 1fr; gap:16px; }
-  @media (max-width: 900px) { .live-grid { grid-template-columns: 1fr; } }
-  .card { border:1px solid var(--border, #e6e6e6); border-radius:12px; background:#fff; padding:12px; }
-  .sticky-panel { position: sticky; top: 12px; }
+  .live-grid { display:grid; grid-template-columns:320px 1fr; gap:var(--space-4); }
+  @media (max-width:900px){ .live-grid { grid-template-columns:1fr; } }
+  .sticky-panel { position:sticky; top:var(--space-3); }
 
-  .seg { display:inline-flex; gap:8px; padding:4px; background:#f6f7fb; border-radius:999px; }
-  .seg > button { border:0; background:transparent; padding:6px 12px; border-radius:999px; font-weight:700; cursor:pointer; }
-  .seg > button.active { background:#0c66ff; color:#fff; }
+  .seg { display:inline-flex; gap:var(--space-2); padding:var(--space-1); background:var(--bg); border-radius:999px; }
+  .seg > button { border:0; background:transparent; padding:var(--space-2) var(--space-3); border-radius:999px; font-weight:700; cursor:pointer; }
+  .seg > button.active { background:var(--accent); color:#fff; }
 
-  .player-grid { display:grid; grid-template-columns: repeat(5, 1fr); gap:6px; }
-  .player-grid > button { border:1px solid var(--border, #e6e6e6); background:#fff; border-radius:10px; padding:8px 0; font-weight:700; cursor:pointer; }
-  .player-grid > button.active { background:#0c66ff; color:#fff; border-color:#0c66ff; }
+  .player-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:var(--space-2); }
+  .player-grid > button { border:1px solid var(--border, #e6e6e6); background:#fff; border-radius:10px; padding:var(--space-2) 0; font-weight:700; cursor:pointer; }
+  .player-grid > button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
 
   .pitch-interactive h2 { margin: 0 0 10px; }
 </style>
 
 <div class="live-grid">
   <!-- Controls -->
-  <div class="card sticky-panel">
+  <Card class="sticky-panel">
     <h3>Team</h3>
     <div class="seg" aria-label="Team">
       <button class:active={$current_side==='us'}  on:click={()=>setSide('us')}>Us</button>
@@ -178,7 +178,7 @@
         <button class:active={player===n} on:click={()=>player=n}>{n}</button>
       {/each}
     </div>
-  </div>
+  </Card>
 
   <!-- Pitch -->
   <div
