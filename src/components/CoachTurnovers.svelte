@@ -33,11 +33,18 @@
     }));
 
   function tally(outcomes, causes) {
-    const rows = tosThisHalf.filter(e => keepByFilters(e, outcomes, causes));
-    const win  = rows.filter((e) => e.outcome === 'gain').length;
-    const loss = rows.filter((e) => e.outcome === 'loss').length;
-    const forced   = rows.filter((e) => e.cause === 'forced').length;
-    const unforced = rows.filter((e) => e.cause === 'unforced').length;
+    const rows = tosThisHalf.filter((e) => keepByFilters(e, outcomes, causes));
+    let win = 0,
+      loss = 0,
+      forced = 0,
+      unforced = 0;
+    for (const e of rows) {
+      if (e.outcome === "gain") win++;
+      if (e.outcome === "loss") loss++;
+      const c = e.cause || "forced";
+      if (c === "forced") forced++;
+      if (c === "unforced") unforced++;
+    }
     const denom = win + loss;
     const pct = denom ? Math.round((win / denom) * 100) : 0;
     return { total: rows.length, win, loss, forced, unforced, pct };
