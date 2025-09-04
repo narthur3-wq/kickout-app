@@ -21,6 +21,6 @@ export function toDisplayXY(nx, ny, savedLeft, currentLeft) {
   if (Boolean(savedLeft) === Boolean(currentLeft)) {
     return { x: nx, y: ny };
   }
-  // horizontal flip
-  return { x: 1 - nx, y: ny };
+  // full rotation when switching from left↔right
+  return { x: 1 - nx, y: 1 - ny };
 }

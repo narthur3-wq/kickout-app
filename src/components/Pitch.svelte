@@ -44,26 +44,24 @@
 
   {#each marks as m, i}
     {#key i}
-      {#await Promise.resolve(
-        toDisplayXY(
-          m.x ?? 0.5, m.y ?? 0.5,
-          (m.savedOrientationLeft ?? savedOrientationLeft) ?? true,
-          $orientation_left
-        )
-      ) then p}
-        <div class="ovl {m.class ?? ''}" style="left:{p.x*100}%; top:{p.y*100}%;">
+       {@const p = toDisplayXY(
+        m.x ?? 0.5,
+        m.y ?? 0.5,
+        (m.savedOrientationLeft ?? savedOrientationLeft) ?? true,
+        $orientation_left
+      )}
+      <div class="ovl {m.class ?? ''}" style="left:{p.x*100}%; top:{p.y*100}%;">
 
-          <!-- Bigger glyphs + 'with-label' class for legibility -->
-          <div
-            class="mark {m.label ? 'with-label' : ''}"
-            data-color={m.dataColor ?? null}
-            data-shape={m.shape ?? null}
-            aria-hidden="true"
-          >
-            <span>{m.label ?? ''}</span>
-          </div>
+        <!-- Bigger glyphs + 'with-label' class for legibility -->
+        <div
+          class="mark {m.label ? 'with-label' : ''}"
+          data-color={m.dataColor ?? null}
+          data-shape={m.shape ?? null}
+          aria-hidden="true"
+        >
+          <span>{m.label ?? ''}</span>
         </div>
-      {/await}
+    </div>
     {/key}
   {/each}
 </div>

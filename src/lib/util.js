@@ -32,14 +32,14 @@ export function zoneFromCanonical(nx, ny){
 export function classifyKickoutZone(nx, ny, savedLeft, currentLeft){
   let cx = nx, cy = ny;
 
-  // ✅ If we were kicking LEFT when captured, rotate 180° into "attack →" frame.
+    // ✅ Normalize capture to "attack →" frame.
   if (savedLeft === true){
     cx = 1 - cx;
     cy = 1 - cy;
   }
 
-  // Keep buckets visually stable when UI flip differs from saved.
-  if (currentLeft !== savedLeft){
+ // ✅ Apply current orientation independently of how it was saved.
+  if (currentLeft === true){
     cx = 1 - cx;
     cy = 1 - cy;
   }
