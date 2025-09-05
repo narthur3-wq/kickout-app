@@ -1,8 +1,10 @@
-import { vitePreprocess } from '@sveltejs/vite-plugin-svelte'
+/** @type {import('svelte').Config} */
+const dev = process.env.NODE_ENV !== 'production';
 
-/** @type {import("@sveltejs/vite-plugin-svelte").SvelteConfig} */
-export default {
-  // Consult https://svelte.dev/docs#compile-time-svelte-preprocess
-  // for more information about preprocessors
-  preprocess: vitePreprocess(),
-}
+const config = {
+  compilerOptions: {
+    dev
+  }
+};
+
+export default config;

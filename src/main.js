@@ -1,6 +1,8 @@
-import './app.css';
-import App from './App.svelte';
-import { mount } from 'svelte';
+import './styles/ui.css';
+import App from './components/App.svelte';
 
-mount(App, { target: document.getElementById('app') });
-// no `new App(...)`, no default export needed
+const app = new App({
+  target: document.getElementById('app')
+});
+
+export default app;
