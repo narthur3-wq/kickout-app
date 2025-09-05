@@ -43,13 +43,14 @@
   </svg>
 
   {#each marks as m, i}
+   {@const p = toDisplayXY(
+      m.x ?? 0.5,
+      m.y ?? 0.5,
+      (m.savedOrientationLeft ?? savedOrientationLeft) ?? true,
+      $orientation_left
+    )}
     {#key i}
-       {@const p = toDisplayXY(
-        m.x ?? 0.5,
-        m.y ?? 0.5,
-        (m.savedOrientationLeft ?? savedOrientationLeft) ?? true,
-        $orientation_left
-      )}
+      
       <div class="ovl {m.class ?? ''}" style="left:{p.x*100}%; top:{p.y*100}%;">
 
         <!-- Bigger glyphs + 'with-label' class for legibility -->

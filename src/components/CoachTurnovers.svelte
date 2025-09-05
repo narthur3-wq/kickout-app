@@ -71,8 +71,8 @@
 
     <div class="mini-sum">
        <h4>This half</h4>
-      <div><b>{toTally.win}</b> wins ({toTally.pct}%)</div>
-      <div><b>{toTally.loss}</b> losses</div>
+      <div><b>{usTally.win}</b> wins ({usTally.pct}%)</div>
+      <div><b>{usTally.loss}</b> losses</div>
      <div class="byc">F:{usTally.forced} • U:{usTally.unforced} • ?:{usTally.unknown}</div>
     </div>
   </div>
