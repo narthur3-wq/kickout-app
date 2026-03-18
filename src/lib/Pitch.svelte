@@ -8,6 +8,7 @@
   // NEW: overlay points to draw on the pitch (normalized coords)
   // [{ x, y, contest_type, outcome, at_target }]
   export let overlays: Array<any> = [];
+  export let showZoneLabels = false;
 
   const dispatch = createEventDispatcher();
 
@@ -126,6 +127,7 @@
   .dot    { fill:#111 }
   .pick   { fill:#444 }
   .overlay { pointer-events:none } /* so clicks pass through */
+  :global(.zlabel) { font-size: 3.2px; fill: #9ca3af; pointer-events: none; }
 </style>
 
 <div class="w-full">
@@ -182,6 +184,19 @@
         outcomeColor(o.outcome), !!o.at_target
       )).join('')}
     </g>
+
+    <!-- zone labels -->
+    {#if showZoneLabels}
+      <text x={W/6}   y="3" text-anchor="middle" class="zlabel">L</text>
+      <text x={W/2}   y="3" text-anchor="middle" class="zlabel">C</text>
+      <text x={5*W/6} y="3" text-anchor="middle" class="zlabel">R</text>
+      <text x="86" y={py(20)}     text-anchor="start" class="zlabel">20m</text>
+      <text x="86" y={py(45)}     text-anchor="start" class="zlabel">45m</text>
+      <text x="86" y={py(65)}     text-anchor="start" class="zlabel">65m</text>
+      <text x="86" y={py(H-65)}   text-anchor="start" class="zlabel">65m</text>
+      <text x="86" y={py(H-45)}   text-anchor="start" class="zlabel">45m</text>
+      <text x="86" y={py(H-20)}   text-anchor="start" class="zlabel">20m</text>
+    {/if}
 
     <!-- keyboard crosshair -->
     <circle cx={kb.x*W} cy={(flip ? (1-kb.y) : kb.y)*H} r="1.1" fill="none" stroke="#666" stroke-width="0.6" />

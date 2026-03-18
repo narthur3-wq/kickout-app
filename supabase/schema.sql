@@ -33,6 +33,11 @@ create table if not exists events (
   pickup_x_m            numeric,
   pickup_y_m            numeric,
   break_displacement_m  numeric,
+  score_us              text,
+  score_them            text,
+  notes                 text,
+  flag                  boolean default false,
+  ko_sequence           integer,
   updated_at            timestamptz default now()
 );
 

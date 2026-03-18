@@ -28,6 +28,10 @@
   let scored20 = false;
   let landing = {x:NaN, y:NaN}, pickup = {x:NaN, y:NaN};
 
+  // ── New capture fields ────────────────────────────────────────────────────
+  let scoreUs = '', scoreThem = '';
+  let notes = '', flagEvent = false;
+
   // ── UI state ──────────────────────────────────────────────────────────────
   let events = [];
   let editingId = null;
@@ -35,6 +39,9 @@
   let setupOpen = true;
   let syncStatus = ''; // '', 'syncing', 'synced', 'error'
   let wakeLock = null;
+  let backupReminder = false;
+  let showSummary = false;
+  let pitchError = false;
 
   // ── Viz filters ───────────────────────────────────────────────────────────
   let fContest = new Set(CONTESTS);
@@ -44,6 +51,31 @@
   let oppFilter = 'ALL';
   let plyFilter = 'ALL';
   let ytdOnly = false;
+  let matchFilter = 'ALL';
+
+  // ── Clock timer ───────────────────────────────────────────────────────────
+  let timerRunning = false;
+  let timerInterval = null;
+  let timerSeconds = 0;
+
+  function toggleTimer() {
+    if (timerRunning) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      timerRunning = false;
+    } else {
+      // Parse current clock value as starting seconds (mm:ss)
+      const parts = clock.match(/^(\d{1,2}):(\d{2})$/);
+      timerSeconds = parts ? parseInt(parts[1]) * 60 + parseInt(parts[2]) : 0;
+      timerRunning = true;
+      timerInterval = setInterval(() => {
+        timerSeconds++;
+        const mins = Math.floor(timerSeconds / 60);
+        const secs = timerSeconds % 60;
+        clock = `${mins}:${secs.toString().padStart(2, '0')}`;
+      }, 1000);
+    }
+  }
 
   const today = new Date();
   const currentYear = today.getFullYear();
@@ -60,6 +92,12 @@
 
   // YTD: compare year strings to avoid UTC-vs-local timezone edge cases
   const eventYear = e => (e.match_date || (e.created_at||'').slice(0,10)).slice(0,4);
+
+  // match key helper
+  const matchKey = e => {
+    const md = e.match_date || (e.created_at||'').slice(0,10);
+    return `${md}|${norm(e.team)}|${norm(e.opponent)}`;
+  };
 
   // ── localStorage helpers ─────────────────────────────────────────────────
   function loadFromLocalStorage() {
@@ -144,6 +182,10 @@
       });
     }
     authChecked = true;
+
+    return () => {
+      if (timerInterval) clearInterval(timerInterval);
+    };
   });
 
   function handleLogin(e) {
@@ -178,8 +220,11 @@
   function validate() {
     if (clock.trim() !== '' && !/^(\d{1,2}):\d{2}$/.test(clock))
       return 'Clock must be mm:ss or blank.';
-    if (Number.isNaN(landing.x) || Number.isNaN(landing.y))
+    if (Number.isNaN(landing.x) || Number.isNaN(landing.y)) {
+      pitchError = true;
+      setTimeout(() => { pitchError = false; }, 1200);
       return 'Tap the pitch to set the landing point.';
+    }
     if (contest === 'break') {
       if (Number.isNaN(pickup.x) || Number.isNaN(pickup.y))
         return 'For a break, tap the pickup point too.';
@@ -200,6 +245,18 @@
     const originalCreatedAt = editingId
       ? (events.find(r => r.id === editingId)?.created_at ?? new Date().toISOString())
       : new Date().toISOString();
+
+    // Compute ko_sequence: preserve for edits, count for new
+    let koSequence;
+    if (editingId) {
+      const existing = events.find(r => r.id === editingId);
+      koSequence = existing?.ko_sequence ?? null;
+    } else {
+      const currentKey = `${matchDate}|${norm(team)}|${norm(opponent)}`;
+      const matchEvents = events.filter(e => matchKey(e) === currentKey);
+      koSequence = matchEvents.length + 1;
+    }
+
     return {
       id:           editingId ?? crypto.randomUUID(),
       created_at:   originalCreatedAt,
@@ -229,6 +286,11 @@
       break_displacement_m: contest === 'break'
         ? +breakDispM(landing.x, landing.y, pickup.x, pickup.y).toFixed(2)
         : null,
+      score_us:    scoreUs.trim() || null,
+      score_them:  scoreThem.trim() || null,
+      notes:       notes.trim() || null,
+      flag:        !!flagEvent,
+      ko_sequence: koSequence,
     };
   }
 
@@ -236,6 +298,7 @@
     const err = validate();
     if (err) { alert(err); return; }
     const ev = buildEvent();
+    const isNew = !editingId;
 
     // Push undo snapshot before mutating
     undoStack = [...undoStack.slice(-9), [...events]];
@@ -247,6 +310,18 @@
     clearPoints();
     editingId = null;
     targetPlayer = '';
+    // score persists within match; clear notes and flag
+    notes = '';
+    flagEvent = false;
+
+    // Haptic feedback
+    navigator.vibrate?.(50);
+
+    // Auto-backup reminder every 10 new events
+    if (isNew && events.length % 10 === 0) {
+      backupReminder = true;
+      setTimeout(() => { backupReminder = false; }, 8000);
+    }
 
     // Sync to Supabase in background (don't block UI)
     upsertToSupabase(ev);
@@ -287,6 +362,11 @@
     pickup       = (e.pickup_x == null || e.pickup_y == null)
       ? { x: NaN, y: NaN }
       : { x: e.pickup_x, y: e.pickup_y };
+    // Restore new fields
+    scoreUs      = e.score_us   || '';
+    scoreThem    = e.score_them || '';
+    notes        = e.notes      || '';
+    flagEvent    = !!e.flag;
     // NOTE: ourGoalAtTop is NOT restored from the event so the analyst's
     // current orientation preference is preserved for subsequent captures.
     setupOpen = true;
@@ -301,6 +381,7 @@
       'time_to_tee_s','total_time_s','scored_20s',
       'x','y','x_m','y_m','depth_from_own_goal_m','side_band','depth_band','zone_code','our_goal_at_top',
       'pickup_x','pickup_y','pickup_x_m','pickup_y_m','break_displacement_m',
+      'score_us','score_them','notes','flag','ko_sequence',
     ];
     const rows = [headers.join(',')].concat(
       subset.map(e => headers.map(h => {
@@ -349,6 +430,16 @@
     input.click();
   }
 
+  // ── Unsaved changes warning ───────────────────────────────────────────────
+  $: hasUnsaved = !Number.isNaN(landing.x) || !Number.isNaN(landing.y);
+
+  function handleBeforeUnload(e) {
+    if (hasUnsaved) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  }
+
   // ── Derived: opponent & player choices ───────────────────────────────────
   $: opponentChoices = Object.entries(
     events.reduce((acc, e) => {
@@ -369,13 +460,30 @@
   function toggleContest(val) { const s = new Set(fContest); s.has(val) ? s.delete(val) : s.add(val); fContest = s; }
   function toggleOutcome(val) { const s = new Set(fOutcome); s.has(val) ? s.delete(val) : s.add(val); fOutcome = s; }
 
+  // ── Unique matches derived ────────────────────────────────────────────────
+  $: uniqueMatches = Object.values(
+    events.reduce((acc, e) => {
+      const key = matchKey(e);
+      if (!acc[key]) acc[key] = {
+        key,
+        match_date: e.match_date || (e.created_at||'').slice(0,10),
+        team: e.team || '',
+        opponent: e.opponent || '',
+        count: 0
+      };
+      acc[key].count++;
+      return acc;
+    }, {})
+  ).sort((a, b) => b.match_date.localeCompare(a.match_date));
+
   // ── Filtered events for viz & KPIs ───────────────────────────────────────
   $: vizEvents = events.filter(e => {
-    const passOpp = oppFilter === 'ALL' || norm(e.opponent) === oppFilter;
-    const passPly = plyFilter === 'ALL' || norm(e.target_player) === plyFilter;
-    const passYTD = !ytdOnly || eventYear(e) === String(currentYear);
-    const passCO  = !useFilters || (fContest.has(e.contest_type) && fOutcome.has(e.outcome));
-    return passOpp && passPly && passYTD && passCO;
+    const passOpp   = oppFilter === 'ALL' || norm(e.opponent) === oppFilter;
+    const passPly   = plyFilter === 'ALL' || norm(e.target_player) === plyFilter;
+    const passYTD   = !ytdOnly || eventYear(e) === String(currentYear);
+    const passCO    = !useFilters || (fContest.has(e.contest_type) && fOutcome.has(e.outcome));
+    const passMatch = matchFilter === 'ALL' || matchKey(e) === matchFilter;
+    return passOpp && passPly && passYTD && passCO && passMatch;
   });
 
   // Overlays: fixed at_target field name (was previously 'target', never rendered)
@@ -403,12 +511,34 @@
     return z;
   })();
 
+  $: zoneStatsBaseline = (() => {
+    const z = {};
+    for (const S of ZSIDES) for (const D of ZDEPTH) z[zoneKey(S,D)] = {tot:0, ret:0};
+    for (const e of events) {
+      const key = e.zone_code; if (!z[key]) continue;
+      z[key].tot++;
+      if (RETAINED.has(e.outcome)) z[key].ret++;
+    }
+    return z;
+  })();
+
+  function retTrend(filteredPct, zoneCd) {
+    if (matchFilter === 'ALL' && oppFilter === 'ALL') return '';
+    const bl = zoneStatsBaseline[zoneCd];
+    if (!bl || bl.tot < 5) return '';
+    const basePct = 100 * bl.ret / bl.tot;
+    const delta = filteredPct - basePct;
+    if (Math.abs(delta) < 8) return '';
+    return delta > 0 ? ' ▲' : ' ▼';
+  }
+
   $: zoneTableRet = ZDEPTH.map(D => ({
     D,
     cells: ZSIDES.map(S => {
       const st  = zoneStats[zoneKey(S,D)] || {tot:0, ret:0};
       const pct = st.tot ? (100 * st.ret / st.tot) : 0;
-      return { tot: st.tot, ret: st.ret, pct };
+      const zk  = zoneKey(S, D);
+      return { tot: st.tot, ret: st.ret, pct, zk };
     })
   }));
 
@@ -431,7 +561,77 @@
     const t = Math.max(0, Math.min(1, pct / 100));
     return `hsl(${120 * t} 70% 45% / 0.25)`;
   }
+
+  // ── Timeline ──────────────────────────────────────────────────────────────
+  $: timelineEvents = [...vizEvents].sort((a, b) => {
+    const sa = a.ko_sequence ?? 9999, sb = b.ko_sequence ?? 9999;
+    if (sa !== sb) return sa - sb;
+    return (a.created_at||'').localeCompare(b.created_at||'');
+  });
+
+  function outcomeColor(o) {
+    switch ((o||'').toLowerCase()) {
+      case 'score':    return '#2563eb';
+      case 'retained': return '#16a34a';
+      case 'lost':     return '#dc2626';
+      case 'wide':     return '#d97706';
+      case 'out':      return '#7c3aed';
+      case 'foul':     return '#db2777';
+      default:         return '#6b7280';
+    }
+  }
+
+  // ── Player stats ──────────────────────────────────────────────────────────
+  $: playerStats = playerChoices
+    .map(([key, label]) => {
+      const evs = vizEvents.filter(e => norm(e.target_player) === key);
+      if (evs.length === 0) return null;
+      const ret = evs.filter(e => RETAINED.has(e.outcome)).length;
+      const breaks = evs.filter(e => e.contest_type === 'break');
+      const brWon = breaks.filter(e => e.break_outcome === 'won').length;
+      return {
+        label,
+        total: evs.length,
+        retPct: Math.round(100 * ret / evs.length),
+        brTotal: breaks.length,
+        brWonPct: breaks.length ? Math.round(100 * brWon / breaks.length) : null,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.total - a.total);
+
+  // ── Summary stats ─────────────────────────────────────────────────────────
+  $: summaryStats = (() => {
+    if (vizEvents.length === 0) return null;
+    const total = vizEvents.length;
+    const ret = vizEvents.filter(e => RETAINED.has(e.outcome)).length;
+    const retPct = Math.round(100 * ret / total);
+    const breaks = vizEvents.filter(e => e.contest_type === 'break');
+    const brWon = breaks.filter(e => e.break_outcome === 'won').length;
+    const brPct = breaks.length ? Math.round(100 * brWon / breaks.length) : null;
+    const h1 = vizEvents.filter(e => e.period === 'H1');
+    const h2 = vizEvents.filter(e => e.period === 'H2');
+    const h1Ret = h1.filter(e => RETAINED.has(e.outcome)).length;
+    const h2Ret = h2.filter(e => RETAINED.has(e.outcome)).length;
+    // best/worst zones with at least 3 events
+    const zonePcts = Object.entries(zoneStats)
+      .map(([k, s]) => ({ k, pct: s.tot >= 3 ? (100 * s.ret / s.tot) : null }))
+      .filter(z => z.pct !== null);
+    const sorted = [...zonePcts].sort((a,b) => b.pct - a.pct);
+    const topPlayer = playerStats[0] ?? null;
+    return {
+      total, retPct,
+      brPct, brTotal: breaks.length,
+      best: sorted[0] ? `${sorted[0].k} (${Math.round(sorted[0].pct)}%)` : null,
+      worst: sorted[sorted.length-1] ? `${sorted[sorted.length-1].k} (${Math.round(sorted[sorted.length-1].pct)}%)` : null,
+      h1: { total: h1.length, retPct: h1.length ? Math.round(100 * h1Ret / h1.length) : null },
+      h2: { total: h2.length, retPct: h2.length ? Math.round(100 * h2Ret / h2.length) : null },
+      topPlayer,
+    };
+  })();
 </script>
+
+<svelte:window on:beforeunload={handleBeforeUnload} />
 
 <!-- ── Show nothing until auth is checked (prevents login flash) ── -->
 {#if !authChecked}
@@ -513,17 +713,30 @@
         </datalist>
       </label>
       <label>Clock <input bind:value={clock} placeholder="12:34" inputmode="numeric"/></label>
+      <button class="small timer-btn" on:click={toggleTimer}
+        style="font-size:12px;padding:4px 8px;">{timerRunning ? '⏹ Stop' : '▶ Start'}</button>
+    </div>
+
+    <!-- Score fields -->
+    <div class="inline-fields">
+      <label>Score
+        <input bind:value={scoreUs} placeholder="2-14" style="width:70px;"/>
+        <span style="margin:0 4px;">–</span>
+        <input bind:value={scoreThem} placeholder="0-8" style="width:70px;"/>
+      </label>
     </div>
 
     <!-- Pitch -->
-    <Pitch
-      contestType={contest}
-      landing={landing}
-      pickup={pickup}
-      overlays={[]}
-      on:landed={onLanding}
-      on:picked={onPickup}
-    />
+    <div class="pitch-wrap {pitchError ? 'pitch-error' : ''}">
+      <Pitch
+        contestType={contest}
+        landing={landing}
+        pickup={pickup}
+        overlays={[]}
+        on:landed={onLanding}
+        on:picked={onPickup}
+      />
+    </div>
 
     <p class="coords">
       Landing: {Number.isNaN(landing.x) ? '—' : landing.x.toFixed(3)}, {Number.isNaN(landing.y) ? '—' : landing.y.toFixed(3)}
@@ -531,6 +744,12 @@
         &nbsp;|&nbsp; Pickup: {Number.isNaN(pickup.x) ? '—' : pickup.x.toFixed(3)}, {Number.isNaN(pickup.y) ? '—' : pickup.y.toFixed(3)}
       {/if}
     </p>
+
+    <!-- Notes and flag -->
+    <div class="notes-row">
+      <textarea bind:value={notes} placeholder="Optional note…" rows="2"></textarea>
+      <label><input type="checkbox" bind:checked={flagEvent}/> Flag for review</label>
+    </div>
 
     <!-- Primary actions -->
     <div class="action-row">
@@ -574,14 +793,28 @@
 
   <!-- ══ ANALYTICS SECTION ═════════════════════════════════════════════════ -->
   <section class="card">
-    <div class="section-title">Analytics <span class="count">({vizEvents.length} of {events.length} events)</span></div>
+    <div class="section-title">
+      Analytics <span class="count">({vizEvents.length} of {events.length} events)</span>
+      <button class="small" on:click={() => showSummary = true}>Summary</button>
+    </div>
 
     <!-- Filters -->
     <div class="filters">
+      <!-- Match selector -->
+      <div class="filter-row">
+        <label>Match
+          <select bind:value={matchFilter}>
+            <option value="ALL">All matches</option>
+            {#each uniqueMatches as m}
+              <option value={m.key}>{m.match_date} · {m.opponent || 'Unknown'} ({m.count})</option>
+            {/each}
+          </select>
+        </label>
+      </div>
       <div class="filter-row">
         <label><input type="checkbox" bind:checked={useFilters}/> Contest / outcome filters</label>
         <label><input type="checkbox" bind:checked={ytdOnly}/> YTD ({currentYear})</label>
-        <button class="small" on:click={() => { oppFilter='ALL'; plyFilter='ALL'; ytdOnly=false; fContest=new Set(CONTESTS); fOutcome=new Set(OUTCOMES); }}>
+        <button class="small" on:click={() => { oppFilter='ALL'; plyFilter='ALL'; ytdOnly=false; fContest=new Set(CONTESTS); fOutcome=new Set(OUTCOMES); matchFilter='ALL'; }}>
           Reset all
         </button>
       </div>
@@ -621,12 +854,27 @@
       </div>
     </div>
 
+    <!-- Timeline -->
+    {#if timelineEvents.length > 0}
+      <h3>Timeline ({timelineEvents.length} kickouts)</h3>
+      <div class="timeline-wrap">
+        {#each timelineEvents as e, i}
+          <div
+            class="tl-dot {e.flag ? 'tl-flagged' : ''}"
+            style="background:{outcomeColor(e.outcome)}"
+            title="#{e.ko_sequence ?? i+1} · {e.outcome} · {e.contest_type} · {e.period} {e.clock}{e.target_player ? ' → ' + e.target_player : ''}{e.notes ? ' — ' + e.notes : ''}"
+          >{e.ko_sequence ?? i+1}</div>
+        {/each}
+      </div>
+    {/if}
+
     <!-- Pitch overlay (filtered) -->
     <Pitch
       contestType="clean"
       landing={{x:NaN,y:NaN}}
       pickup={{x:NaN,y:NaN}}
       overlays={overlays}
+      showZoneLabels={true}
     />
 
     <!-- Heatmap -->
@@ -646,7 +894,7 @@
                 <th>{row.D}</th>
                 {#each row.cells as c}
                   <td style="background:{cellColor(c.pct)}" title="{c.ret}/{c.tot}">
-                    {c.tot ? `${Math.round(c.pct)}%` : '—'}
+                    {c.tot ? `${Math.round(c.pct)}%${retTrend(c.pct, c.zk)}` : '—'}
                   </td>
                 {/each}
               </tr>
@@ -677,6 +925,25 @@
         </table>
       </div>
     </div>
+
+    <!-- Player breakdown table -->
+    {#if playerStats.length > 0}
+      <h3>By target player</h3>
+      <table class="kpi-table player-table">
+        <thead><tr><th>Player</th><th>Targeted</th><th>Retention</th><th>Breaks</th><th>Break win%</th></tr></thead>
+        <tbody>
+          {#each playerStats as p}
+            <tr>
+              <td style="text-align:left">{p.label}</td>
+              <td>{p.total}</td>
+              <td style="background:{cellColor(p.retPct)}">{p.retPct}%</td>
+              <td>{p.brTotal}</td>
+              <td>{p.brWonPct != null ? p.brWonPct + '%' : '—'}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {/if}
   </section>
 
   <!-- ══ EVENTS TABLE ══════════════════════════════════════════════════════ -->
@@ -698,7 +965,7 @@
             <th>Tee(s)</th><th>Total(s)</th><th>≤20s</th>
             <th>Side</th><th>Depth</th><th>Depth(m)</th>
             <th>x,y</th><th>pickup x,y</th><th>Δbreak(m)</th>
-            <th>Team</th><th>Opp</th><th></th>
+            <th>Team</th><th>Opp</th><th>#KO</th><th>Score</th><th>Flag</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -721,6 +988,9 @@
               <td>{e.break_displacement_m == null ? '—' : e.break_displacement_m?.toFixed?.(1)}</td>
               <td>{e.team}</td>
               <td>{e.opponent}</td>
+              <td>{e.ko_sequence ?? '—'}</td>
+              <td>{e.score_us ? `${e.score_us}–${e.score_them ?? '?'}` : '—'}</td>
+              <td>{e.flag ? '🚩' : '—'}</td>
               <td class="actions">
                 <button on:click={() => loadToForm(e)}>Load</button>
                 <button class="danger" on:click={() => delEvent(e.id)}>Del</button>
@@ -731,6 +1001,47 @@
       </table>
     </div>
   </section>
+
+  <!-- Backup reminder toast -->
+  {#if backupReminder}
+    <div class="toast">
+      💾 {events.length} events — back up your data
+      <button class="small" on:click={exportJSON}>Export JSON</button>
+      <button class="small" on:click={() => backupReminder = false}>✕</button>
+    </div>
+  {/if}
+
+  <!-- Summary modal -->
+  {#if showSummary && summaryStats}
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_interactive_supports_focus -->
+    <div class="modal-backdrop" role="dialog" aria-modal="true" tabindex="-1" on:click={() => showSummary = false}>
+      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+      <div class="modal" on:click|stopPropagation>
+        <div class="modal-header">
+          <span>Match Summary</span>
+          <button on:click={() => showSummary = false}>✕</button>
+        </div>
+        <div class="summary-grid">
+          <div class="s-stat"><div class="s-val">{summaryStats.total}</div><div class="s-lbl">Kickouts</div></div>
+          <div class="s-stat"><div class="s-val">{summaryStats.retPct}%</div><div class="s-lbl">Retention</div></div>
+          {#if summaryStats.brTotal > 0}
+            <div class="s-stat"><div class="s-val">{summaryStats.brPct ?? '—'}%</div><div class="s-lbl">Break win rate ({summaryStats.brTotal} breaks)</div></div>
+          {/if}
+          {#if summaryStats.best}
+            <div class="s-stat"><div class="s-val">{summaryStats.best}</div><div class="s-lbl">Best zone</div></div>
+          {/if}
+          {#if summaryStats.worst}
+            <div class="s-stat"><div class="s-val">{summaryStats.worst}</div><div class="s-lbl">Worst zone</div></div>
+          {/if}
+          <div class="s-stat"><div class="s-val">{summaryStats.h1.total} · {summaryStats.h1.retPct ?? '—'}%</div><div class="s-lbl">H1 kickouts · retention</div></div>
+          <div class="s-stat"><div class="s-val">{summaryStats.h2.total} · {summaryStats.h2.retPct ?? '—'}%</div><div class="s-lbl">H2 kickouts · retention</div></div>
+          {#if summaryStats.topPlayer}
+            <div class="s-stat full"><div class="s-val">{summaryStats.topPlayer.label}</div><div class="s-lbl">Most targeted — {summaryStats.topPlayer.total}× · {summaryStats.topPlayer.retPct}% retention</div></div>
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
 
 </div>
 {/if}
@@ -777,7 +1088,7 @@
   .seg-btn.active.outcome-score { background: #2563eb; border-color: #2563eb; }
 
   /* ── Inline fields ── */
-  .inline-fields { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 0 8px; }
+  .inline-fields { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 0 8px; align-items: center; }
   label { display: flex; gap: 6px; align-items: center; font-size: 14px; }
   input, select {
     padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px;
@@ -785,6 +1096,22 @@
   }
   input:focus, select:focus { outline: none; border-color: #0a5; box-shadow: 0 0 0 2px #0a52; }
   input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+
+  /* ── Notes row ── */
+  .notes-row { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+  .notes-row textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px;
+    font-size: 14px; font-family: inherit; resize: vertical;
+  }
+  .notes-row textarea:focus { outline: none; border-color: #0a5; box-shadow: 0 0 0 2px #0a52; }
+
+  /* ── Pitch wrap / error flash ── */
+  .pitch-wrap { border-radius: 8px; transition: box-shadow 0.15s; }
+  .pitch-error { box-shadow: 0 0 0 3px #dc2626; animation: pitchFlash 0.4s ease 2; }
+  @keyframes pitchFlash {
+    0%,100% { box-shadow: 0 0 0 3px #dc2626; }
+    50% { box-shadow: 0 0 0 6px #fca5a5; }
+  }
 
   /* ── Buttons ── */
   button {
@@ -823,6 +1150,16 @@
   .filters { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
   .filter-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 13px; }
 
+  /* ── Timeline ── */
+  .timeline-wrap { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 0; }
+  .tl-dot {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: #fff;
+    cursor: default; flex-shrink: 0;
+  }
+  .tl-flagged { outline: 2px solid #f59e0b; outline-offset: 2px; }
+
   /* ── KPIs ── */
   .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
   h3 { font-size: 14px; font-weight: 700; margin: 16px 0 6px; }
@@ -830,6 +1167,7 @@
   .kpi-table { border-collapse: collapse; font-size: 13px; width: 100%; }
   .kpi-table th, .kpi-table td { border: 1px solid #e5e7eb; padding: 5px 8px; text-align: center; }
   .kpi-table thead th { background: #f9fafb; }
+  .player-table { width: 100%; margin-top: 4px; }
 
   /* ── Events table ── */
   .export-btns { margin-left: auto; display: flex; gap: 6px; }
@@ -839,6 +1177,34 @@
   thead th { background: #f9fafb; position: sticky; top: 0; font-weight: 600; }
   .editing-row { background: #fefce8; }
   .actions { display: flex; gap: 4px; }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: #1f2937; color: #fff; padding: 10px 16px;
+    border-radius: 99px; font-size: 13px; display: flex; align-items: center;
+    gap: 10px; box-shadow: 0 4px 16px #0004; z-index: 50; white-space: nowrap;
+  }
+  .toast button { color: #fff; border-color: #4b5563; }
+
+  /* ── Summary modal ── */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: #0006; z-index: 100;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal {
+    background: #fff; border-radius: 16px; padding: 20px;
+    width: 100%; max-width: 400px; box-shadow: 0 8px 32px #0003;
+  }
+  .modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    font-weight: 700; font-size: 16px; margin-bottom: 16px;
+  }
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .s-stat { background: #f9fafb; border-radius: 8px; padding: 12px; }
+  .s-stat.full { grid-column: 1 / -1; }
+  .s-val { font-size: 20px; font-weight: 700; color: #111; }
+  .s-lbl { font-size: 12px; color: #666; margin-top: 2px; }
 
   /* ── Responsive ── */
   @media (max-width: 480px) {
