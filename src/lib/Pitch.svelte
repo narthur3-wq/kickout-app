@@ -129,12 +129,13 @@
 </style>
 
 <div class="w-full">
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions -->
   <svg
     bind:this={svgEl}
     viewBox={`0 0 ${W} ${H}`}
     class="w-full"
     style="touch-action:manipulation; user-select:none; background:#eaf4ef; border:1px solid #0a5; border-radius:6px;"
-    role="img"
+    role="application"
     aria-label="GAA pitch — click or use arrow keys; Enter/Space to set a point"
     tabindex="0"
     on:click={handleClick}

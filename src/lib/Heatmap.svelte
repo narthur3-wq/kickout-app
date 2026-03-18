@@ -1,5 +1,5 @@
 <script>
-  import { onMount, afterUpdate } from 'svelte';
+  import { onMount } from 'svelte';
   // Heatmap sits on top of the *same* pitch you use elsewhere
   import Pitch from './Pitch.svelte';
 
@@ -114,13 +114,15 @@
     return `hsla(${hue}, 85%, 50%, ${a})`;
   }
 
+  // Redraw whenever points prop changes (not on every app state change)
+  $: if (points !== undefined) { draw(); }
+
   onMount(() => {
     draw();
     ro = new ResizeObserver(draw);
     ro.observe(container);   // redraw when pitch size changes
     return () => ro?.disconnect();
   });
-  afterUpdate(draw);
 </script>
 
 <style>
