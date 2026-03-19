@@ -11,11 +11,6 @@
   export let outcome      = 'Retained';
   export let breakOutcome = '';
   export let targetPlayer = '';
-  export let clock        = '';
-  export let timerRunning = false;
-  export let scoreUs      = '';
-  export let scoreThem    = '';
-  export let notes        = '';
   export let flagEvent    = false;
 
   // ── Match setup (bindable) ────────────────────────────────────────────
@@ -44,7 +39,6 @@
   export let onSave         = () => {};
   export let onClearPoints  = () => {};
   export let onUndoLast     = () => {};
-  export let onToggleTimer  = () => {};
   export let onPersist      = () => {};
 
   // ── Outcome sets per event type + direction ───────────────────────────
@@ -109,7 +103,7 @@
     {#each ['H1','H2','ET'] as p}
       <button
         class="seg-dir {period === p ? 'active' : ''}"
-        on:click={() => period = p}
+        on:click={() => dispatch('periodChange', p)}
       >{p}</button>
     {/each}
   </div>
@@ -188,31 +182,6 @@
     {/if}
   </div>
 
-  <!-- ── Clock & timer ── -->
-  <div class="inline-fields">
-    <label>Clock
-      <input bind:value={clock} placeholder="12:34" inputmode="numeric" style="width:72px"/>
-    </label>
-    <button class="small" on:click={onToggleTimer}>{timerRunning ? '⏹ Stop' : '▶ Go'}</button>
-  </div>
-
-  <!-- ── Score ── -->
-  <div class="inline-fields">
-    <label>Score <span class="label-hint">goals-pts e.g. 1-10</span>
-      <input bind:value={scoreUs}   placeholder="Us" style="width:54px"/>
-      <span style="margin:0 4px">–</span>
-      <input bind:value={scoreThem} placeholder="Them" style="width:54px"/>
-    </label>
-  </div>
-
-  <!-- ── Notes & flag ── -->
-  <div class="notes-row">
-    <textarea bind:value={notes} placeholder="Note…" rows="2"></textarea>
-    <label class="flag-label">
-      <input type="checkbox" bind:checked={flagEvent}/> Flag
-    </label>
-  </div>
-
   <!-- ── Actions ── -->
   {#if editingId}
     <div class="edit-badge">Editing event — tap Update when done</div>
@@ -227,6 +196,7 @@
         <button class="sec-btn" on:click={() => dispatch('cancelEdit')}>Cancel</button>
       {/if}
       <button class="sec-btn" on:click={onUndoLast} disabled={undoStack.length === 0} title="Undo last save">↩ Undo</button>
+      <label class="flag-inline" title="Flag for review"><input type="checkbox" bind:checked={flagEvent}/> ⚑</label>
     </div>
   </div>
 
@@ -244,11 +214,6 @@
         </datalist>
       </label>
       <label>Date     <input type="date" bind:value={matchDate}/></label>
-      <label>Period
-        <select bind:value={period}>
-          <option>H1</option><option>H2</option><option>ET</option>
-        </select>
-      </label>
       <label class="full-row">
         <input type="checkbox" bind:checked={ourGoalAtTop}/> Our goal at left end
       </label>
@@ -404,6 +369,12 @@
   }
   .sec-btn:hover { background: #f9fafb; border-color: #d1d5db; }
   .sec-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .flag-inline {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 13px; color: #9ca3af; cursor: pointer; padding: 0 4px;
+    white-space: nowrap;
+  }
+  .flag-inline input[type="checkbox"] { width: 15px; height: 15px; accent-color: #f59e0b; cursor: pointer; }
 
   /* Generic button fallback */
   button {

@@ -35,9 +35,7 @@
   let eventType = 'kickout';
   let direction = 'ours';
 
-  // ── New capture fields ────────────────────────────────────────────────────
-  let scoreUs = '', scoreThem = '';
-  let notes = '', flagEvent = false;
+  let flagEvent = false;
   let restartReason = '';
 
   // ── UI state ──────────────────────────────────────────────────────────────
@@ -343,9 +341,9 @@
       break_displacement_m: contest === 'break'
         ? +breakDispM(landing.x, landing.y, pickup.x, pickup.y).toFixed(2)
         : null,
-      score_us:    scoreUs.trim() || null,
-      score_them:  scoreThem.trim() || null,
-      notes:       notes.trim() || null,
+      score_us:    currentMatchScore.us.str,
+      score_them:  currentMatchScore.them.str,
+      notes:       null,
       flag:        !!flagEvent,
       restart_reason: eventType === 'kickout' ? (restartReason || null) : null,
       ko_sequence: koSequence,
@@ -369,8 +367,6 @@
     clearPoints();
     editingId = null;
     targetPlayer = '';
-    // score persists within match; clear notes, flag and restart reason
-    notes = '';
     flagEvent = false;
     restartReason = '';
 
@@ -426,9 +422,6 @@
       ? { x: NaN, y: NaN }
       : { x: e.pickup_x, y: e.pickup_y };
     // Restore new fields
-    scoreUs      = e.score_us   || '';
-    scoreThem    = e.score_them || '';
-    notes        = e.notes      || '';
     flagEvent      = !!e.flag;
     restartReason  = e.restart_reason || '';
     eventType      = e.event_type  || 'kickout';
@@ -539,6 +532,19 @@
       return acc;
     }, {})
   ).sort((a, b) => b.match_date.localeCompare(a.match_date));
+
+  // ── Derived match score from tracked shots ────────────────────────────────
+  $: currentMatchScore = (() => {
+    const currentKey = `${matchDate}|${norm(team)}|${norm(opponent)}`;
+    const shots = events.filter(e => matchKey(e) === currentKey && e.event_type === 'shot');
+    const calc = (dir) => {
+      const s = shots.filter(e => (e.direction || 'ours') === dir);
+      const goals  = s.filter(e => e.outcome === 'Goal').length;
+      const points = s.filter(e => e.outcome === 'Point').length;
+      return { goals, points, str: `${goals}-${points}` };
+    };
+    return { us: calc('ours'), them: calc('theirs'), hasShots: shots.length > 0 };
+  })();
 
   // ── Filtered events for viz & KPIs ───────────────────────────────────────
   $: vizEvents = events.filter(e => {
@@ -780,7 +786,7 @@
     <div class="header-center">
       <div class="match-ctx-wrap">
           {#if team}<span class="match-ctx">{team}{opponent ? ' v ' + opponent : ''}</span>{/if}
-        {#if scoreUs || scoreThem}<span class="match-score">{scoreUs || '?'} – {scoreThem || '?'}</span>{/if}
+        {#if currentMatchScore?.hasShots}<span class="match-score">{currentMatchScore.us.str} – {currentMatchScore.them.str}</span>{/if}
       </div>
       <div class="period-pills">
         {#each ['H1','H2','ET'] as p}
@@ -847,11 +853,6 @@
         bind:outcome
         bind:breakOutcome
         bind:targetPlayer
-        bind:clock
-        bind:timerRunning
-        bind:scoreUs
-        bind:scoreThem
-        bind:notes
         bind:flagEvent
         bind:setupOpen
         bind:team
@@ -869,14 +870,29 @@
         onSave={saveEvent}
         onClearPoints={clearPoints}
         onUndoLast={undoLast}
-        onToggleTimer={toggleTimer}
         onPersist={persistLocal}
+        on:periodChange={(e) => {
+          const p = e.detail;
+          const wasH2 = period === 'H2';
+          const goingH2 = p === 'H2';
+          period = p;
+          if (goingH2 && !wasH2) ourGoalAtTop = !ourGoalAtTop;
+          else if (wasH2 && !goingH2) ourGoalAtTop = !ourGoalAtTop;
+        }}
         on:cancelEdit={() => { editingId = null; clearPoints(); targetPlayer = ''; }}
       />
     </div><!-- /form-panel -->
 
     <!-- Right: pitch panel -->
     <div class="pitch-panel {pitchError ? 'pitch-error' : ''}">
+      <!-- Timer strip -->
+      <div class="timer-strip">
+        <button class="timer-btn" on:click={toggleTimer}>
+          {timerRunning ? '⏹' : '▶'}
+        </button>
+        <span class="timer-clock">{clock || '0:00'}</span>
+        <span class="timer-period">{period}</span>
+      </div>
       <div class="pitch-card">
         <div class="goal-indicator">
           {ourGoalAtTop ? '◀ Your goal — left end' : 'Your goal — right end ▶'}
@@ -1100,6 +1116,26 @@
     .capture-layout { flex-direction: row; }
     .form-panel { width: 300px; flex-shrink: 0; border-bottom: none; border-right: 1px solid #e5e7eb; overflow-y: auto; }
     .pitch-panel { flex: 1; padding: 24px; justify-content: center; }
+  }
+
+  /* ── Timer strip ── */
+  .timer-strip {
+    display: flex; align-items: center; gap: 12px;
+    background: #2d5a33; padding: 8px 14px; flex-shrink: 0; border-radius: 10px;
+  }
+  .timer-btn {
+    padding: 6px 16px; border-radius: 7px; font-size: 15px; font-weight: 800;
+    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25);
+    color: #fff; cursor: pointer; font-family: inherit; transition: all 0.12s; line-height: 1;
+  }
+  .timer-btn:hover { background: rgba(255,255,255,0.25); }
+  .timer-clock {
+    font-size: 26px; font-weight: 900; color: #fff;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 1;
+  }
+  .timer-period {
+    font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.55);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-left: auto;
   }
 
   /* ── Pitch card ── */
