@@ -291,6 +291,10 @@
 
   function buildEvent() {
     const depth_m = depthMetersFromOwnGoal(landing.y);
+    // Normalise stored coords so y=0 always = own goal end regardless of match orientation.
+    // This keeps analytics dots consistent across home and away matches.
+    const normY    = ourGoalAtTop ? landing.y : 1 - landing.y;
+    const normPickY = ourGoalAtTop ? pickup.y  : 1 - pickup.y;
     // Preserve original created_at when editing
     const originalCreatedAt = editingId
       ? (events.find(r => r.id === editingId)?.created_at ?? new Date().toISOString())
@@ -322,8 +326,8 @@
       time_to_tee_s: timeToTee === '' ? null : +timeToTee,
       total_time_s:  totalTime === '' ? null : +totalTime,
       scored_20s:    !!scored20,
-      x:   landing.x, y:   landing.y,
-      x_m: toMetersX(landing.x), y_m: toMetersY(landing.y),
+      x:   landing.x, y:   normY,
+      x_m: toMetersX(landing.x), y_m: toMetersY(normY),
       depth_from_own_goal_m: +depth_m.toFixed(2),
       side_band:    sideBand(landing.x),
       depth_band:   depthBandFromMeters(depth_m),
@@ -331,10 +335,10 @@
       our_goal_at_top: ourGoalAtTop,
       event_type:      eventType,
       direction,
-      pickup_x:   contest === 'break' ? pickup.x  : null,
-      pickup_y:   contest === 'break' ? pickup.y  : null,
-      pickup_x_m: contest === 'break' ? toMetersX(pickup.x) : null,
-      pickup_y_m: contest === 'break' ? toMetersY(pickup.y) : null,
+      pickup_x:   contest === 'break' ? pickup.x    : null,
+      pickup_y:   contest === 'break' ? normPickY   : null,
+      pickup_x_m: contest === 'break' ? toMetersX(pickup.x)    : null,
+      pickup_y_m: contest === 'break' ? toMetersY(normPickY)   : null,
       break_displacement_m: contest === 'break'
         ? +breakDispM(landing.x, landing.y, pickup.x, pickup.y).toFixed(2)
         : null,
@@ -384,6 +388,7 @@
 
   function undoLast() {
     if (undoStack.length === 0) return;
+    if (!confirm('Remove the last saved event?')) return;
     events = undoStack[undoStack.length - 1];
     undoStack = undoStack.slice(0, -1);
     persistLocal();
