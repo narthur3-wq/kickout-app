@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r \"http\\\\|fetch\\\\|axios\\\\|api\\\\|key\\\\|password\\\\|secret\" /c/Users/neila/ko-app/src --include=*.js --include=*.svelte --include=*.ts)"
+    ]
+  }
+}
