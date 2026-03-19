@@ -91,6 +91,33 @@
   function pctStr(v) { return v === null ? '–' : v + '%'; }
   function netStr(n) { return n > 0 ? '+' + n : String(n); }
 
+  let digestEl;
+  let sharing = false;
+
+  async function shareDigest() {
+    if (sharing) return;
+    sharing = true;
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(digestEl, { backgroundColor: '#f0f4f0', scale: 2, useCORS: true });
+      canvas.toBlob(async (blob) => {
+        const file = new File([blob], 'kickout-digest.png', { type: 'image/png' });
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], title: 'KickOut Digest' });
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = 'kickout-digest.png'; a.click();
+          URL.revokeObjectURL(url);
+        }
+        sharing = false;
+      }, 'image/png');
+    } catch (e) {
+      console.error('Share failed', e);
+      sharing = false;
+    }
+  }
+
   function tileBg(pct, hi, lo) {
     if (pct === null) return '#f9fafb';
     if (pct >= hi) return '#dcfce7';
@@ -105,7 +132,7 @@
   }
 </script>
 
-<div class="digest">
+<div class="digest" bind:this={digestEl}>
 
   {#if filtered.length === 0}
     <!-- ── Empty state ── -->
@@ -125,6 +152,9 @@
         </span>
         {#if matchCtx.date}<span class="ctx-date">{matchCtx.date}</span>{/if}
         <span class="ctx-count">{filtered.length} events · {periodFilter !== 'ALL' ? periodFilter : 'All periods'}</span>
+        <button class="share-btn" on:click={shareDigest} disabled={sharing}>
+          {sharing ? '…' : '⬆ Share'}
+        </button>
       </div>
     {/if}
 
@@ -306,6 +336,13 @@
   .ctx-vs { font-weight: 400; color: #9ca3af; margin: 0 3px; }
   .ctx-date { color: #6b7280; }
   .ctx-count { margin-left: auto; font-size: 12px; color: #9ca3af; }
+  .share-btn {
+    padding: 5px 12px; border-radius: 7px; font-size: 12px; font-weight: 700;
+    border: 1.5px solid #1c3f8a; background: #1c3f8a; color: #fff;
+    cursor: pointer; font-family: inherit; transition: all 0.12s; flex-shrink: 0;
+  }
+  .share-btn:hover { background: #163270; }
+  .share-btn:disabled { opacity: 0.5; cursor: default; }
 
   /* ── Hero KPI tiles ── */
   .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
