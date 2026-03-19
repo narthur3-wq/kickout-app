@@ -14,8 +14,8 @@
   // Stored normalised coords: x = side (0=top edge → 1=bottom edge), y = depth (0=left goal → 1=right goal)
   const W = 145, H = 90;
   const L13 = 13, L20 = 20, L45 = 45, L65 = 65;
-  const SMALL_W = 14, SMALL_D = 4.5, LARGE_W = 19, LARGE_D = 13;
-  const R_D = 13, R_40 = 40;
+  const SMALL_W = 14, SMALL_D = 4.5;
+  const R_D = 13, R_CENTRE = 10;
   const cy = H / 2; // 45 — vertical centre
 
   let svgEl: SVGSVGElement;
@@ -71,9 +71,6 @@
   // D arcs — centred on the goal line (x=0 and x=W), R=13m, curving into the field
   const pathDLeft  = () => arcPath(0, cy, R_D, -Math.PI / 2,  Math.PI / 2);
   const pathDRight = () => arcPath(W, cy, R_D,  Math.PI / 2, -Math.PI / 2);
-  // 40m arcs
-  const path40Left  = () => arcPath(0, cy, R_40, -Math.PI / 2,  Math.PI / 2);
-  const path40Right = () => arcPath(W, cy, R_40,  Math.PI / 2, -Math.PI / 2);
 
   // stored x = side (0–1) → SVG y;  stored y = depth (0–1) → SVG x
   function svgX(o: { x: number; y: number }) { return (flip ? 1 - o.y : o.y) * W; }
@@ -164,31 +161,25 @@
       vector-effect="non-scaling-stroke" />
   {/each}
 
-  <!-- horizontal thirds (sideline thirds) -->
-  <line x1="0" y1={H/3}   x2={W} y2={H/3}   stroke="rgba(255,255,255,0.18)" stroke-width="0.55" vector-effect="non-scaling-stroke" />
-  <line x1="0" y1={2*H/3} x2={W} y2={2*H/3} stroke="rgba(255,255,255,0.18)" stroke-width="0.55" vector-effect="non-scaling-stroke" />
-
-  <!-- goal boxes — left end -->
-  <rect x="0" y={cy - LARGE_W/2} width={LARGE_D} height={LARGE_W}
-    fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.88)" stroke-width="1.0"
+  <!-- centre circle -->
+  <circle cx={W/2} cy={cy} r={R_CENTRE}
+    fill="none" stroke="rgba(255,255,255,0.72)" stroke-width="1.0"
     vector-effect="non-scaling-stroke" />
+  <!-- centre spot -->
+  <circle cx={W/2} cy={cy} r="0.8"
+    fill="rgba(255,255,255,0.72)" vector-effect="non-scaling-stroke" />
+
+  <!-- goal small rectangles (parallelograms) — left and right ends -->
   <rect x="0" y={cy - SMALL_W/2} width={SMALL_D} height={SMALL_W}
     fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.88)" stroke-width="1.0"
-    vector-effect="non-scaling-stroke" />
-  <!-- goal boxes — right end -->
-  <rect x={W - LARGE_D} y={cy - LARGE_W/2} width={LARGE_D} height={LARGE_W}
-    fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.88)" stroke-width="1.0"
     vector-effect="non-scaling-stroke" />
   <rect x={W - SMALL_D} y={cy - SMALL_W/2} width={SMALL_D} height={SMALL_W}
     fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.88)" stroke-width="1.0"
     vector-effect="non-scaling-stroke" />
 
-  <!-- D arcs — centred on goal line -->
+  <!-- D arcs — centred on goal line, R=13m -->
   <path d={pathDLeft()}  fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.0" vector-effect="non-scaling-stroke" />
   <path d={pathDRight()} fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.0" vector-effect="non-scaling-stroke" />
-  <!-- 40m arcs — dashed, lighter -->
-  <path d={path40Left()}  fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="0.85" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" />
-  <path d={path40Right()} fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="0.85" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" />
 
   <!-- overlays -->
   <g style="pointer-events:none">

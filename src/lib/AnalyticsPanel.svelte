@@ -40,6 +40,28 @@
   // Local: pitch vs heatmap toggle
   let vizMode = 'dots'; // 'dots' | 'heat'
 
+  // Advanced filter drawer
+  let advancedOpen = false;
+
+  // Player stats sort
+  let playerSort = 'total'; // 'total' | 'ret' | 'break'
+  $: sortedPlayers = [...playerStats].sort((a, b) => {
+    if (playerSort === 'ret')   return (b.retPct   ?? -1) - (a.retPct   ?? -1);
+    if (playerSort === 'break') return (b.brWonPct ?? -1) - (a.brWonPct ?? -1);
+    return b.total - a.total;
+  });
+
+  // Count of active "advanced" filters
+  $: advancedCount = [
+    matchFilter !== 'ALL',
+    oppFilter !== 'ALL',
+    plyFilter !== 'ALL',
+    ytdOnly,
+    flaggedOnly,
+    fContest.size !== CONTESTS.length,
+    fOutcome.size !== OUTCOMES.length,
+  ].filter(Boolean).length;
+
   // Local: heatmap density vs quality toggle
   let heatmapWeighted = false;
 
@@ -141,63 +163,81 @@
 
   <!-- Filters -->
   <div class="filters">
-    <!-- Direction + match selects row -->
-    <div class="filter-pills-row">
+    <!-- Primary row: Direction always visible -->
+    <div class="filter-primary-row">
       <div class="fpill-group">
         <span class="fpill-label">Direction</span>
         {#each [['ALL','Both'],['ours','Ours'],['theirs','Theirs']] as [val, lbl]}
           <button class="fpill {directionFilter === val ? 'fpill-on' : ''}" on:click={() => directionFilter = val}>{lbl}</button>
         {/each}
       </div>
-    </div>
-    <!-- Select row -->
-    <div class="filter-selects-row">
-      <div class="fselect-wrap">
-        <span class="fselect-label">Match</span>
-        <select bind:value={matchFilter}>
-          <option value="ALL">All matches</option>
-          {#each uniqueMatches as m}
-            <option value={m.key}>{m.match_date} · {m.opponent || 'Unknown'} ({m.count})</option>
-          {/each}
-        </select>
-      </div>
-      <div class="fselect-wrap">
-        <span class="fselect-label">Opponent</span>
-        <select bind:value={oppFilter}>
-          <option value="ALL">All</option>
-          {#each opponentChoices as [key,lbl]}<option value={key}>{lbl}</option>{/each}
-        </select>
-      </div>
-      <div class="fselect-wrap">
-        <span class="fselect-label">Player</span>
-        <select bind:value={plyFilter}>
-          <option value="ALL">All</option>
-          {#each playerChoices as [key,lbl]}<option value={key}>{lbl}</option>{/each}
-        </select>
+      <div class="filter-toolbar">
+        <button
+          class="adv-toggle {advancedOpen ? 'adv-open' : ''} {advancedCount > 0 ? 'adv-active' : ''}"
+          on:click={() => advancedOpen = !advancedOpen}
+        >
+          Filters {advancedCount > 0 ? `· ${advancedCount}` : ''} {advancedOpen ? '▲' : '▼'}
+        </button>
+        {#if filterTags.length > 0}
+          <button class="reset-btn" on:click={resetFilters}>Reset</button>
+        {/if}
       </div>
     </div>
-    <!-- Flags + reset -->
-    <div class="filter-flags-row">
-      <label class="flag-check"><input type="checkbox" bind:checked={useFilters}/> Contest filters</label>
-      <label class="flag-check"><input type="checkbox" bind:checked={ytdOnly}/> YTD {currentYear}</label>
-      <label class="flag-check"><input type="checkbox" bind:checked={flaggedOnly}/> Flagged</label>
-      <button class="reset-btn" on:click={resetFilters}>Reset</button>
-    </div>
-    {#if useFilters && isKickoutView}
-      <div class="filter-pills-row">
-        <div class="fpill-group">
-          <span class="fpill-label">Contest</span>
-          {#each CONTESTS as c}
-            <button class="fpill {fContest.has(c) ? 'fpill-on' : ''}" on:click={() => toggleContest(c)}>{c}</button>
-          {/each}
+
+    <!-- Advanced drawer -->
+    {#if advancedOpen}
+      <div class="adv-drawer">
+        <!-- Match / Opponent / Player selects -->
+        <div class="filter-selects-row">
+          <div class="fselect-wrap">
+            <span class="fselect-label">Match</span>
+            <select bind:value={matchFilter}>
+              <option value="ALL">All matches</option>
+              {#each uniqueMatches as m}
+                <option value={m.key}>{m.match_date} · {m.opponent || 'Unknown'} ({m.count})</option>
+              {/each}
+            </select>
+          </div>
+          <div class="fselect-wrap">
+            <span class="fselect-label">Opponent</span>
+            <select bind:value={oppFilter}>
+              <option value="ALL">All</option>
+              {#each opponentChoices as [key,lbl]}<option value={key}>{lbl}</option>{/each}
+            </select>
+          </div>
+          <div class="fselect-wrap">
+            <span class="fselect-label">Player</span>
+            <select bind:value={plyFilter}>
+              <option value="ALL">All</option>
+              {#each playerChoices as [key,lbl]}<option value={key}>{lbl}</option>{/each}
+            </select>
+          </div>
         </div>
-      </div>
-      <div class="filter-pills-row">
-        <div class="fpill-group">
-          <span class="fpill-label">Outcome</span>
-          {#each OUTCOMES as o}
-            <button class="fpill {fOutcome.has(o) ? 'fpill-on' : ''}" on:click={() => toggleOutcome(o)}>{o}</button>
-          {/each}
+
+        <!-- Contest / Outcome pills (kickout only) -->
+        {#if isKickoutView}
+          <div class="filter-pills-row">
+            <div class="fpill-group">
+              <span class="fpill-label">Contest</span>
+              {#each CONTESTS as c}
+                <button class="fpill {fContest.has(c) ? 'fpill-on' : ''}" on:click={() => toggleContest(c)}>{c}</button>
+              {/each}
+            </div>
+          </div>
+          <div class="filter-pills-row">
+            <div class="fpill-group">
+              <span class="fpill-label">Outcome</span>
+              {#each OUTCOMES as o}
+                <button class="fpill {fOutcome.has(o) ? 'fpill-on' : ''}" on:click={() => toggleOutcome(o)}>{o}</button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <!-- Flags row -->
+        <div class="filter-flags-row">
+          <label class="flag-check"><input type="checkbox" bind:checked={ytdOnly}/> {currentYear} only</label>
+          <label class="flag-check"><input type="checkbox" bind:checked={flaggedOnly}/> Flagged only</label>
         </div>
       </div>
     {/if}
@@ -336,13 +376,21 @@
     {/if}
 
     <!-- ── Target players (kickout only) ── -->
-    {#if isKickoutView && playerStats.length > 0}
+    {#if isKickoutView && sortedPlayers.length > 0}
       <div class="section-card">
-        <div class="section-hd">Target Players</div>
+        <div class="section-hd">
+          Target Players
+          <div class="player-sort">
+            Sort:
+            {#each [['total','Volume'],['ret','Retention'],['break','Break win%']] as [k,l]}
+              <button class="psort {playerSort === k ? 'psort-on' : ''}" on:click={() => playerSort = k}>{l}</button>
+            {/each}
+          </div>
+        </div>
         <table class="kpi-table player-table">
           <thead><tr><th>Player</th><th>Targeted</th><th>Retention</th><th>Breaks</th><th>Break win%</th></tr></thead>
           <tbody>
-            {#each playerStats as p}
+            {#each sortedPlayers as p}
               <tr>
                 <td style="text-align:left">{p.label}</td>
                 <td>{p.total}</td>
@@ -418,8 +466,28 @@
 
   /* ── Filters ── */
   .filters {
-    display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;
-    background: #f8faf8; border: 1px solid #e8eee6; border-radius: 10px; padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;
+    background: #f8faf8; border: 1px solid #e8eee6; border-radius: 10px; padding: 10px 12px;
+  }
+  .filter-primary-row {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .filter-toolbar { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+  /* Advanced toggle */
+  .adv-toggle {
+    padding: 5px 11px; border: 1.5px solid #e5e7eb; border-radius: 7px;
+    background: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
+    color: #6b7280; font-family: inherit; transition: all 0.12s; white-space: nowrap;
+  }
+  .adv-toggle:hover { border-color: #d1d5db; background: #f3f4f6; }
+  .adv-toggle.adv-open { border-color: #1c3f8a; color: #1c3f8a; background: #eff6ff; }
+  .adv-toggle.adv-active { border-color: #1c3f8a; color: #1c3f8a; font-weight: 700; }
+
+  /* Advanced drawer */
+  .adv-drawer {
+    display: flex; flex-direction: column; gap: 8px;
+    padding-top: 8px; border-top: 1px solid #e8eee6; margin-top: 2px;
   }
 
   /* Pill controls */
@@ -446,13 +514,13 @@
   }
   .fselect-wrap select:focus { outline: none; border-color: #1c3f8a; box-shadow: 0 0 0 3px rgba(28,63,138,0.12); }
 
-  /* Flags + reset */
+  /* Flags row */
   .filter-flags-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .flag-check { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #6b7280; cursor: pointer; }
   .flag-check input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: #1c3f8a; }
   .fpill-check input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: #1c3f8a; }
   .reset-btn {
-    margin-left: auto; padding: 5px 11px; border: 1.5px solid #e5e7eb; border-radius: 7px;
+    padding: 5px 11px; border: 1.5px solid #e5e7eb; border-radius: 7px;
     background: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
     color: #6b7280; font-family: inherit; transition: all 0.12s;
   }
@@ -533,6 +601,16 @@
   .kpi-table thead th { background: #f0f4f0; font-size: 11px; font-weight: 700; color: #6b7280; }
   .kpi-table tbody tr:hover { background: #f9fbf9; }
   .player-table { width: 100%; }
+  .player-sort {
+    margin-left: auto; display: flex; align-items: center; gap: 4px;
+    font-size: 10px; font-weight: 600; color: #9ca3af; text-transform: none; letter-spacing: 0;
+  }
+  .psort {
+    padding: 2px 7px; border: 1px solid #e5e7eb; border-radius: 5px;
+    background: #fff; cursor: pointer; font-size: 10px; font-weight: 600;
+    color: #6b7280; font-family: inherit;
+  }
+  .psort.psort-on { background: #1c3f8a; color: #fff; border-color: #1c3f8a; }
   .low-n { color: #b0b8b0; font-size: 11px; font-style: italic; }
   :global(.trend-up)   { color: #16a34a; font-weight: 800; }
   :global(.trend-down) { color: #dc2626; font-weight: 800; }

@@ -131,7 +131,7 @@
   }
   .close-btn:hover { background: rgba(255,255,255,0.18); color: #fff; }
 
-  .modal-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  .modal-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; max-height: 80svh; overflow-y: auto; }
 
   /* Hero */
   .hero {

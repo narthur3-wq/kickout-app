@@ -146,6 +146,19 @@
       >{num}</button>
     {/each}
   </div>
+  <div class="jersey-custom-row">
+    <span class="jersey-custom-label">#26+</span>
+    <input
+      class="jersey-custom-input"
+      type="number" min="1" max="99" placeholder="other #"
+      inputmode="numeric"
+      value={targetPlayer && parseInt(targetPlayer) > 25 ? targetPlayer : ''}
+      on:change={(e) => { targetPlayer = e.target.value || ''; }}
+    />
+    {#if targetPlayer}
+      <button class="jersey-clear" on:click={() => targetPlayer = ''}>✕</button>
+    {/if}
+  </div>
 
   <!-- ── Clock & timer ── -->
   <div class="inline-fields">
@@ -157,10 +170,10 @@
 
   <!-- ── Score ── -->
   <div class="inline-fields">
-    <label>Score
-      <input bind:value={scoreUs}   placeholder="2-14" style="width:64px"/>
+    <label>Score <span class="label-hint">goals-pts e.g. 1-10</span>
+      <input bind:value={scoreUs}   placeholder="Us" style="width:54px"/>
       <span style="margin:0 4px">–</span>
-      <input bind:value={scoreThem} placeholder="0-8"  style="width:64px"/>
+      <input bind:value={scoreThem} placeholder="Them" style="width:54px"/>
     </label>
   </div>
 
@@ -173,8 +186,11 @@
   </div>
 
   <!-- ── Actions ── -->
+  {#if editingId}
+    <div class="edit-badge">Editing event — tap Update when done</div>
+  {/if}
   <div class="action-row">
-    <button class="save-cta {savedFlash ? 'save-flash' : ''}" on:click={onSave}>
+    <button class="save-cta {savedFlash ? 'save-flash' : editingId ? 'save-edit' : ''}" on:click={onSave}>
       {savedFlash ? '✓ Saved!' : editingId ? 'Update Event' : 'Save Event'}
     </button>
     <div class="sec-row">
@@ -289,6 +305,23 @@
   .jersey-btn:hover:not(.active) { border-color: #d1d5db; background: #f9fafb; }
   .jersey-btn:active { transform: scale(0.92); }
   .jersey-btn.active { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+  .jersey-custom-row {
+    display: flex; align-items: center; gap: 6px; margin-top: 6px;
+  }
+  .jersey-custom-label { font-size: 11px; font-weight: 700; color: #9ca3af; flex-shrink: 0; }
+  .jersey-custom-input {
+    padding: 5px 9px; border: 1.5px solid #e5e7eb; border-radius: 7px;
+    font-size: 13px; background: #fff; color: #111827; font-family: inherit;
+    width: 80px; transition: border-color 0.12s;
+  }
+  .jersey-custom-input:focus { outline: none; border-color: #1c3f8a; box-shadow: 0 0 0 3px rgba(28,63,138,0.12); }
+  .jersey-clear {
+    padding: 5px 8px; border: 1.5px solid #fca5a5; border-radius: 7px;
+    background: #fff; cursor: pointer; font-size: 11px; color: #dc2626;
+    font-family: inherit; transition: all 0.12s;
+  }
+  .jersey-clear:hover { background: #fef2f2; }
+  .label-hint { font-size: 10px; font-weight: 500; color: #9ca3af; }
 
   /* ── Inline fields (clock, score) ── */
   .inline-fields { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
@@ -328,6 +361,13 @@
   .save-cta:hover { background: #163270; }
   .save-cta:active { transform: scale(0.99); }
   .save-cta.save-flash { background: #16a34a; cursor: default; }
+  .save-cta.save-edit { background: #b45309; }
+  .save-cta.save-edit:hover:not(.save-flash) { background: #92400e; }
+  .edit-badge {
+    background: #fef3c7; border: 1px solid #fde68a; border-radius: 7px;
+    padding: 6px 12px; font-size: 11px; font-weight: 700; color: #92400e;
+    margin-bottom: 8px; text-align: center;
+  }
   .sec-row { display: flex; gap: 6px; }
   .sec-btn {
     flex: 1; padding: 9px 10px; border: 1.5px solid #e5e7eb; border-radius: 8px;

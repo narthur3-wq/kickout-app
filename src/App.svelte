@@ -392,7 +392,8 @@
     direction    = e.direction   || 'ours';
     // NOTE: ourGoalAtTop is NOT restored from the event so the analyst's
     // current orientation preference is preserved for subsequent captures.
-    setupOpen = true;
+    // Don't force-expand match setup — only open if team/opponent differ from current session
+    setupOpen = false;
     activeTab = 'capture';
   }
 
