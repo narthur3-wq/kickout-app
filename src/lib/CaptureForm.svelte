@@ -99,6 +99,17 @@
     >Theirs ▶</button>
   </div>
 
+  <!-- ── Period ── -->
+  <div class="field-label">Period</div>
+  <div class="dir-row">
+    {#each ['H1','H2','ET'] as p}
+      <button
+        class="seg-dir {period === p ? 'active' : ''}"
+        on:click={() => period = p}
+      >{p}</button>
+    {/each}
+  </div>
+
   <!-- ── Contest (kickout only) ── -->
   {#if eventType === 'kickout'}
     <div class="field-label">Contest</div>

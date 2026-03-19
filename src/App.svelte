@@ -51,6 +51,8 @@
   let pitchError = false;
   let activeTab = 'capture';
   let savedFlash = false;
+  let pendingSync = new Set(); // IDs awaiting upload to Supabase
+  let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
   // ── Viz filters ───────────────────────────────────────────────────────────
   let fContest = new Set(CONTESTS);
@@ -153,6 +155,25 @@
     }
   }
 
+  // ── Sync queue ───────────────────────────────────────────────────────────
+  function loadPendingSync() {
+    try { pendingSync = new Set(JSON.parse(localStorage.getItem('ko_sync_queue') || '[]')); }
+    catch { pendingSync = new Set(); }
+  }
+  function savePendingSync() {
+    try { localStorage.setItem('ko_sync_queue', JSON.stringify([...pendingSync])); } catch {}
+  }
+  async function flushSyncQueue() {
+    if (!supabase || !user || pendingSync.size === 0 || !isOnline) return;
+    for (const id of [...pendingSync]) {
+      const ev = events.find(e => e.id === id);
+      if (!ev) { pendingSync.delete(id); continue; }
+      const { error } = await supabase.from('events').upsert(ev);
+      if (!error) { pendingSync.delete(id); savePendingSync(); }
+    }
+    if (pendingSync.size === 0) syncStatus = 'synced';
+  }
+
   // ── Supabase helpers ──────────────────────────────────────────────────────
   async function syncFromSupabase() {
     if (!supabase || !user) return;
@@ -172,6 +193,7 @@
         persistLocal();
       }
       syncStatus = 'synced';
+      flushSyncQueue();
     } catch (e) {
       console.error('Sync failed', e);
       syncStatus = 'error';
@@ -179,9 +201,17 @@
   }
 
   async function upsertToSupabase(ev) {
-    if (!supabase || !user) return;
+    if (!supabase || !user) {
+      if (user) { pendingSync.add(ev.id); savePendingSync(); }
+      return;
+    }
     const { error } = await supabase.from('events').upsert(ev);
-    if (error) console.error('Supabase upsert failed', ev.id, error.message);
+    if (error) {
+      console.error('Supabase upsert failed', ev.id, error.message);
+      pendingSync.add(ev.id); savePendingSync();
+    } else {
+      pendingSync.delete(ev.id); savePendingSync();
+    }
   }
 
   async function deleteFromSupabase(id) {
@@ -193,6 +223,9 @@
   // ── Auth ──────────────────────────────────────────────────────────────────
   onMount(async () => {
     loadFromLocalStorage();
+    loadPendingSync();
+    window.addEventListener('online',  () => { isOnline = true;  flushSyncQueue(); });
+    window.addEventListener('offline', () => { isOnline = false; });
 
     if (supabaseConfigured) {
       const { data: { session } } = await supabase.auth.getSession();
@@ -310,6 +343,7 @@
       notes:       notes.trim() || null,
       flag:        !!flagEvent,
       ko_sequence: koSequence,
+      schema_version: 1,
     };
   }
 
@@ -706,7 +740,10 @@
     </div>
 
     <div class="header-center">
-      {#if team}<span class="match-ctx">{team}</span>{/if}
+      <div class="match-ctx-wrap">
+          {#if team}<span class="match-ctx">{team}{opponent ? ' v ' + opponent : ''}</span>{/if}
+        {#if scoreUs || scoreThem}<span class="match-score">{scoreUs || '?'} – {scoreThem || '?'}</span>{/if}
+      </div>
       <div class="period-pills">
         {#each ['H1','H2','ET'] as p}
           <button class="period-pill {periodFilter === p ? 'active' : ''}" on:click={() => periodFilter = p}>{p}</button>
@@ -716,9 +753,17 @@
     </div>
 
     <div class="header-actions">
-      {#if syncStatus === 'syncing'}<span class="chip syncing">↻ Sync</span>{/if}
-      {#if syncStatus === 'synced'}<span class="chip synced">✓ Synced</span>{/if}
-      {#if syncStatus === 'error'}<span class="chip error">⚠ Error</span>{/if}
+      {#if !isOnline}
+        <span class="chip offline">● Offline</span>
+      {:else if pendingSync.size > 0}
+        <span class="chip pending">⚠ {pendingSync.size}</span>
+      {:else if syncStatus === 'syncing'}
+        <span class="chip syncing">↻</span>
+      {:else if syncStatus === 'synced'}
+        <span class="chip synced">✓</span>
+      {:else if syncStatus === 'error'}
+        <span class="chip error">!</span>
+      {/if}
       <button class="flip-pill" on:click={() => ourGoalAtTop = !ourGoalAtTop} title="Flip goal end">⇄</button>
       <button class="icon-btn" title="{wakeLock ? 'Screen locked on' : 'Keep screen on'}"
         on:click={toggleWakeLock}>{wakeLock ? '🔆' : '🔅'}</button>
@@ -928,8 +973,8 @@
     flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; min-width: 0;
   }
   .match-ctx {
-    font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.45);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90px;
+    font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.55);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;
   }
 
   /* Period segmented control — on dark header */
@@ -957,6 +1002,11 @@
   .chip.syncing { background: rgba(251,191,36,0.15); color: #fbbf24; }
   .chip.synced  { background: rgba(74,222,128,0.15);  color: #4ade80; }
   .chip.error   { background: rgba(248,113,113,0.15); color: #f87171; }
+  .chip.offline { background: rgba(156,163,175,0.15); color: #9ca3af; }
+  .chip.pending { background: rgba(245,158,11,0.15);  color: #f59e0b; }
+
+  .match-ctx-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0; }
+  .match-score { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.7); letter-spacing: 0.04em; }
 
   /* Flip button — dark header */
   .flip-pill {
