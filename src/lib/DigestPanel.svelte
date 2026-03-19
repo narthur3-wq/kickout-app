@@ -12,7 +12,7 @@
   $: ourTurnovers   = filtered.filter(e => (e.event_type || 'kickout') === 'turnover' && (e.direction || 'ours') === 'ours');
   $: theirTurnovers = filtered.filter(e => (e.event_type || 'kickout') === 'turnover' && (e.direction || 'ours') === 'theirs');
 
-  const KO_RETAINED = new Set(['retained', 'score']);
+  const KO_RETAINED = new Set(['retained', 'score', 'won']);
   const SHOT_SCORED = new Set(['goal', 'point']);
 
   function koStat(evs) {
@@ -122,7 +122,7 @@
         <div class="kpi-sub">{koUs.won} of {koUs.n} won</div>
       </div>
       <div class="kpi-tile" style="background:{tileBg(koThem.pct, 55, 45)}">
-        <div class="kpi-label">Their KO Ret.</div>
+        <div class="kpi-label">Won Their KO</div>
         <div class="kpi-value" style="color:{pctColor(koThem.pct, 55, 45)}">{pctStr(koThem.pct)}</div>
         <div class="kpi-sub">{koThem.won} of {koThem.n} won</div>
       </div>

@@ -524,7 +524,7 @@
   // ── KPIs ──────────────────────────────────────────────────────────────────
   const ZSIDES = ['L','C','R'], ZDEPTH = ['S','M','L','V'];
   const zoneKey = (s,d) => `${s}-${d}`;
-  const RETAINED = new Set(['Retained','Score']);
+  const RETAINED = new Set(['Retained','Score','Won']);
 
   $: zoneStats = (() => {
     const z = {};

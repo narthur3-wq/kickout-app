@@ -61,7 +61,7 @@
   }
 
   const EVENT_TYPES = ['kickout', 'turnover', 'shot'];
-  const JERSEY_NUMS = Array.from({ length: 25 }, (_, i) => i + 1);
+  const JERSEY_NUMS = Array.from({ length: 15 }, (_, i) => i + 1);
 
   function toggleJersey(num) {
     targetPlayer = targetPlayer === String(num) ? '' : String(num);
@@ -147,12 +147,12 @@
     {/each}
   </div>
   <div class="jersey-custom-row">
-    <span class="jersey-custom-label">#26+</span>
+    <span class="jersey-custom-label">Other #</span>
     <input
       class="jersey-custom-input"
-      type="number" min="1" max="99" placeholder="other #"
+      type="number" min="1" max="99" placeholder="16+"
       inputmode="numeric"
-      value={targetPlayer && parseInt(targetPlayer) > 25 ? targetPlayer : ''}
+      value={targetPlayer && parseInt(targetPlayer) > 15 ? targetPlayer : ''}
       on:change={(e) => { targetPlayer = e.target.value || ''; }}
     />
     {#if targetPlayer}
