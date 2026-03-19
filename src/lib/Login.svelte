@@ -39,8 +39,8 @@
       <div class="brand-inner">
         <img src="/crest.png" class="brand-crest" alt="Clontarf GAA" />
         <div class="brand-text">
-          <div class="brand-title">KickOut</div>
-          <div class="brand-sub">GAA Analytics</div>
+          <div class="brand-title">Páirc</div>
+          <div class="brand-sub">GAA Match Analyst</div>
         </div>
       </div>
     </div>

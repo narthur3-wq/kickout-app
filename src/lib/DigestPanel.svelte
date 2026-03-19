@@ -101,9 +101,9 @@
       const html2canvas = (await import('html2canvas')).default;
       const canvas = await html2canvas(digestEl, { backgroundColor: '#f0f4f0', scale: 2, useCORS: true });
       canvas.toBlob(async (blob) => {
-        const file = new File([blob], 'kickout-digest.png', { type: 'image/png' });
+        const file = new File([blob], 'pairc-digest.png', { type: 'image/png' });
         if (navigator.canShare?.({ files: [file] })) {
-          await navigator.share({ files: [file], title: 'KickOut Digest' });
+          await navigator.share({ files: [file], title: 'Páirc Digest' });
         } else {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');

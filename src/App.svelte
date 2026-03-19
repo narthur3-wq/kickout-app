@@ -780,7 +780,7 @@
   <header class="header">
     <div class="logo-wrap">
       <img src="/crest.png" class="logo-crest" alt="Clontarf GAA" />
-      <h1>KickOut</h1>
+      <h1>Páirc</h1>
     </div>
 
     <div class="header-center">
@@ -789,10 +789,11 @@
         {#if currentMatchScore?.hasShots}<span class="match-score">{currentMatchScore.us.str} – {currentMatchScore.them.str}</span>{/if}
       </div>
       <div class="period-pills">
+        <span class="pills-label" title="Filter analytics by period">View:</span>
         {#each ['H1','H2','ET'] as p}
-          <button class="period-pill {periodFilter === p ? 'active' : ''}" on:click={() => periodFilter = p}>{p}</button>
+          <button class="period-pill {periodFilter === p ? 'active' : ''}" on:click={() => periodFilter = p} title="Show {p} events only">{p}</button>
         {/each}
-        <button class="period-pill {periodFilter === 'ALL' ? 'active' : ''}" on:click={() => periodFilter = 'ALL'}>All</button>
+        <button class="period-pill {periodFilter === 'ALL' ? 'active' : ''}" on:click={() => periodFilter = 'ALL'} title="Show all periods">All</button>
       </div>
     </div>
 
@@ -808,7 +809,7 @@
       {:else if syncStatus === 'error'}
         <span class="chip error">!</span>
       {/if}
-      <button class="flip-pill" on:click={() => ourGoalAtTop = !ourGoalAtTop} title="Flip goal end">⇄</button>
+      <button class="flip-pill" on:click={() => ourGoalAtTop = !ourGoalAtTop} title="Swap which goal end is ours on the pitch (use at half-time if not auto-detected)">End ⇄</button>
       <button class="icon-btn" title="{wakeLock ? 'Screen locked on' : 'Keep screen on'}"
         on:click={toggleWakeLock}>{wakeLock ? '🔆' : '🔅'}</button>
       {#if supabaseConfigured && user}
@@ -1037,8 +1038,13 @@
 
   /* Period segmented control — on dark header */
   .period-pills {
-    display: flex; gap: 1px; background: rgba(255,255,255,0.08);
+    display: flex; align-items: center; gap: 1px; background: rgba(255,255,255,0.08);
     border-radius: 8px; padding: 3px; flex-shrink: 0;
+  }
+  .pills-label {
+    font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.38);
+    padding: 0 5px 0 2px; letter-spacing: 0.04em; text-transform: uppercase;
+    cursor: default;
   }
   .period-pill {
     padding: 4px 11px; border-radius: 6px; font-size: 12px; font-weight: 700;
@@ -1068,9 +1074,10 @@
 
   /* Flip button — dark header */
   .flip-pill {
-    padding: 5px 11px; border-radius: 7px; font-size: 14px; font-weight: 700;
+    padding: 5px 9px; border-radius: 7px; font-size: 12px; font-weight: 700;
     border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.08);
     cursor: pointer; color: rgba(255,255,255,0.75); font-family: inherit; transition: all 0.15s; line-height: 1;
+    letter-spacing: 0.01em;
   }
   .flip-pill:hover { background: rgba(255,255,255,0.15); color: #fff; }
 
