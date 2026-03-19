@@ -33,6 +33,10 @@
   export let editingId       = null;
   export let undoStack       = [];
 
+  // ── Restart context (kickout only) ────────────────────────────────────
+  export let restartReason = '';
+  const RESTART_REASONS = ['Score','Wide','Foul','Out'];
+
   // ── Visual feedback ───────────────────────────────────────────────────
   export let savedFlash = false;
 
@@ -143,6 +147,19 @@
           class="seg-btn {breakOutcome === b ? 'active' : ''}"
           on:click={() => breakOutcome = b}
         >{b}</button>
+      {/each}
+    </div>
+  {/if}
+
+  <!-- ── Restart context (kickout only) ── -->
+  {#if eventType === 'kickout'}
+    <div class="field-label">Restart after</div>
+    <div class="btn-group">
+      {#each RESTART_REASONS as r}
+        <button
+          class="seg-btn {restartReason === r ? 'active' : ''}"
+          on:click={() => restartReason = restartReason === r ? '' : r}
+        >{r}</button>
       {/each}
     </div>
   {/if}

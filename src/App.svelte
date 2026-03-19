@@ -38,6 +38,7 @@
   // ── New capture fields ────────────────────────────────────────────────────
   let scoreUs = '', scoreThem = '';
   let notes = '', flagEvent = false;
+  let restartReason = '';
 
   // ── UI state ──────────────────────────────────────────────────────────────
   let events = [];
@@ -346,6 +347,7 @@
       score_them:  scoreThem.trim() || null,
       notes:       notes.trim() || null,
       flag:        !!flagEvent,
+      restart_reason: eventType === 'kickout' ? (restartReason || null) : null,
       ko_sequence: koSequence,
       schema_version: 1,
     };
@@ -367,9 +369,10 @@
     clearPoints();
     editingId = null;
     targetPlayer = '';
-    // score persists within match; clear notes and flag
+    // score persists within match; clear notes, flag and restart reason
     notes = '';
     flagEvent = false;
+    restartReason = '';
 
     // Haptic + visual feedback
     navigator.vibrate?.(50);
@@ -426,8 +429,9 @@
     scoreUs      = e.score_us   || '';
     scoreThem    = e.score_them || '';
     notes        = e.notes      || '';
-    flagEvent    = !!e.flag;
-    eventType    = e.event_type  || 'kickout';
+    flagEvent      = !!e.flag;
+    restartReason  = e.restart_reason || '';
+    eventType      = e.event_type  || 'kickout';
     direction    = e.direction   || 'ours';
     // NOTE: ourGoalAtTop is NOT restored from the event so the analyst's
     // current orientation preference is preserved for subsequent captures.
@@ -715,6 +719,17 @@
       .map(b => ({ label: b.label, tot: b.tot, pct: Math.round(100 * b.ret / b.tot) }));
   })();
 
+  // ── Restart-context stats ─────────────────────────────────────────────────
+  $: restartStats = (() => {
+    const REASONS = ['Score','Wide','Foul','Out'];
+    return REASONS.map(r => {
+      const evs = vizEvents.filter(e => e.restart_reason === r);
+      if (evs.length < 3) return null;
+      const ret = evs.filter(e => RETAINED.has(e.outcome)).length;
+      return { reason: r, tot: evs.length, pct: Math.round(100 * ret / evs.length) };
+    }).filter(Boolean);
+  })();
+
   // ── Summary stats ─────────────────────────────────────────────────────────
   $: summaryStats = (() => {
     if (vizEvents.length === 0) return null;
@@ -844,6 +859,7 @@
         bind:matchDate
         bind:period
         bind:ourGoalAtTop
+        bind:restartReason
         {CONTESTS}
         {BREAK_OUTS}
         {opponentChoices}
@@ -933,6 +949,7 @@
       analyticsEventType={analyticsEventType}
       bind:directionFilter
       {clockTrend}
+      {restartStats}
       on:showSummary={() => showSummary = true}
       on:filterPlayer={(e) => { plyFilter = e.detail; }}
     />

@@ -21,6 +21,7 @@
   export let OUTCOMES     = [];
   export let retTrend     = () => null;
   export let clockTrend   = [];
+  export let restartStats = [];
 
   // ── Bindable filter state ────────────────────────────────────────────────
   export let matchFilter  = 'ALL';
@@ -332,6 +333,27 @@
             </div>
           {/each}
         </div>
+      </div>
+    {/if}
+
+    <!-- ── By restart reason ── -->
+    {#if restartStats.length > 0}
+      <div class="section-card">
+        <div class="section-hd">Retention by Restart</div>
+        <div class="restart-bars">
+          {#each restartStats as r}
+            {@const color = r.pct >= 60 ? '#16a34a' : r.pct >= 45 ? '#d97706' : '#dc2626'}
+            <div class="clock-row">
+              <span class="clock-lbl" style="width:46px">{r.reason}</span>
+              <div class="clock-track">
+                <div class="clock-fill" style="width:{r.pct}%;background:{color}"></div>
+              </div>
+              <span class="clock-pct" style="color:{color}">{r.pct}%</span>
+              <span class="clock-n">n={r.tot}</span>
+            </div>
+          {/each}
+        </div>
+        <p class="hint">Shown when n≥3. Tap "Restart after" in capture to tag each kickout.</p>
       </div>
     {/if}
 
