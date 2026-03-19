@@ -33,6 +33,9 @@
   export let editingId       = null;
   export let undoStack       = [];
 
+  // ── Visual feedback ───────────────────────────────────────────────────
+  export let savedFlash = false;
+
   // ── Action callbacks ──────────────────────────────────────────────────
   export let onSave         = () => {};
   export let onClearPoints  = () => {};
@@ -171,8 +174,8 @@
 
   <!-- ── Actions ── -->
   <div class="action-row">
-    <button class="save-cta" on:click={onSave}>
-      {editingId ? 'Update Event' : 'Save Event'}
+    <button class="save-cta {savedFlash ? 'save-flash' : ''}" on:click={onSave}>
+      {savedFlash ? '✓ Saved!' : editingId ? 'Update Event' : 'Save Event'}
     </button>
     <div class="sec-row">
       <button class="sec-btn" on:click={onClearPoints}>Clear</button>
@@ -317,13 +320,14 @@
   /* ── Action row ── */
   .action-row { display: flex; flex-direction: column; gap: 7px; margin-top: 18px; }
   .save-cta {
-    width: 100%; padding: 15px; background: #0a5500; color: #fff;
+    width: 100%; padding: 15px; background: #1c3f8a; color: #fff;
     border: none; border-radius: 10px; font-size: 15px; font-weight: 800;
     cursor: pointer; font-family: inherit; letter-spacing: 0.01em;
-    transition: background 0.12s; text-align: center;
+    transition: background 0.2s, transform 0.1s; text-align: center;
   }
-  .save-cta:hover { background: #083e00; }
+  .save-cta:hover { background: #163270; }
   .save-cta:active { transform: scale(0.99); }
+  .save-cta.save-flash { background: #16a34a; cursor: default; }
   .sec-row { display: flex; gap: 6px; }
   .sec-btn {
     flex: 1; padding: 9px 10px; border: 1.5px solid #e5e7eb; border-radius: 8px;

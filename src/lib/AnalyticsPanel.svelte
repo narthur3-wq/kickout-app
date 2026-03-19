@@ -19,7 +19,6 @@
   export let currentYear  = new Date().getFullYear();
   export let CONTESTS     = [];
   export let OUTCOMES     = [];
-  // retTrend closes over parent reactive state — passed as function prop
   export let retTrend     = () => null;
 
   // ── Bindable filter state ────────────────────────────────────────────────
@@ -37,6 +36,9 @@
   export let directionFilter     = 'ALL';
 
   const dispatch = createEventDispatcher();
+
+  // Local: pitch vs heatmap toggle
+  let vizMode = 'dots'; // 'dots' | 'heat'
 
   // Local: heatmap density vs quality toggle
   let heatmapWeighted = false;
@@ -73,6 +75,7 @@
   function toggleOutcome(val) {
     const s = new Set(fOutcome); s.has(val) ? s.delete(val) : s.add(val); fOutcome = s;
   }
+
   $: outcomeBreakdown = (() => {
     if (vizEvents.length === 0) return [];
     const map = {};
@@ -87,6 +90,25 @@
   const TYPE_LABELS = { 'kickout': 'Kickouts', 'shot': 'Shots', 'turnover': 'Turnovers', 'ALL': 'Analytics' };
   $: panelTitle = TYPE_LABELS[analyticsEventType] || 'Analytics';
 
+  // Active filter tags for summary bar
+  $: filterTags = (() => {
+    const tags = [];
+    if (periodFilter !== 'ALL') tags.push(periodFilter);
+    if (directionFilter !== 'ALL') tags.push(directionFilter === 'ours' ? 'Ours' : 'Theirs');
+    if (oppFilter !== 'ALL') {
+      const m = opponentChoices.find(([k]) => k === oppFilter);
+      tags.push('vs ' + (m ? m[1] : oppFilter));
+    }
+    if (matchFilter !== 'ALL') tags.push('1 match');
+    if (plyFilter !== 'ALL') {
+      const m = playerChoices.find(([k]) => k === plyFilter);
+      tags.push(m ? '#' + m[1] : 'player');
+    }
+    if (flaggedOnly) tags.push('flagged');
+    if (ytdOnly) tags.push(String(currentYear) + ' only');
+    return tags;
+  })();
+
   function resetFilters() {
     matchFilter = 'ALL'; oppFilter = 'ALL'; plyFilter = 'ALL'; periodFilter = 'ALL';
     ytdOnly = false; useFilters = true; flaggedOnly = false;
@@ -96,6 +118,8 @@
 </script>
 
 <section class="card">
+
+  <!-- Panel header -->
   <div class="panel-header">
     <div class="panel-title">{panelTitle}</div>
     <span class="panel-count">{vizEvents.length} events</span>
@@ -104,9 +128,20 @@
     {/if}
   </div>
 
+  <!-- Active filter summary bar -->
+  {#if filterTags.length > 0}
+    <div class="filter-summary">
+      <span class="filter-summary-label">Filtered:</span>
+      {#each filterTags as tag}
+        <span class="filter-tag">{tag}</span>
+      {/each}
+      <button class="filter-clear" on:click={resetFilters}>Clear</button>
+    </div>
+  {/if}
+
   <!-- Filters -->
   <div class="filters">
-    <!-- Row 1: pill controls -->
+    <!-- Direction + match selects row -->
     <div class="filter-pills-row">
       <div class="fpill-group">
         <span class="fpill-label">Direction</span>
@@ -114,17 +149,8 @@
           <button class="fpill {directionFilter === val ? 'fpill-on' : ''}" on:click={() => directionFilter = val}>{lbl}</button>
         {/each}
       </div>
-      <div class="fpill-group">
-        <span class="fpill-label">View</span>
-        {#each [['landing','Landing'],['pickup','Pickup']] as [val, lbl]}
-          <button class="fpill {overlayMode === val ? 'fpill-on' : ''}" on:click={() => overlayMode = val}>{lbl}</button>
-        {/each}
-      </div>
-      <label class="fpill-check">
-        <input type="checkbox" bind:checked={heatmapWeighted}/> Weighted
-      </label>
     </div>
-    <!-- Row 2: match + player selects -->
+    <!-- Select row -->
     <div class="filter-selects-row">
       <div class="fselect-wrap">
         <span class="fselect-label">Match</span>
@@ -150,7 +176,7 @@
         </select>
       </div>
     </div>
-    <!-- Row 3: flags + reset -->
+    <!-- Flags + reset -->
     <div class="filter-flags-row">
       <label class="flag-check"><input type="checkbox" bind:checked={useFilters}/> Contest filters</label>
       <label class="flag-check"><input type="checkbox" bind:checked={ytdOnly}/> YTD {currentYear}</label>
@@ -177,141 +203,183 @@
     {/if}
   </div>
 
-  <!-- Timeline -->
-  {#if timelineEvents.length > 0}
-    <h3>Timeline ({timelineEvents.length} {analyticsEventType === 'ALL' ? 'events' : analyticsEventType + 's'})</h3>
-    <div class="timeline-wrap">
-      {#each timelineEvents as e, i}
-        <div
-          class="tl-dot {e.flag ? 'tl-flagged' : ''}"
-          style="background:{outcomeColor(e.outcome)}"
-          title="#{e.ko_sequence ?? i+1} · {e.outcome} · {e.contest_type} · {e.period} {e.clock}{e.target_player ? ' → ' + e.target_player : ''}{e.notes ? ' — ' + e.notes : ''}"
-        >{e.ko_sequence ?? i+1}</div>
-      {/each}
+  <!-- ── Empty state ── -->
+  {#if vizEvents.length === 0}
+    <div class="empty-analytics">
+      <div class="empty-icon">📊</div>
+      <div class="empty-title">No events match the current filters</div>
+      <div class="empty-sub">Adjust or clear your filters to see data.</div>
+      <button class="empty-reset" on:click={resetFilters}>Reset filters</button>
     </div>
-  {/if}
 
-  <!-- Pitch overlay -->
-  <Pitch
-    contestType="clean"
-    landing={{x:NaN,y:NaN}}
-    pickup={{x:NaN,y:NaN}}
-    {overlays}
-    showZoneLabels={true}
-  />
+  {:else}
 
-  <!-- Heatmap -->
-  <h3>Heatmap</h3>
-  <Heatmap points={heatPoints} cols={140} radius={3} smooth={2} />
-
-  <!-- Outcome breakdown (all types) -->
-  {#if outcomeBreakdown.length > 0}
-    <h3>Outcomes</h3>
-    <div class="outcome-chips">
-      {#each outcomeBreakdown as o}
-        <div class="outcome-chip" style="border-color:{outcomeColor(o.outcome)};color:{outcomeColor(o.outcome)}">
-          {o.outcome}: {o.count} ({o.pct}%)
+    <!-- ── Viz section: Pitch (dots) or Heatmap ── -->
+    <div class="section-card viz-section">
+      <div class="viz-controls-bar">
+        <div class="viz-seg">
+          <button class="vseg {vizMode === 'dots' ? 'vseg-on' : ''}" on:click={() => vizMode = 'dots'}>Dots</button>
+          <button class="vseg {vizMode === 'heat' ? 'vseg-on' : ''}" on:click={() => vizMode = 'heat'}>Heat</button>
         </div>
-      {/each}
-    </div>
-  {/if}
-
-  <!-- KPIs (kickout-specific) -->
-  {#if isKickoutView}
-  <h3>KPIs</h3>
-  <div class="kpi-grid">
-    <div class="kpi">
-      <div class="kpi-title">Retention by Zone (S/M/L/V × L/C/R)</div>
-      <table class="kpi-table">
-        <thead><tr><th></th><th>L</th><th>C</th><th>R</th></tr></thead>
-        <tbody>
-          {#each zoneTableRet as row}
-            <tr>
-              <th>{row.D}</th>
-              {#each row.cells as c}
-                {@const trend = retTrend(c.pct, c.zk)}
-                <td
-                  style="background:{c.tot >= 8 ? cellColor(c.pct) : 'transparent'}"
-                  class="{c.tot > 0 && c.tot < 8 ? 'low-n' : ''}"
-                  title="{c.ret}/{c.tot} retained"
-                >
-                  {#if c.tot >= 8}
-                    {Math.round(c.pct)}%{#if trend}<span class="trend-{trend}">{trend === 'up' ? ' ▲' : ' ▼'}</span>{/if}
-                  {:else if c.tot > 0}
-                    n={c.tot}
-                  {:else}
-                    —
-                  {/if}
-                </td>
-              {/each}
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
-
-    <div class="kpi">
-      <div class="kpi-title">
-        Break Win-Rate — {overallBreak.tot ? Math.round(overallBreak.pct)+'%' : '—'}
-        ({overallBreak.won}/{overallBreak.tot})
+        <div class="viz-seg">
+          <button class="vseg {overlayMode === 'landing' ? 'vseg-on' : ''}" on:click={() => overlayMode = 'landing'}>Landing</button>
+          <button class="vseg {overlayMode === 'pickup' ? 'vseg-on' : ''}" on:click={() => overlayMode = 'pickup'}>Pickup</button>
+        </div>
+        {#if vizMode === 'heat'}
+          <label class="fpill-check"><input type="checkbox" bind:checked={heatmapWeighted}/> Weighted</label>
+        {/if}
       </div>
-      <table class="kpi-table">
-        <thead><tr><th></th><th>L</th><th>C</th><th>R</th></tr></thead>
-        <tbody>
-          {#each zoneTableBreak as row}
-            <tr>
-              <th>{row.D}</th>
-              {#each row.cells as c}
-                <td style="background:{cellColor(c.pct)}" title="{c.won}/{c.tot}">
-                  {c.tot ? `${Math.round(c.pct)}%` : '—'}
-                </td>
-              {/each}
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+      <div class="pitch-viz-card">
+        {#if vizMode === 'heat'}
+          <Heatmap points={heatPoints} cols={140} radius={3} smooth={2} />
+        {:else}
+          <Pitch
+            contestType="clean"
+            landing={{x:NaN,y:NaN}}
+            pickup={{x:NaN,y:NaN}}
+            {overlays}
+            showZoneLabels={true}
+          />
+        {/if}
+      </div>
     </div>
-  </div>
-  {/if}<!-- /isKickoutView KPIs -->
 
-  <!-- Player breakdown (kickout only) -->
-  {#if isKickoutView && playerStats.length > 0}
-    <h3>By target player</h3>
-    <table class="kpi-table player-table">
-      <thead><tr><th>Player</th><th>Targeted</th><th>Retention</th><th>Breaks</th><th>Break win%</th></tr></thead>
-      <tbody>
-        {#each playerStats as p}
-          <tr>
-            <td style="text-align:left">{p.label}</td>
-            <td>{p.total}</td>
-            <td style="background:{cellColor(p.retPct)}">{p.retPct}%</td>
-            <td>{p.brTotal}</td>
-            <td>{p.brWonPct != null ? p.brWonPct + '%' : '—'}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  {/if}
+    <!-- ── Outcomes ── -->
+    {#if outcomeBreakdown.length > 0}
+      <div class="section-card">
+        <div class="section-hd">Outcomes</div>
+        <div class="outcome-chips">
+          {#each outcomeBreakdown as o}
+            <div class="outcome-chip" style="border-color:{outcomeColor(o.outcome)};color:{outcomeColor(o.outcome)}">
+              {o.outcome}: {o.count} ({o.pct}%)
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
 
-  <!-- Score state (kickout only) -->
-  {#if isKickoutView && scoreStateStats.length > 0}
-    <h3>Retention by score state</h3>
-    <table class="kpi-table player-table">
-      <thead><tr><th>Score state</th><th>KOs</th><th>Retention</th></tr></thead>
-      <tbody>
-        {#each scoreStateStats as s}
-          <tr>
-            <td style="text-align:left">{s.bucket}</td>
-            <td>{s.tot}</td>
-            <td style="background:{s.pct != null ? cellColor(s.pct) : 'transparent'}">
-              {s.pct != null ? s.pct + '%' : `(n=${s.tot})`}
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-    <p class="hint">Score state when each kickout was taken. Requires Score field. Shown when n≥3.</p>
-  {/if}
+    <!-- ── Timeline ── -->
+    {#if timelineEvents.length > 0}
+      <div class="section-card">
+        <div class="section-hd">Timeline <span class="section-ct">{timelineEvents.length}</span></div>
+        <div class="timeline-wrap">
+          {#each timelineEvents as e, i}
+            <div
+              class="tl-dot {e.flag ? 'tl-flagged' : ''}"
+              style="background:{outcomeColor(e.outcome)}"
+              title="#{e.ko_sequence ?? i+1} · {e.outcome} · {e.contest_type} · {e.period} {e.clock}{e.target_player ? ' → #' + e.target_player : ''}{e.notes ? ' — ' + e.notes : ''}"
+            >{e.ko_sequence ?? i+1}</div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
+    <!-- ── Zone breakdown (kickout only) ── -->
+    {#if isKickoutView}
+      <div class="section-card">
+        <div class="section-hd">Zone Breakdown</div>
+        <div class="kpi-grid">
+          <div class="kpi">
+            <div class="kpi-title">Retention by Zone</div>
+            <table class="kpi-table">
+              <thead><tr><th></th><th>L</th><th>C</th><th>R</th></tr></thead>
+              <tbody>
+                {#each zoneTableRet as row}
+                  <tr>
+                    <th>{row.D}</th>
+                    {#each row.cells as c}
+                      {@const trend = retTrend(c.pct, c.zk)}
+                      <td
+                        style="background:{c.tot >= 8 ? cellColor(c.pct) : 'transparent'}"
+                        class="{c.tot > 0 && c.tot < 8 ? 'low-n' : ''}"
+                        title="{c.ret}/{c.tot} retained"
+                      >
+                        {#if c.tot >= 8}
+                          {Math.round(c.pct)}%{#if trend}<span class="trend-{trend}">{trend === 'up' ? ' ▲' : ' ▼'}</span>{/if}
+                        {:else if c.tot > 0}
+                          n={c.tot}
+                        {:else}
+                          —
+                        {/if}
+                      </td>
+                    {/each}
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="kpi">
+            <div class="kpi-title">
+              Break Win-Rate — {overallBreak.tot ? Math.round(overallBreak.pct)+'%' : '—'}
+              ({overallBreak.won}/{overallBreak.tot})
+            </div>
+            <table class="kpi-table">
+              <thead><tr><th></th><th>L</th><th>C</th><th>R</th></tr></thead>
+              <tbody>
+                {#each zoneTableBreak as row}
+                  <tr>
+                    <th>{row.D}</th>
+                    {#each row.cells as c}
+                      <td style="background:{cellColor(c.pct)}" title="{c.won}/{c.tot}">
+                        {c.tot ? `${Math.round(c.pct)}%` : '—'}
+                      </td>
+                    {/each}
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="zone-legend">S = 0–20m · M = 20–45m · L = 45–65m · V = 65m+ &nbsp;|&nbsp; L = Left · C = Centre · R = Right</div>
+      </div>
+    {/if}
+
+    <!-- ── Target players (kickout only) ── -->
+    {#if isKickoutView && playerStats.length > 0}
+      <div class="section-card">
+        <div class="section-hd">Target Players</div>
+        <table class="kpi-table player-table">
+          <thead><tr><th>Player</th><th>Targeted</th><th>Retention</th><th>Breaks</th><th>Break win%</th></tr></thead>
+          <tbody>
+            {#each playerStats as p}
+              <tr>
+                <td style="text-align:left">{p.label}</td>
+                <td>{p.total}</td>
+                <td style="background:{cellColor(p.retPct)}">{p.retPct}%</td>
+                <td>{p.brTotal}</td>
+                <td>{p.brWonPct != null ? p.brWonPct + '%' : '—'}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+
+    <!-- ── Score state (kickout only) ── -->
+    {#if isKickoutView && scoreStateStats.length > 0}
+      <div class="section-card">
+        <div class="section-hd">By Score State</div>
+        <table class="kpi-table player-table">
+          <thead><tr><th>Score state</th><th>KOs</th><th>Retention</th></tr></thead>
+          <tbody>
+            {#each scoreStateStats as s}
+              <tr>
+                <td style="text-align:left">{s.bucket}</td>
+                <td>{s.tot}</td>
+                <td style="background:{s.pct != null ? cellColor(s.pct) : 'transparent'}">
+                  {s.pct != null ? s.pct + '%' : `(n=${s.tot})`}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+        <p class="hint">Score state when each kickout was taken. Requires Score field to be filled. Shown when n≥3.</p>
+      </div>
+    {/if}
+
+  {/if}<!-- /vizEvents.length > 0 -->
+
 </section>
 
 <style>
@@ -319,7 +387,7 @@
 
   /* ── Panel header ── */
   .panel-header {
-    display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;
   }
   .panel-title { font-size: 16px; font-weight: 800; color: #111827; letter-spacing: -0.02em; }
   .panel-count { font-size: 12px; font-weight: 500; color: #9ca3af; margin-right: auto; }
@@ -330,9 +398,27 @@
   }
   .summary-btn:hover { background: #f9fafb; border-color: #d1d5db; }
 
+  /* ── Active filter summary bar ── */
+  .filter-summary {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
+    padding: 7px 12px; margin-bottom: 10px; font-size: 12px;
+  }
+  .filter-summary-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: #3b82f6; }
+  .filter-tag {
+    background: #1c3f8a; color: #fff;
+    border-radius: 5px; padding: 2px 8px; font-size: 11px; font-weight: 700;
+  }
+  .filter-clear {
+    margin-left: auto; padding: 3px 9px; border: 1px solid #93c5fd; border-radius: 5px;
+    background: #fff; cursor: pointer; font-size: 11px; font-weight: 700;
+    color: #1c3f8a; font-family: inherit; transition: all 0.12s;
+  }
+  .filter-clear:hover { background: #dbeafe; }
+
   /* ── Filters ── */
   .filters {
-    display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;
+    display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;
     background: #f8faf8; border: 1px solid #e8eee6; border-radius: 10px; padding: 12px 14px;
   }
 
@@ -346,7 +432,7 @@
     color: #4b5563; font-family: inherit; transition: all 0.12s; white-space: nowrap;
   }
   .fpill:hover { border-color: #d1d5db; background: #f9fafb; }
-  .fpill.fpill-on { background: #0a5500; color: #fff; border-color: #0a5500; }
+  .fpill.fpill-on { background: #1c3f8a; color: #fff; border-color: #1c3f8a; }
   .fpill-check { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #6b7280; cursor: pointer; }
 
   /* Select row */
@@ -358,13 +444,13 @@
     font-size: 13px; background: #fff; color: #111827; font-family: inherit;
     cursor: pointer; transition: border-color 0.12s;
   }
-  .fselect-wrap select:focus { outline: none; border-color: #0a5500; box-shadow: 0 0 0 3px rgba(10,85,0,0.1); }
+  .fselect-wrap select:focus { outline: none; border-color: #1c3f8a; box-shadow: 0 0 0 3px rgba(28,63,138,0.12); }
 
   /* Flags + reset */
   .filter-flags-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .flag-check { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #6b7280; cursor: pointer; }
-  .flag-check input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: #0a5500; }
-  .fpill-check input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: #0a5500; }
+  .flag-check input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: #1c3f8a; }
+  .fpill-check input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: #1c3f8a; }
   .reset-btn {
     margin-left: auto; padding: 5px 11px; border: 1.5px solid #e5e7eb; border-radius: 7px;
     background: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
@@ -372,14 +458,64 @@
   }
   .reset-btn:hover { border-color: #dc2626; color: #dc2626; background: #fef2f2; }
 
-  /* ── Section headings ── */
-  h3 {
-    font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
-    color: #9ca3af; margin: 20px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #f0f2f0;
+  /* ── Empty state ── */
+  .empty-analytics {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 48px 24px; background: #f8faf8; border: 1px solid #e8eee6;
+    border-radius: 10px; text-align: center; gap: 8px;
+  }
+  .empty-icon { font-size: 28px; line-height: 1; }
+  .empty-title { font-size: 14px; font-weight: 700; color: #374151; }
+  .empty-sub { font-size: 13px; color: #9ca3af; }
+  .empty-reset {
+    margin-top: 8px; padding: 8px 20px; border: 1.5px solid #1c3f8a;
+    border-radius: 8px; background: #fff; color: #1c3f8a; cursor: pointer;
+    font-size: 13px; font-weight: 700; font-family: inherit; transition: all 0.12s;
+  }
+  .empty-reset:hover { background: #1c3f8a; color: #fff; }
+
+  /* ── Section cards ── */
+  .section-card {
+    background: #f8faf8; border: 1px solid #e8eee6;
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 12px;
+  }
+  .section-hd {
+    font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #9ca3af;
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 12px;
+  }
+  .section-ct {
+    background: #e8eee6; color: #6b7280; font-size: 11px; font-weight: 700;
+    padding: 2px 7px; border-radius: 99px;
+    text-transform: none; letter-spacing: 0;
+  }
+
+  /* ── Viz section ── */
+  .viz-section { padding: 12px 14px 0; }
+  .viz-controls-bar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .viz-seg {
+    display: flex; background: #f0f0f0; border-radius: 8px; padding: 2px; gap: 1px;
+  }
+  .vseg {
+    padding: 5px 12px; border: none; border-radius: 6px; font-size: 12px; font-weight: 700;
+    background: transparent; cursor: pointer; color: #6b7280;
+    font-family: inherit; transition: all 0.15s;
+  }
+  .vseg.vseg-on {
+    background: #fff; color: #1c3f8a;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.05);
+  }
+  .pitch-viz-card {
+    border-radius: 10px; overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,50,0,0.18), 0 1px 6px rgba(0,0,0,0.08);
+    margin-bottom: 14px;
   }
 
   /* ── Timeline ── */
-  .timeline-wrap { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 0 8px; }
+  .timeline-wrap { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 0; }
   .tl-dot {
     width: 26px; height: 26px; border-radius: 6px;
     display: flex; align-items: center; justify-content: center;
@@ -389,27 +525,33 @@
   .tl-flagged { outline: 2px solid #f59e0b; outline-offset: 2px; }
 
   /* ── KPI grid ── */
-  .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px; }
-  .kpi { background: #f8faf8; border: 1px solid #e8eee6; border-radius: 10px; padding: 12px 14px; }
+  .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .kpi { background: #fff; border: 1px solid #e8eee6; border-radius: 8px; padding: 12px 14px; }
   .kpi-title { font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 8px; }
   .kpi-table { border-collapse: collapse; font-size: 13px; width: 100%; font-variant-numeric: tabular-nums; }
   .kpi-table th, .kpi-table td { border: 1px solid #e8eee6; padding: 6px 8px; text-align: center; }
   .kpi-table thead th { background: #f0f4f0; font-size: 11px; font-weight: 700; color: #6b7280; }
   .kpi-table tbody tr:hover { background: #f9fbf9; }
-  .player-table { width: 100%; margin-top: 4px; }
+  .player-table { width: 100%; }
   .low-n { color: #b0b8b0; font-size: 11px; font-style: italic; }
   :global(.trend-up)   { color: #16a34a; font-weight: 800; }
   :global(.trend-down) { color: #dc2626; font-weight: 800; }
 
+  /* ── Zone legend ── */
+  .zone-legend {
+    font-size: 10px; color: #9ca3af; margin-top: 10px;
+    padding-top: 8px; border-top: 1px solid #f0f0f0; line-height: 1.5;
+  }
+
   /* ── Outcome chips ── */
-  .outcome-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+  .outcome-chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .outcome-chip {
     padding: 5px 12px; border-radius: 7px; border: 1.5px solid;
     font-size: 12px; font-weight: 700; background: #fff;
   }
 
   /* ── Hint ── */
-  .hint { font-size: 11px; color: #b0b8b0; margin: 6px 0 0; }
+  .hint { font-size: 11px; color: #b0b8b0; margin: 8px 0 0; }
 
   /* fallback buttons */
   button { padding: 7px 14px; border: 1.5px solid #e5e7eb; border-radius: 7px; background: #fff; cursor: pointer; font-size: 13px; font-weight: 600; font-family: inherit; transition: all 0.12s; }
@@ -419,5 +561,6 @@
   @media (max-width: 480px) {
     .kpi-grid { grid-template-columns: 1fr; }
     .card { padding: 14px; }
+    .section-card { padding: 12px 12px; }
   }
 </style>

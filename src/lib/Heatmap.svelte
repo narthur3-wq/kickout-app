@@ -128,16 +128,15 @@
 </script>
 
 <style>
-  .stack { position: relative; width: 100%; border:1px solid #0a5; border-radius:6px 6px 0 0; overflow:hidden; }
+  .stack { position: relative; width: 100%; overflow:hidden; }
   .pitch { width:100%; }
   .overlay { position:absolute; inset:0; pointer-events:none; }
   /* ensure the embedded Pitch cannot be clicked in the heatmap */
   .stack :global(svg) { pointer-events: none; }
   .legend {
     display: flex; align-items: center; gap: 8px;
-    padding: 4px 10px 6px;
-    border: 1px solid #0a5; border-top: none; border-radius: 0 0 6px 6px;
-    background: #f9fafb;
+    padding: 6px 12px 8px;
+    background: rgba(0,0,0,0.03);
     font-size: 11px; color: #6b7280;
   }
   .legend-bar {

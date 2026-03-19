@@ -33,34 +33,44 @@
 
 <div class="login-wrap">
   <div class="login-card">
-    <h1>KickOut</h1>
-    <p class="sub">GAA Kickout Analytics</p>
+    <!-- Brand header -->
+    <div class="brand-header">
+      <div class="red-stripe"></div>
+      <div class="brand-inner">
+        <img src="/crest.png" class="brand-crest" alt="Clontarf GAA" />
+        <div class="brand-text">
+          <div class="brand-title">KickOut</div>
+          <div class="brand-sub">GAA Analytics</div>
+        </div>
+      </div>
+    </div>
 
-    <input
-      type="email"
-      placeholder="Email"
-      bind:value={email}
-      on:keydown={handleKey}
-      autocomplete="email"
-    />
-    <input
-      type="password"
-      placeholder="Password"
-      bind:value={password}
-      on:keydown={handleKey}
-      autocomplete="current-password"
-    />
+    <!-- Form body -->
+    <div class="form-body">
+      <input
+        type="email"
+        placeholder="Email"
+        bind:value={email}
+        on:keydown={handleKey}
+        autocomplete="email"
+      />
+      <input
+        type="password"
+        placeholder="Password"
+        bind:value={password}
+        on:keydown={handleKey}
+        autocomplete="current-password"
+      />
 
-    {#if error}
-      <p class="error">{error}</p>
-    {/if}
+      {#if error}
+        <p class="error">{error}</p>
+      {/if}
 
-    <div class="btn-row">
       <button class="primary" on:click={signIn} disabled={loading || !email || !password}>
         {loading ? 'Signing in…' : 'Sign in'}
       </button>
-      <button on:click={signUp} disabled={loading || !email || !password}>
-        Sign up
+      <button class="secondary" on:click={signUp} disabled={loading || !email || !password}>
+        Create account
       </button>
     </div>
   </div>
@@ -69,26 +79,61 @@
 <style>
   .login-wrap {
     display: flex; align-items: center; justify-content: center;
-    min-height: 100svh; background: #f4f7f4;
+    min-height: 100svh; background: #f1f5f9;
   }
   .login-card {
-    background: #fff; border-radius: 12px; padding: 32px 28px;
-    width: 100%; max-width: 360px; box-shadow: 0 2px 16px #0002;
-    display: flex; flex-direction: column; gap: 12px;
+    width: 100%; max-width: 360px;
+    border-radius: 14px; overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.08);
   }
-  h1 { font-size: 24px; font-weight: 700; margin: 0; color: #0a5; }
-  .sub { font-size: 14px; color: #666; margin: -8px 0 4px; }
+
+  /* ── Brand header ── */
+  .brand-header {
+    background: #0f1923;
+    display: flex; flex-direction: column;
+  }
+  .red-stripe { height: 3px; background: #c41230; }
+  .brand-inner {
+    display: flex; align-items: center; gap: 14px;
+    padding: 24px 24px 22px;
+  }
+  .brand-crest { width: 52px; height: 52px; object-fit: contain; flex-shrink: 0; }
+  .brand-title {
+    font-size: 26px; font-weight: 800; color: #fff;
+    letter-spacing: -0.02em; line-height: 1;
+  }
+  .brand-sub { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 3px; }
+
+  /* ── Form body ── */
+  .form-body {
+    background: #fff;
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 24px 24px 28px;
+  }
   input {
-    padding: 10px 12px; border: 1px solid #ccc; border-radius: 8px;
-    font-size: 16px; width: 100%; box-sizing: border-box;
+    padding: 11px 13px; border: 1.5px solid #e2e8f0; border-radius: 8px;
+    font-size: 15px; width: 100%; box-sizing: border-box; background: #f8fafc;
+    font-family: inherit; transition: border-color 0.15s, box-shadow 0.15s;
   }
-  input:focus { outline: none; border-color: #0a5; box-shadow: 0 0 0 2px #0a52; }
-  .error { color: #b33; font-size: 13px; margin: 0; }
-  .btn-row { display: flex; gap: 8px; }
+  input:focus {
+    outline: none; border-color: #1c3f8a;
+    box-shadow: 0 0 0 3px rgba(28,63,138,0.12); background: #fff;
+  }
+  .error {
+    color: #dc2626; font-size: 13px; margin: 0;
+    background: #fef2f2; border-radius: 6px; padding: 8px 10px;
+  }
   button {
-    flex: 1; padding: 10px; border: 1px solid #bbb; border-radius: 8px;
-    background: #fff; cursor: pointer; font-size: 15px;
+    width: 100%; padding: 12px; border-radius: 8px;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+    font-family: inherit; transition: background 0.15s, opacity 0.15s;
   }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
-  .primary { background: #0a5; color: #fff; border-color: #0a5; }
+  .primary { background: #1c3f8a; color: #fff; border: none; margin-top: 4px; }
+  .primary:hover:not(:disabled) { background: #163270; }
+  .secondary {
+    background: #fff; color: #374151;
+    border: 1.5px solid #e2e8f0;
+  }
+  .secondary:hover:not(:disabled) { background: #f8fafc; }
 </style>

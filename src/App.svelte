@@ -50,6 +50,7 @@
   let showSummary = false;
   let pitchError = false;
   let activeTab = 'capture';
+  let savedFlash = false;
 
   // ── Viz filters ───────────────────────────────────────────────────────────
   let fContest = new Set(CONTESTS);
@@ -332,8 +333,10 @@
     notes = '';
     flagEvent = false;
 
-    // Haptic feedback
+    // Haptic + visual feedback
     navigator.vibrate?.(50);
+    savedFlash = true;
+    setTimeout(() => { savedFlash = false; }, 1500);
 
     // Auto-backup reminder every 10 new events
     if (isNew && events.length % 10 === 0) {
@@ -777,6 +780,7 @@
         {opponentChoices}
         {editingId}
         {undoStack}
+        {savedFlash}
         onSave={saveEvent}
         onClearPoints={clearPoints}
         onUndoLast={undoLast}
@@ -803,12 +807,18 @@
       </div>
       <p class="coords">
         {#if !Number.isNaN(landing.x)}
-          Land: {landing.x.toFixed(2)}, {landing.y.toFixed(2)}
+          {sideBand(landing.x)} · {Math.round(depthMetersFromOwnGoal(landing.y))}m
+          {#if contest === 'break'}
+            {#if !Number.isNaN(pickup.x)}
+              &nbsp;→&nbsp; Pick: {sideBand(pickup.x)} · {Math.round(depthMetersFromOwnGoal(pickup.y))}m
+            {:else}
+              <span class="coords-hint">Now tap pickup point</span>
+            {/if}
+          {/if}
         {:else}
-          Tap pitch to place landing point
-        {/if}
-        {#if contest === 'break' && !Number.isNaN(pickup.x)}
-          &nbsp;·&nbsp; Pick: {pickup.x.toFixed(2)}, {pickup.y.toFixed(2)}
+          <span class="coords-hint">
+            {contest === 'break' ? 'Step 1 of 2 — tap pitch to set landing' : 'Tap pitch to place landing point'}
+          </span>
         {/if}
       </p>
     </div><!-- /pitch-panel -->
@@ -1013,9 +1023,10 @@
   .pitch-panel.pitch-error { outline: 3px solid #dc2626; outline-offset: 2px; animation: pitchFlash 0.4s ease 2; }
   @keyframes pitchFlash { 0%,100% { outline-color: #dc2626; } 50% { outline-color: #fca5a5; } }
   .coords {
-    font-size: 11px; color: #9ca3af; margin: 0; text-align: center;
-    font-variant-numeric: tabular-nums; letter-spacing: 0.01em;
+    font-size: 11px; color: #374151; margin: 0; text-align: center;
+    font-variant-numeric: tabular-nums; letter-spacing: 0.01em; font-weight: 600;
   }
+  .coords-hint { color: #9ca3af; font-weight: 400; }
 
   /* ── Generic shell buttons (toast etc.) ── */
   button {
