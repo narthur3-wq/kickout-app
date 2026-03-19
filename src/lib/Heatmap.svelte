@@ -11,8 +11,8 @@
   export let radius = 3;   // per-point influence radius (in grid cells)
   export let smooth = 2;   // gaussian blur passes
 
-  // the pitch logical size (must match Pitch.svelte)
-  const W = 90, H = 145;
+  // landscape pitch dimensions (must match Pitch.svelte)
+  const W = 145, H = 90;
 
   let container;   // wrapper around the pitch
   let canvas;      // overlay canvas
@@ -47,10 +47,12 @@
     const sigma2 = (r * 0.65) ** 2;
     for (const p of points) {
       if (!p || isNaN(p.x) || isNaN(p.y)) continue;
-      const x = Math.min(0.999, Math.max(0, p.x));
-      const y = Math.min(0.999, Math.max(0, p.y));
-      const cx = Math.floor(x * C);
-      const cy = Math.floor(y * R);
+      // stored x = side (0–1) → vertical in landscape → row
+      // stored y = depth (0–1) → horizontal in landscape → column
+      const side  = Math.min(0.999, Math.max(0, p.x));
+      const depth = Math.min(0.999, Math.max(0, p.y));
+      const cx = Math.floor(depth * C);  // depth → column (horizontal)
+      const cy = Math.floor(side  * R);  // side  → row    (vertical)
       const w = p.weight ?? 1;
       for (let dy = -r; dy <= r; dy++) {
         const ry = cy + dy; if (ry < 0 || ry >= R) continue;
@@ -126,11 +128,28 @@
 </script>
 
 <style>
-  .stack { position: relative; width: 100%; border:1px solid #0a5; border-radius:6px; overflow:hidden; }
+  .stack { position: relative; width: 100%; border:1px solid #0a5; border-radius:6px 6px 0 0; overflow:hidden; }
   .pitch { width:100%; }
   .overlay { position:absolute; inset:0; pointer-events:none; }
   /* ensure the embedded Pitch cannot be clicked in the heatmap */
   .stack :global(svg) { pointer-events: none; }
+  .legend {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 10px 6px;
+    border: 1px solid #0a5; border-top: none; border-radius: 0 0 6px 6px;
+    background: #f9fafb;
+    font-size: 11px; color: #6b7280;
+  }
+  .legend-bar {
+    flex: 1; height: 8px; border-radius: 4px;
+    background: linear-gradient(to right,
+      hsla(220,85%,50%,0.15),
+      hsla(160,85%,50%,0.45),
+      hsla(80,85%,50%,0.65),
+      hsla(40,85%,50%,0.78),
+      hsla(0,85%,50%,0.85)
+    );
+  }
 </style>
 
 <div class="stack">
@@ -147,3 +166,12 @@
   <!-- heatmap canvas perfectly aligned to the SVG above -->
   <canvas class="overlay" bind:this={canvas}></canvas>
 </div>
+
+<!-- colour scale legend -->
+{#if points && points.length > 0}
+  <div class="legend">
+    <span>Low</span>
+    <div class="legend-bar"></div>
+    <span>High</span>
+  </div>
+{/if}

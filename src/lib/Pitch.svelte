@@ -5,200 +5,229 @@
   export let contestType: 'clean'|'break'|'foul'|'out' = 'clean';
   export let landing = { x: NaN, y: NaN };
   export let pickup  = { x: NaN, y: NaN };
-  // NEW: overlay points to draw on the pitch (normalized coords)
-  // [{ x, y, contest_type, outcome, at_target }]
   export let overlays: Array<any> = [];
   export let showZoneLabels = false;
 
   const dispatch = createEventDispatcher();
 
-  // --- Pitch dimensions (m) ---
-  const W = 90, H = 145;
+  // Landscape pitch — W = length (145m), H = width (90m)
+  // Stored normalised coords: x = side (0=top edge → 1=bottom edge), y = depth (0=left goal → 1=right goal)
+  const W = 145, H = 90;
   const L13 = 13, L20 = 20, L45 = 45, L65 = 65;
   const SMALL_W = 14, SMALL_D = 4.5, LARGE_W = 19, LARGE_D = 13;
   const R_D = 13, R_40 = 40;
-  const cx = W/2;
-  const py = (y:number) => (flip ? H - y : y);
+  const cy = H / 2; // 45 — vertical centre
 
   let svgEl: SVGSVGElement;
 
+  // Map SVG click → normalised stored coords
   function getPoint(evt: MouseEvent) {
     const pt = svgEl.createSVGPoint();
     pt.x = evt.clientX; pt.y = evt.clientY;
-    const inv = svgEl.getScreenCTM()?.inverse(); if (!inv) return {x:NaN,y:NaN};
+    const inv = svgEl.getScreenCTM()?.inverse();
+    if (!inv) return { x: NaN, y: NaN };
     const p = pt.matrixTransform(inv);
-    return { x: Math.max(0, Math.min(W, p.x)), y: Math.max(0, Math.min(H, p.y)) };
+    return {
+      x: Math.max(0, Math.min(1, p.y / H)),                            // SVG-y → side
+      y: Math.max(0, Math.min(1, flip ? (W - p.x) / W : p.x / W)),    // SVG-x → depth
+    };
   }
 
   let awaitingPickup = false;
   function handleClick(e: MouseEvent) {
-    const p = getPoint(e);
-    const pos = { x: p.x / W, y: p.y / H };
+    const pos = getPoint(e);
     if (contestType === 'break') {
       if (!awaitingPickup) { awaitingPickup = true;  dispatch('landed', pos); }
       else                 { awaitingPickup = false; dispatch('picked', pos); }
     } else { awaitingPickup = false; dispatch('landed', pos); }
   }
 
-  // keyboard a11y
+  // Keyboard crosshair — kb in normalised coords (x=side, y=depth)
   let kb = { x: 0.5, y: 0.5 };
   function handleKeydown(e: KeyboardEvent) {
-    const s=0.02;
-    if (e.key==='ArrowLeft') kb.x=Math.max(0,kb.x-s);
-    if (e.key==='ArrowRight')kb.x=Math.min(1,kb.x+s);
-    if (e.key==='ArrowUp')   kb.y=Math.max(0,kb.y-s);
-    if (e.key==='ArrowDown') kb.y=Math.min(1,kb.y+s);
-    if (e.key==='Enter'||e.key===' '){
+    const s = 0.02;
+    if (e.key === 'ArrowUp')    kb = { ...kb, x: Math.max(0, kb.x - s) };
+    if (e.key === 'ArrowDown')  kb = { ...kb, x: Math.min(1, kb.x + s) };
+    if (e.key === 'ArrowLeft')  kb = { ...kb, y: Math.max(0, kb.y - s) };
+    if (e.key === 'ArrowRight') kb = { ...kb, y: Math.min(1, kb.y + s) };
+    if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      const pos={x:kb.x,y:kb.y};
-      if (contestType==='break'){
-        if(!awaitingPickup){awaitingPickup=true;dispatch('landed',pos);}
-        else{awaitingPickup=false;dispatch('picked',pos);}
-      } else { awaitingPickup=false;dispatch('landed',pos); }
+      const pos = { ...kb };
+      if (contestType === 'break') {
+        if (!awaitingPickup) { awaitingPickup = true;  dispatch('landed', pos); }
+        else                 { awaitingPickup = false; dispatch('picked', pos); }
+      } else { awaitingPickup = false; dispatch('landed', pos); }
     }
   }
 
-  // angle-based arcs
-  function arcPath(cx:number, cy:number, r:number, a0:number, a1:number){
-    const sx=cx+r*Math.cos(a0), sy=cy+r*Math.sin(a0);
-    const ex=cx+r*Math.cos(a1), ey=cy+r*Math.sin(a1);
-    const large = Math.abs(a1-a0)>Math.PI ? 1 : 0;
+  function arcPath(acx: number, acy: number, r: number, a0: number, a1: number) {
+    const sx = acx + r * Math.cos(a0), sy = acy + r * Math.sin(a0);
+    const ex = acx + r * Math.cos(a1), ey = acy + r * Math.sin(a1);
+    const large = Math.abs(a1 - a0) > Math.PI ? 1 : 0;
     const sweep = a1 > a0 ? 1 : 0;
     return `M ${sx} ${sy} A ${r} ${r} 0 ${large} ${sweep} ${ex} ${ey}`;
   }
-  const pathDTop    = () => arcPath(cx, py(L20),       R_D,  Math.PI, 0);
-  const pathDBottom = () => arcPath(cx, py(H - L20),   R_D,  0, -Math.PI);
-  const path40Top   = () => arcPath(cx, py(0),         R_40, Math.PI, 0);
-  const path40Bot   = () => arcPath(cx, py(H),         R_40, 0, -Math.PI);
 
-  const smallX = cx - SMALL_W/2, largeX = cx - LARGE_W/2;
+  // D arcs — centred on the goal line (x=0 and x=W), R=13m, curving into the field
+  const pathDLeft  = () => arcPath(0, cy, R_D, -Math.PI / 2,  Math.PI / 2);
+  const pathDRight = () => arcPath(W, cy, R_D,  Math.PI / 2, -Math.PI / 2);
+  // 40m arcs
+  const path40Left  = () => arcPath(0, cy, R_40, -Math.PI / 2,  Math.PI / 2);
+  const path40Right = () => arcPath(W, cy, R_40,  Math.PI / 2, -Math.PI / 2);
 
-  // --- overlay styling helpers ---
-  function outcomeColor(o:string){
-    const s = String(o||'').toLowerCase();
-    if (s==='score') return '#2563eb';
-    if (s==='retained') return '#16a34a';
-    if (s==='lost') return '#dc2626';
-    return '#6b7280'; // wide/out/foul/other
+  // stored x = side (0–1) → SVG y;  stored y = depth (0–1) → SVG x
+  function svgX(o: { x: number; y: number }) { return (flip ? 1 - o.y : o.y) * W; }
+  function svgY(o: { x: number; y: number }) { return o.x * H; }
+
+  // Bright palette — legible on dark green turf
+  function outcomeColor(o: string) {
+    const s = String(o || '').toLowerCase();
+    if (s === 'score' || s === 'point')   return '#60a5fa'; // sky blue
+    if (s === 'retained' || s === 'won')  return '#4ade80'; // bright green
+    if (s === 'goal')                     return '#c084fc'; // purple
+    if (s === 'lost')                     return '#f87171'; // red
+    if (s === 'wide')                     return '#fbbf24'; // amber
+    if (s === 'blocked')                  return '#fb923c'; // orange
+    if (s === 'saved')                    return '#94a3b8'; // slate
+    if (s === 'foul')                     return '#f472b6'; // pink
+    return '#e2e8f0';
   }
-  const shapeSize = 2.1; // metres in SVG units
-  function markerShape(x:number,y:number,type:string,color:string,atTarget:boolean){
-    const sx = x*W, sy = (flip ? (1-y):y)*H;
-    const s = shapeSize;
-    if (type==='break') {
-      // triangle
-      const p1=`${sx},${sy-s}`, p2=`${sx-s*0.9},${sy+s*0.7}`, p3=`${sx+s*0.9},${sy+s*0.7}`;
-      return `<g pointer-events="none">
-        <polygon points="${p1} ${p2} ${p3}" fill="${color}" stroke="${color}" stroke-width="0.6"/>
-        ${atTarget ? `<circle cx="${sx}" cy="${sy}" r="${s*1.2}" fill="none" stroke="#7c3aed" stroke-width="0.8"/>` : ''}
-      </g>`;
+
+  const SZ = 2.0;
+
+  function markerShape(o: any): string {
+    const sx = svgX(o), sy = svgY(o);
+    const col = outcomeColor(o.outcome);
+    const t = String(o.contest_type || 'clean');
+    const ws = 'rgba(255,255,255,0.75)'; // white stroke
+    const ring = o.at_target
+      ? `<circle cx="${sx}" cy="${sy}" r="${SZ * 1.55}" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="0.7" vector-effect="non-scaling-stroke"/>`
+      : '';
+    if (t === 'break')
+      return `<polygon points="${sx},${sy-SZ} ${sx-SZ*.9},${sy+SZ*.7} ${sx+SZ*.9},${sy+SZ*.7}" fill="${col}" stroke="${ws}" stroke-width="0.55" vector-effect="non-scaling-stroke"/>${ring}`;
+    if (t === 'foul')
+      return `<polygon points="${sx},${sy-SZ} ${sx-SZ},${sy} ${sx},${sy+SZ} ${sx+SZ},${sy}" fill="${col}" stroke="${ws}" stroke-width="0.55" vector-effect="non-scaling-stroke"/>${ring}`;
+    if (t === 'out') {
+      const r = SZ * .88;
+      return `<rect x="${sx-r}" y="${sy-r}" width="${2*r}" height="${2*r}" fill="${col}" stroke="${ws}" stroke-width="0.55" vector-effect="non-scaling-stroke"/>${ring}`;
     }
-    if (type==='foul') {
-      // diamond
-      const p1=`${sx},${sy-s}`, p2=`${sx-s},${sy}`, p3=`${sx},${sy+s}`, p4=`${sx+s},${sy}`;
-      return `<g pointer-events="none">
-        <polygon points="${p1} ${p2} ${p3} ${p4}" fill="${color}" stroke="${color}" stroke-width="0.6"/>
-        ${atTarget ? `<circle cx="${sx}" cy="${sy}" r="${s*1.2}" fill="none" stroke="#7c3aed" stroke-width="0.8"/>` : ''}
-      </g>`;
-    }
-    if (type==='out') {
-      // square
-      const r = s*0.9;
-      return `<g pointer-events="none">
-        <rect x="${sx-r}" y="${sy-r}" width="${2*r}" height="${2*r}" fill="${color}" stroke="${color}" stroke-width="0.6"/>
-        ${atTarget ? `<circle cx="${sx}" cy="${sy}" r="${s*1.2}" fill="none" stroke="#7c3aed" stroke-width="0.8"/>` : ''}
-      </g>`;
-    }
-    // clean → circle
-    return `<g pointer-events="none">
-      <circle cx="${sx}" cy="${sy}" r="${s*0.9}" fill="${color}" stroke="${color}" stroke-width="0.6"/>
-      ${atTarget ? `<circle cx="${sx}" cy="${sy}" r="${s*1.2}" fill="none" stroke="#7c3aed" stroke-width="0.8"/>` : ''}
-    </g>`;
+    return `<circle cx="${sx}" cy="${sy}" r="${SZ*.92}" fill="${col}" stroke="${ws}" stroke-width="0.55" vector-effect="non-scaling-stroke"/>${ring}`;
   }
 </script>
 
 <style>
-  .grid   { stroke:#a2acb3; stroke-width:.45; opacity:.7 }
-  .grid65 { stroke:#98a3aa; stroke-width:.45; opacity:.6; stroke-dasharray:3 3 }
-  .main   { stroke:#1d1d1d; stroke-width:.9 }
-  .rect   { stroke:#1d1d1d; stroke-width:.9; fill:none }
-  .darc   { stroke:#444;    stroke-width:.9; fill:none }
-  .arc40  { stroke:#666;    stroke-width:.9; fill:none; stroke-dasharray:4 3 }
-  .dot    { fill:#111 }
-  .pick   { fill:#444 }
-  .overlay { pointer-events:none } /* so clicks pass through */
-  :global(.zlabel) { font-size: 3.2px; fill: #9ca3af; pointer-events: none; }
+  svg {
+    touch-action: manipulation; user-select: none;
+    display: block; width: 100%; cursor: crosshair;
+  }
+  :global(.zlabel) { font-size: 3px; fill: rgba(255,255,255,0.55); pointer-events: none; font-weight: 700; }
 </style>
 
-<div class="w-full">
-  <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions -->
-  <svg
-    bind:this={svgEl}
-    viewBox={`0 0 ${W} ${H}`}
-    class="w-full"
-    style="touch-action:manipulation; user-select:none; background:#eaf4ef; border:1px solid #0a5; border-radius:6px;"
-    role="application"
-    aria-label="GAA pitch — click or use arrow keys; Enter/Space to set a point"
-    tabindex="0"
-    on:click={handleClick}
-    on:keydown={handleKeydown}
-  >
-    <!-- boundary -->
-    <rect x="0" y="0" width={W} height={H} fill="transparent" />
-    <!-- halfway -->
-    <line x1="0" y1={py(H/2)} x2={W} y2={py(H/2)} class="main" />
-    <!-- 13 / 20 / 45 / 65 from each end -->
-    {#each [L13, L20, L45, L65, H-L65, H-L45, H-L20, H-L13] as y, i}
-      <line x1="0" y1={py(y)} x2={W} y2={py(y)} class={i===3||i===4 ? 'grid65' : 'grid'} />
-    {/each}
-    <!-- vertical thirds -->
-    <line x1={W/3} y1="0" x2={W/3} y2={H} class="grid" />
-    <line x1={(2*W)/3} y1="0" x2={(2*W)/3} y2={H} class="grid" />
-    <!-- goal rectangles -->
-    <rect x={smallX} y={py(0)}           width={SMALL_W} height={SMALL_D} class="rect" />
-    <rect x={largeX} y={py(0)}           width={LARGE_W} height={LARGE_D} class="rect" />
-    <rect x={smallX} y={py(H - SMALL_D)} width={SMALL_W} height={SMALL_D} class="rect" />
-    <rect x={largeX} y={py(H - LARGE_D)} width={LARGE_W} height={LARGE_D} class="rect" />
-    <!-- 13 m D -->
-    <path d={pathDTop()} class="darc" />
-    <path d={pathDBottom()} class="darc" />
-    <!-- 40 m arcs -->
-    <path d={path40Top()} class="arc40" />
-    <path d={path40Bot()} class="arc40" />
+<!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions -->
+<svg
+  bind:this={svgEl}
+  viewBox="0 0 145 90"
+  role="application"
+  aria-label="GAA pitch — tap or use arrow keys to set a point"
+  tabindex="0"
+  on:click={handleClick}
+  on:keydown={handleKeydown}
+>
+  <!-- turf base -->
+  <rect x="0" y="0" width={W} height={H} fill="#3d7642" />
+  <!-- subtle half-pitch stripe — mimics mown stripes -->
+  <rect x="0"     y="0" width={W/2} height={H} fill="rgba(0,0,0,0.04)" />
+  <rect x={W*3/4} y="0" width={W/4} height={H} fill="rgba(0,0,0,0.025)" />
+  <rect x="0"     y="0" width={W/4} height={H} fill="rgba(0,0,0,0.025)" />
 
-    <!-- current landing/pickup markers -->
-    {#if !Number.isNaN(landing.x) && !Number.isNaN(landing.y)}
-      <circle cx={landing.x*W} cy={(flip ? (1-landing.y) : landing.y)*H} r="1.8" class="dot" />
-    {/if}
-    {#if !Number.isNaN(pickup.x) && !Number.isNaN(pickup.y)}
-      <circle cx={pickup.x*W} cy={(flip ? (1-pickup.y) : pickup.y)*H} r="1.8" class="pick" />
-      <line x1={landing.x*W} y1={(flip ? (1-landing.y) : landing.y)*H}
-            x2={pickup.x*W}  y2={(flip ? (1-pickup.y)  : pickup.y)*H}
-            stroke="#444" stroke-dasharray="2 2" stroke-width="0.7" />
-    {/if}
+  <!-- boundary -->
+  <rect x="0.5" y="0.5" width={W-1} height={H-1}
+    fill="none" stroke="rgba(255,255,255,0.92)" stroke-width="1.2"
+    vector-effect="non-scaling-stroke" />
 
-    <!-- overlays -->
-    <g class="overlay">
-      {@html overlays.map(o => markerShape(
-        o.x, o.y, String(o.contest_type||'clean'),
-        outcomeColor(o.outcome), !!o.at_target
-      )).join('')}
-    </g>
+  <!-- halfway line -->
+  <line x1={W/2} y1="0" x2={W/2} y2={H}
+    stroke="rgba(255,255,255,0.88)" stroke-width="1.1"
+    vector-effect="non-scaling-stroke" />
 
-    <!-- zone labels -->
-    {#if showZoneLabels}
-      <text x={W/6}   y="3" text-anchor="middle" class="zlabel">L</text>
-      <text x={W/2}   y="3" text-anchor="middle" class="zlabel">C</text>
-      <text x={5*W/6} y="3" text-anchor="middle" class="zlabel">R</text>
-      <text x="86" y={py(20)}     text-anchor="start" class="zlabel">20m</text>
-      <text x="86" y={py(45)}     text-anchor="start" class="zlabel">45m</text>
-      <text x="86" y={py(65)}     text-anchor="start" class="zlabel">65m</text>
-      <text x="86" y={py(H-65)}   text-anchor="start" class="zlabel">65m</text>
-      <text x="86" y={py(H-45)}   text-anchor="start" class="zlabel">45m</text>
-      <text x="86" y={py(H-20)}   text-anchor="start" class="zlabel">20m</text>
-    {/if}
+  <!-- distance lines from each end — weight hierarchy -->
+  {#each [L13, L20, L45, L65] as d}
+    <line x1={d}   y1="0" x2={d}   y2={H}
+      stroke={d === L65 ? 'rgba(255,255,255,0.22)' : d === L13 ? 'rgba(255,255,255,0.52)' : 'rgba(255,255,255,0.72)'}
+      stroke-width={d === L65 ? '0.55' : '0.9'}
+      stroke-dasharray={d === L65 ? '3 3' : 'none'}
+      vector-effect="non-scaling-stroke" />
+    <line x1={W-d} y1="0" x2={W-d} y2={H}
+      stroke={d === L65 ? 'rgba(255,255,255,0.22)' : d === L13 ? 'rgba(255,255,255,0.52)' : 'rgba(255,255,255,0.72)'}
+      stroke-width={d === L65 ? '0.55' : '0.9'}
+      stroke-dasharray={d === L65 ? '3 3' : 'none'}
+      vector-effect="non-scaling-stroke" />
+  {/each}
 
-    <!-- keyboard crosshair -->
-    <circle cx={kb.x*W} cy={(flip ? (1-kb.y) : kb.y)*H} r="1.1" fill="none" stroke="#666" stroke-width="0.6" />
-  </svg>
-</div>
+  <!-- horizontal thirds (sideline thirds) -->
+  <line x1="0" y1={H/3}   x2={W} y2={H/3}   stroke="rgba(255,255,255,0.18)" stroke-width="0.55" vector-effect="non-scaling-stroke" />
+  <line x1="0" y1={2*H/3} x2={W} y2={2*H/3} stroke="rgba(255,255,255,0.18)" stroke-width="0.55" vector-effect="non-scaling-stroke" />
+
+  <!-- goal boxes — left end -->
+  <rect x="0" y={cy - LARGE_W/2} width={LARGE_D} height={LARGE_W}
+    fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.88)" stroke-width="1.0"
+    vector-effect="non-scaling-stroke" />
+  <rect x="0" y={cy - SMALL_W/2} width={SMALL_D} height={SMALL_W}
+    fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.88)" stroke-width="1.0"
+    vector-effect="non-scaling-stroke" />
+  <!-- goal boxes — right end -->
+  <rect x={W - LARGE_D} y={cy - LARGE_W/2} width={LARGE_D} height={LARGE_W}
+    fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.88)" stroke-width="1.0"
+    vector-effect="non-scaling-stroke" />
+  <rect x={W - SMALL_D} y={cy - SMALL_W/2} width={SMALL_D} height={SMALL_W}
+    fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.88)" stroke-width="1.0"
+    vector-effect="non-scaling-stroke" />
+
+  <!-- D arcs — centred on goal line -->
+  <path d={pathDLeft()}  fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.0" vector-effect="non-scaling-stroke" />
+  <path d={pathDRight()} fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.0" vector-effect="non-scaling-stroke" />
+  <!-- 40m arcs — dashed, lighter -->
+  <path d={path40Left()}  fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="0.85" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" />
+  <path d={path40Right()} fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="0.85" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" />
+
+  <!-- overlays -->
+  <g style="pointer-events:none">
+    {@html overlays.map(o => markerShape(o)).join('')}
+  </g>
+
+  <!-- landing marker — white, high-contrast -->
+  {#if !Number.isNaN(landing.x) && !Number.isNaN(landing.y)}
+    <circle cx={svgX(landing)} cy={svgY(landing)} r="2.4"
+      fill="rgba(255,255,255,0.95)" stroke="rgba(0,0,0,0.25)" stroke-width="0.5"
+      vector-effect="non-scaling-stroke" />
+  {/if}
+  <!-- pickup marker + connector -->
+  {#if !Number.isNaN(pickup.x) && !Number.isNaN(pickup.y)}
+    <line
+      x1={svgX(landing)} y1={svgY(landing)}
+      x2={svgX(pickup)}  y2={svgY(pickup)}
+      stroke="rgba(255,255,255,0.45)" stroke-dasharray="2 2" stroke-width="0.7"
+      vector-effect="non-scaling-stroke" />
+    <circle cx={svgX(pickup)} cy={svgY(pickup)} r="2.0"
+      fill="rgba(255,255,255,0.65)" stroke="rgba(255,255,255,0.4)" stroke-width="0.5"
+      vector-effect="non-scaling-stroke" />
+  {/if}
+
+  <!-- zone labels -->
+  {#if showZoneLabels}
+    <text x="1.8" y={H/6 + 1.2}   class="zlabel">L</text>
+    <text x="1.8" y={H/2 + 1.2}   class="zlabel">C</text>
+    <text x="1.8" y={5*H/6 + 1.2} class="zlabel">R</text>
+    <text x={L20}   y="3.5" text-anchor="middle" class="zlabel">20</text>
+    <text x={L45}   y="3.5" text-anchor="middle" class="zlabel">45</text>
+    <text x={L65}   y="3.5" text-anchor="middle" class="zlabel">65</text>
+    <text x={W-L65} y="3.5" text-anchor="middle" class="zlabel">65</text>
+    <text x={W-L45} y="3.5" text-anchor="middle" class="zlabel">45</text>
+    <text x={W-L20} y="3.5" text-anchor="middle" class="zlabel">20</text>
+  {/if}
+
+  <!-- keyboard crosshair -->
+  <circle cx={(flip ? 1-kb.y : kb.y)*W} cy={kb.x*H} r="1.4"
+    fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="0.55"
+    vector-effect="non-scaling-stroke" />
+</svg>

@@ -67,3 +67,7 @@ $$;
 create trigger events_updated_at
   before update on events
   for each row execute function set_updated_at();
+
+-- ── Multi-metric columns (run once on existing DB) ────────────────────────
+-- alter table events add column if not exists event_type text not null default 'kickout';
+-- alter table events add column if not exists direction  text not null default 'ours';
