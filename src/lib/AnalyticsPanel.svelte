@@ -20,6 +20,7 @@
   export let CONTESTS     = [];
   export let OUTCOMES     = [];
   export let retTrend     = () => null;
+  export let clockTrend   = [];
 
   // ── Bindable filter state ────────────────────────────────────────────────
   export let matchFilter  = 'ALL';
@@ -314,6 +315,26 @@
       </div>
     {/if}
 
+    <!-- ── Clock trend ── -->
+    {#if clockTrend.length >= 2}
+      <div class="section-card">
+        <div class="section-hd">Retention by Clock <span class="section-ct">{clockTrend.reduce((s,b)=>s+b.tot,0)} with clock</span></div>
+        <div class="clock-bars">
+          {#each clockTrend as b}
+            {@const color = b.pct >= 60 ? '#16a34a' : b.pct >= 45 ? '#d97706' : '#dc2626'}
+            <div class="clock-row">
+              <span class="clock-lbl">{b.label}'</span>
+              <div class="clock-track">
+                <div class="clock-fill" style="width:{b.pct}%;background:{color}"></div>
+              </div>
+              <span class="clock-pct" style="color:{color}">{b.pct}%</span>
+              <span class="clock-n">n={b.tot}</span>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
     <!-- ── Zone breakdown (kickout only) ── -->
     {#if isKickoutView}
       <div class="section-card">
@@ -391,7 +412,7 @@
           <thead><tr><th>Player</th><th>Targeted</th><th>Retention</th><th>Breaks</th><th>Break win%</th></tr></thead>
           <tbody>
             {#each sortedPlayers as p}
-              <tr>
+              <tr class="player-row {plyFilter === p.key ? 'player-row-active' : ''}" on:click={() => dispatch('filterPlayer', plyFilter === p.key ? 'ALL' : p.key)} title="Tap to filter">
                 <td style="text-align:left">{p.label}</td>
                 <td>{p.total}</td>
                 <td style="background:{cellColor(p.retPct)}">{p.retPct}%</td>
@@ -627,6 +648,21 @@
     padding: 5px 12px; border-radius: 7px; border: 1.5px solid;
     font-size: 12px; font-weight: 700; background: #fff;
   }
+
+  /* ── Clock trend ── */
+  .clock-bars { display: flex; flex-direction: column; gap: 6px; }
+  .clock-row { display: flex; align-items: center; gap: 8px; }
+  .clock-lbl { font-size: 11px; font-weight: 700; color: #6b7280; width: 38px; flex-shrink: 0; }
+  .clock-track { flex: 1; height: 10px; background: #f0f0f0; border-radius: 99px; overflow: hidden; }
+  .clock-fill { height: 100%; border-radius: 99px; transition: width 0.3s; }
+  .clock-pct { font-size: 12px; font-weight: 700; width: 36px; text-align: right; flex-shrink: 0; }
+  .clock-n { font-size: 10px; color: #9ca3af; width: 34px; flex-shrink: 0; }
+
+  /* ── Player row tap-to-filter ── */
+  .player-row { cursor: pointer; transition: background 0.1s; }
+  .player-row:hover { background: #f0f4ff; }
+  .player-row-active { background: #dbeafe !important; }
+  .player-row-active td { color: #1c3f8a; font-weight: 700; }
 
   /* ── Hint ── */
   .hint { font-size: 11px; color: #b0b8b0; margin: 8px 0 0; }

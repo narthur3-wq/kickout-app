@@ -687,6 +687,7 @@
       const breaks = evs.filter(e => e.contest_type === 'break');
       const brWon = breaks.filter(e => e.break_outcome === 'won').length;
       return {
+        key,
         label,
         total: evs.length,
         retPct: Math.round(100 * ret / evs.length),
@@ -696,6 +697,23 @@
     })
     .filter(Boolean)
     .sort((a, b) => b.total - a.total);
+
+  // ── Clock trend (retention by 10-min window) ─────────────────────────────
+  $: clockTrend = (() => {
+    const WINDOWS = [[0,10,'0-10'],[10,20,'10-20'],[20,30,'20-30'],[30,40,'30-40'],[40,60,'40+']];
+    const buckets = WINDOWS.map(([lo, hi, label]) => ({ label, lo, hi, tot: 0, ret: 0 }));
+    for (const e of vizEvents) {
+      if (!e.clock) continue;
+      const m = e.clock.match(/^(\d{1,2}):(\d{2})$/);
+      if (!m) continue;
+      const mins = parseInt(m[1]) + parseInt(m[2]) / 60;
+      const b = buckets.find(bk => mins >= bk.lo && mins < bk.hi);
+      if (b) { b.tot++; if (RETAINED.has(e.outcome)) b.ret++; }
+    }
+    return buckets
+      .filter(b => b.tot >= 2)
+      .map(b => ({ label: b.label, tot: b.tot, pct: Math.round(100 * b.ret / b.tot) }));
+  })();
 
   // ── Summary stats ─────────────────────────────────────────────────────────
   $: summaryStats = (() => {
@@ -914,7 +932,9 @@
       bind:flaggedOnly
       analyticsEventType={analyticsEventType}
       bind:directionFilter
+      {clockTrend}
       on:showSummary={() => showSummary = true}
+      on:filterPlayer={(e) => { plyFilter = e.detail; }}
     />
   </div>
 

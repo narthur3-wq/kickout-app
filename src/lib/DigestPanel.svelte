@@ -62,6 +62,20 @@
   $: breakWon = breakEvs.filter(e => (e.break_outcome || '').toLowerCase() === 'won').length;
   $: breakPct = breakEvs.length >= 2 ? Math.round(100 * breakWon / breakEvs.length) : null;
 
+  // Opposition kickout tendency — which zones they target and our win rate per zone
+  const OPP_SIDES = ['L','C','R'], OPP_DEPTH = ['S','M','L','V'];
+  $: oppTendency = (() => {
+    if (theirKickouts.length === 0) return null;
+    const z = {};
+    for (const S of OPP_SIDES) for (const D of OPP_DEPTH) z[`${S}-${D}`] = { tot: 0, won: 0 };
+    for (const e of theirKickouts) {
+      const key = e.zone_code; if (!z[key]) continue;
+      z[key].tot++;
+      if (KO_RETAINED.has((e.outcome || '').toLowerCase())) z[key].won++;
+    }
+    return { z, n: theirKickouts.length };
+  })();
+
   // Flagged events
   $: flagCount = filtered.filter(e => e.flag).length;
 
@@ -197,6 +211,42 @@
             </div>
           {/if}
         </div>
+      </div>
+    {/if}
+
+    <!-- ── Opposition KO Tendency ── -->
+    {#if oppTendency}
+      <div class="section-card">
+        <div class="section-hd">
+          Opposition KO Tendency
+          <span class="hd-sub">{oppTendency.n} tracked</span>
+        </div>
+        <div class="opp-grid-wrap">
+          <div class="opp-col-hdr">
+            <span></span>
+            {#each OPP_SIDES as S}<span class="opp-hdr">{S}</span>{/each}
+          </div>
+          {#each OPP_DEPTH as D}
+            <div class="opp-row">
+              <span class="opp-row-lbl">{D}</span>
+              {#each OPP_SIDES as S}
+                {@const cell = oppTendency.z[`${S}-${D}`]}
+                {@const volPct = cell.tot ? Math.round(100 * cell.tot / oppTendency.n) : 0}
+                {@const winPct = cell.tot ? Math.round(100 * cell.won / cell.tot) : null}
+                <div class="opp-cell" title="{cell.tot} kicks · {winPct ?? 0}% we won"
+                  style="background: rgba(196,18,48,{Math.min(0.55, volPct / 100 * 2.5)})">
+                  {#if cell.tot > 0}
+                    <span class="opp-vol">{volPct}%</span>
+                    <span class="opp-win">{winPct ?? 0}%W</span>
+                  {:else}
+                    <span class="opp-empty">—</span>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {/each}
+        </div>
+        <p class="opp-legend">Cell heat = how often they kick there · W = our win rate</p>
       </div>
     {/if}
 
@@ -337,4 +387,20 @@
     .kpi-row { gap: 8px; }
     .two-col { grid-template-columns: 1fr; }
   }
+  /* ── Opposition tendency grid ── */
+  .opp-grid-wrap { display: flex; flex-direction: column; gap: 3px; }
+  .opp-col-hdr { display: grid; grid-template-columns: 28px repeat(3, 1fr); gap: 3px; margin-bottom: 2px; }
+  .opp-hdr { font-size: 10px; font-weight: 800; color: #9ca3af; text-align: center; text-transform: uppercase; }
+  .opp-row { display: grid; grid-template-columns: 28px repeat(3, 1fr); gap: 3px; }
+  .opp-row-lbl { font-size: 10px; font-weight: 800; color: #9ca3af; display: flex; align-items: center; text-transform: uppercase; }
+  .opp-cell {
+    border-radius: 6px; padding: 6px 4px; text-align: center;
+    display: flex; flex-direction: column; gap: 1px;
+    background: rgba(196,18,48,0.05); min-height: 40px; justify-content: center;
+    border: 1px solid rgba(196,18,48,0.08);
+  }
+  .opp-vol { font-size: 12px; font-weight: 800; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+  .opp-win { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.85); text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+  .opp-empty { font-size: 11px; color: #d1d5db; }
+  .opp-legend { font-size: 10px; color: #9ca3af; margin: 8px 0 0; }
 </style>
