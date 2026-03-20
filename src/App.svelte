@@ -982,7 +982,7 @@
       {events}
       {editingId}
       onExportCSV={() => exportCSV()}
-      onExportView={() => exportCSV(vizEvents)}
+      onExportView={(subset) => exportCSV(subset)}
       onExportJSON={exportJSON}
       onImportJSON={importJSON}
       on:load={(e) => loadToForm(e.detail)}
