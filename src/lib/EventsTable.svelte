@@ -186,7 +186,7 @@
   /* ── Filters ── */
   .filters-row {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #f0f4f0;
+    margin-bottom: 0; padding: 10px 0 12px; border-bottom: 1px solid #f3f4f6;
   }
   .search-input {
     flex: 1; min-width: 180px; padding: 7px 10px; border: 1.5px solid #e5e7eb;
@@ -219,16 +219,16 @@
   .clear-btn:hover { background: #fef2f2; }
 
   /* ── Table wrapper ── */
-  .tablewrap { overflow-x: auto; border: 1px solid #e8eee6; border-radius: 8px; }
+  .tablewrap { overflow-x: auto; border: 1px solid #f0f0f0; border-radius: 8px; margin-top: 12px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
   th {
     padding: 8px 10px; background: #f8faf8; text-align: left;
     font-size: 11px; font-weight: 700; color: #6b7280; letter-spacing: 0.04em; text-transform: uppercase;
     border-bottom: 1px solid #e8eee6; white-space: nowrap; position: sticky; top: 0;
   }
-  td { padding: 8px 10px; border-bottom: 1px solid #f2f5f2; color: #374151; white-space: nowrap; vertical-align: middle; }
+  td { padding: 8px 10px; border-bottom: 1px solid #f5f5f5; color: #374151; white-space: nowrap; vertical-align: middle; }
   tr:last-child td { border-bottom: none; }
-  tr:hover td { background: #f8fbf8; }
+  tr:hover td { background: #fafafa; }
   .editing-row td { background: #fefce8; }
   .center { text-align: center; }
   .mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
@@ -250,16 +250,17 @@
   .outcome-badge[data-outcome="blocked"]  { background: #fef3c7; color: #78350f; }
   .outcome-badge[data-outcome="saved"]    { background: #f3f4f6; color: #374151; }
 
-  /* ── Actions ── */
+  /* ── Actions — low-profile until row hover ── */
   .actions { display: flex; gap: 4px; justify-content: flex-end; }
   .act-btn {
-    padding: 4px 10px; border: 1.5px solid #e5e7eb; border-radius: 6px;
-    background: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
-    color: #374151; font-family: inherit; transition: all 0.12s;
+    padding: 4px 10px; border: 1px solid transparent; border-radius: 6px;
+    background: transparent; cursor: pointer; font-size: 12px; font-weight: 600;
+    color: #d1d5db; font-family: inherit; transition: all 0.12s; opacity: 0.4;
   }
-  .act-btn:hover { background: #f9fafb; border-color: #d1d5db; }
-  .act-btn.danger { color: #dc2626; border-color: #fca5a5; }
-  .act-btn.danger:hover { background: #fef2f2; }
+  tr:hover .act-btn { opacity: 1; border-color: #e5e7eb; background: #fff; color: #374151; }
+  tr:hover .act-btn:hover { background: #f9fafb; border-color: #d1d5db; }
+  tr:hover .act-btn.danger { color: #dc2626; border-color: #fca5a5; }
+  tr:hover .act-btn.danger:hover { background: #fef2f2; }
 
   /* ── Empty / no-results ── */
   .empty-state {

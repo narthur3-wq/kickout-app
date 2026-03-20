@@ -1034,8 +1034,8 @@
     flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; min-width: 0;
   }
   .match-ctx {
-    font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.55);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;
+    font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.82);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;
   }
 
   /* Period segmented control — on dark header */
@@ -1049,12 +1049,12 @@
     cursor: default;
   }
   .period-pill {
-    padding: 4px 11px; border-radius: 6px; font-size: 12px; font-weight: 700;
+    padding: 3px 9px; border-radius: 6px; font-size: 11px; font-weight: 600;
     border: none; background: transparent; cursor: pointer;
-    color: rgba(255,255,255,0.45); font-family: inherit; transition: all 0.15s; line-height: 1.3;
+    color: rgba(255,255,255,0.38); font-family: inherit; transition: all 0.15s; line-height: 1.3;
   }
-  .period-pill.active { background: #1c3f8a; color: #fff; }
-  .period-pill:hover:not(.active) { color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.1); }
+  .period-pill.active { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.9); }
+  .period-pill:hover:not(.active) { color: rgba(255,255,255,0.65); }
 
   .header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .user-email { font-size: 11px; color: rgba(255,255,255,0.38); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1099,14 +1099,14 @@
   .tab-bar::-webkit-scrollbar { display: none; }
   .tab-btn {
     flex: none; padding: 0 16px; height: 44px; font-size: 13px; font-weight: 600;
-    border: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
-    background: none; cursor: pointer; color: #9ca3af;
+    border: none; border-bottom: 3px solid transparent; margin-bottom: -1px;
+    background: none; cursor: pointer; color: #b0b8c4;
     display: flex; align-items: center; justify-content: center; gap: 5px;
     white-space: nowrap; transition: color 0.15s; letter-spacing: 0;
   }
-  .tab-btn.active { color: #1c3f8a; border-bottom-color: #1c3f8a; font-weight: 700; }
-  .tab-btn:hover:not(.active) { color: #374151; }
-  .tab-count { background: #f3f4f6; color: #6b7280; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 99px; }
+  .tab-btn.active { color: #1c3f8a; border-bottom-color: #1c3f8a; font-weight: 800; }
+  .tab-btn:hover:not(.active) { color: #4b5563; }
+  .tab-count { background: #f3f4f6; color: #b0b8c4; font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 99px; }
   .tab-btn.active .tab-count { background: #dbeafe; color: #1e40af; }
   .edit-dot { color: #f59e0b; font-size: 10px; }
 

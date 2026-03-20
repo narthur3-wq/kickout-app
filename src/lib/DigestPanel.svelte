@@ -426,20 +426,21 @@
   /* ── Hero KPI tiles ── */
   .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .kpi-tile {
-    border-radius: 12px; padding: 16px 10px 14px; text-align: center;
-    border: 1px solid rgba(0,0,0,0.06);
+    border-radius: 14px; padding: 20px 12px 18px; text-align: center;
+    border: 1px solid rgba(0,0,0,0.07);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
   }
   .kpi-label {
-    font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
-    text-transform: uppercase; color: #9ca3af; margin-bottom: 6px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+    text-transform: uppercase; color: #9ca3af; margin-bottom: 8px;
   }
   .kpi-value {
-    font-size: 28px; font-weight: 900; color: #111827; line-height: 1;
-    font-variant-numeric: tabular-nums; letter-spacing: -0.03em;
+    font-size: 32px; font-weight: 900; color: #111827; line-height: 1;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.04em;
   }
   .kpi-value.pos { color: #16a34a; }
   .kpi-value.neg { color: #dc2626; }
-  .kpi-sub { font-size: 11px; color: #9ca3af; margin-top: 5px; line-height: 1.3; }
+  .kpi-sub { font-size: 11px; color: #9ca3af; margin-top: 7px; line-height: 1.3; }
 
   /* ── Section cards ── */
   .section-card {

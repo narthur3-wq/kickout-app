@@ -319,7 +319,7 @@
   /* ── Inline fields (clock, score) ── */
   .inline-fields { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   label { display: flex; gap: 6px; align-items: center; font-size: 13px; color: #4b5563; font-weight: 500; }
-  input, select {
+  input {
     padding: 7px 10px; border: 1.5px solid #e5e7eb; border-radius: 7px;
     font-size: 14px; background: #fff; color: #111827; font-family: inherit;
     transition: border-color 0.12s, box-shadow 0.12s;

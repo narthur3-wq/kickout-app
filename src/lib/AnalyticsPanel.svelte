@@ -515,27 +515,28 @@
   /* ── Filters ── */
   .filters {
     display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;
-    background: #f8faf8; border: 1px solid #e8eee6; border-radius: 10px; padding: 10px 12px;
+    padding: 0 0 12px; border-bottom: 1px solid #f0f0f0;
   }
   .filter-primary-row {
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   }
   .filter-toolbar { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
-  /* Advanced toggle */
+  /* Advanced toggle — ghost style */
   .adv-toggle {
-    padding: 5px 11px; border: 1.5px solid #e5e7eb; border-radius: 7px;
-    background: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
-    color: #6b7280; font-family: inherit; transition: all 0.12s; white-space: nowrap;
+    padding: 4px 10px; border: 1px solid transparent; border-radius: 6px;
+    background: transparent; cursor: pointer; font-size: 12px; font-weight: 600;
+    color: #9ca3af; font-family: inherit; transition: all 0.12s; white-space: nowrap;
   }
-  .adv-toggle:hover { border-color: #d1d5db; background: #f3f4f6; }
-  .adv-toggle.adv-open { border-color: #1c3f8a; color: #1c3f8a; background: #eff6ff; }
-  .adv-toggle.adv-active { border-color: #1c3f8a; color: #1c3f8a; font-weight: 700; }
+  .adv-toggle:hover { color: #4b5563; background: #f3f4f6; }
+  .adv-toggle.adv-open { color: #1c3f8a; background: #eff6ff; }
+  .adv-toggle.adv-active { color: #1c3f8a; font-weight: 700; }
 
-  /* Advanced drawer */
+  /* Advanced drawer — inset/quiet */
   .adv-drawer {
-    display: flex; flex-direction: column; gap: 8px;
-    padding-top: 8px; border-top: 1px solid #e8eee6; margin-top: 2px;
+    display: flex; flex-direction: column; gap: 10px;
+    background: #f9fafb; border: 1px solid #f0f0f0; border-radius: 8px;
+    padding: 12px 14px; margin-top: 2px;
   }
 
   /* Pill controls */
@@ -577,8 +578,8 @@
   /* ── Empty state ── */
   .empty-analytics {
     display: flex; flex-direction: column; align-items: center;
-    padding: 48px 24px; background: #f8faf8; border: 1px solid #e8eee6;
-    border-radius: 10px; text-align: center; gap: 8px;
+    padding: 48px 24px; background: #fff; border: 1px solid #e5e7eb;
+    border-radius: 12px; text-align: center; gap: 8px;
   }
   .empty-icon { font-size: 28px; line-height: 1; }
   .empty-title { font-size: 14px; font-weight: 700; color: #374151; }
@@ -592,19 +593,20 @@
 
   /* ── Section cards ── */
   .section-card {
-    background: #f8faf8; border: 1px solid #e8eee6;
-    border-radius: 10px; padding: 14px 16px; margin-bottom: 12px;
+    background: #fff; border: 1px solid #e5e7eb;
+    border-radius: 12px; padding: 16px 18px; margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   }
   .section-hd {
-    font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
-    text-transform: uppercase; color: #9ca3af;
+    font-size: 12px; font-weight: 700; letter-spacing: -0.01em;
+    color: #374151;
     display: flex; align-items: center; gap: 8px;
-    margin-bottom: 12px;
+    margin-bottom: 14px;
   }
   .section-ct {
-    background: #e8eee6; color: #6b7280; font-size: 11px; font-weight: 700;
+    background: #f3f4f6; color: #9ca3af; font-size: 11px; font-weight: 600;
     padding: 2px 7px; border-radius: 99px;
-    text-transform: none; letter-spacing: 0;
+    letter-spacing: 0;
   }
 
   /* ── Viz section ── */
@@ -642,11 +644,11 @@
 
   /* ── KPI grid ── */
   .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .kpi { background: #fff; border: 1px solid #e8eee6; border-radius: 8px; padding: 12px 14px; }
+  .kpi { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
   .kpi-title { font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 8px; }
   .kpi-table { border-collapse: collapse; font-size: 13px; width: 100%; font-variant-numeric: tabular-nums; }
-  .kpi-table th, .kpi-table td { border: 1px solid #e8eee6; padding: 6px 8px; text-align: center; }
-  .kpi-table thead th { background: #f0f4f0; font-size: 11px; font-weight: 700; color: #6b7280; }
+  .kpi-table th, .kpi-table td { border: 1px solid #f3f4f6; padding: 7px 8px; text-align: center; }
+  .kpi-table thead th { background: #f9fafb; font-size: 11px; font-weight: 600; color: #9ca3af; border-bottom: 1px solid #e5e7eb; }
   .kpi-table tbody tr:hover { background: #f9fbf9; }
   .player-table { width: 100%; }
   .player-sort {
