@@ -465,7 +465,7 @@
             {/each}
           </tbody>
         </table>
-        <p class="hint">Score state when each kickout was taken. Requires Score field to be filled. Shown when n≥3.</p>
+        <p class="hint">Retention rate in each score-state context. Derived from tracked shot events. Shown when n≥3.</p>
       </div>
     {/if}
 

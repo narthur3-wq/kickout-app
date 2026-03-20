@@ -29,8 +29,6 @@
   /** @type {'Retained'|'Lost'|'Score'|'Wide'|'Out'|'Foul'} */ let outcome = 'Retained';
   /** @type {'won'|'lost'|'neutral'|''} */ let breakOutcome = '';
   let clock = '', targetPlayer = '';
-  let timeToTee = '', totalTime = '';
-  let scored20 = false;
   let landing = {x:NaN, y:NaN}, pickup = {x:NaN, y:NaN};
   let eventType = 'kickout';
   let direction = 'ours';
@@ -322,9 +320,6 @@
       outcome,
       contest_type:  contest,
       break_outcome: contest === 'break' ? breakOutcome : '',
-      time_to_tee_s: timeToTee === '' ? null : +timeToTee,
-      total_time_s:  totalTime === '' ? null : +totalTime,
-      scored_20s:    !!scored20,
       x:   landing.x, y:   normY,
       x_m: toMetersX(landing.x), y_m: toMetersY(normY),
       depth_from_own_goal_m: +depth_m.toFixed(2),
@@ -343,7 +338,6 @@
         : null,
       score_us:    currentMatchScore.us.str,
       score_them:  currentMatchScore.them.str,
-      notes:       null,
       flag:        !!flagEvent,
       restart_reason: eventType === 'kickout' ? (restartReason || null) : null,
       ko_sequence: koSequence,
@@ -413,9 +407,6 @@
     contest      = e.contest_type;
     breakOutcome = e.break_outcome || '';
     targetPlayer = e.target_player || '';
-    scored20     = !!e.scored_20s;
-    timeToTee    = e.time_to_tee_s == null ? '' : String(e.time_to_tee_s);
-    totalTime    = e.total_time_s  == null ? '' : String(e.total_time_s);
     matchDate    = e.match_date || (e.created_at || '').slice(0,10) || new Date().toISOString().slice(0,10);
     landing      = { x: e.x, y: e.y };
     pickup       = (e.pickup_x == null || e.pickup_y == null)
@@ -438,10 +429,10 @@
     const headers = [
       'id','created_at','match_date','team','opponent','period','clock',
       'target_player','outcome','contest_type','break_outcome',
-      'time_to_tee_s','total_time_s','scored_20s',
       'x','y','x_m','y_m','depth_from_own_goal_m','side_band','depth_band','zone_code','our_goal_at_top',
       'pickup_x','pickup_y','pickup_x_m','pickup_y_m','break_displacement_m',
-      'score_us','score_them','notes','flag','ko_sequence','event_type','direction',
+      'score_us','score_them','flag','ko_sequence','event_type','direction',
+      'restart_reason','schema_version',
     ];
     const rows = [headers.join(',')].concat(
       subset.map(e => headers.map(h => {
@@ -461,7 +452,7 @@
     const blob = new Blob([JSON.stringify(events, null, 2)], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    a.href = url; a.download = 'kickout_events.json'; a.click();
+    a.href = url; a.download = 'pairc_events.json'; a.click();
     URL.revokeObjectURL(url);
   }
 
@@ -474,8 +465,20 @@
         const text  = await file.text();
         const imported = JSON.parse(text);
         if (!Array.isArray(imported)) throw new Error('Expected a JSON array');
+        // Validate shape — each item must have the minimum required fields
+        const REQUIRED = ['id', 'outcome', 'contest_type', 'x', 'y'];
+        const invalid = imported.filter(e =>
+          typeof e !== 'object' || e === null || REQUIRED.some(f => e[f] == null)
+        );
+        if (invalid.length > 0) throw new Error(`${invalid.length} record(s) are missing required fields (id, outcome, contest_type, x, y). Import aborted.`);
+        // Warn about unknown schema versions
+        const unknownVer = imported.filter(e => e.schema_version != null && e.schema_version > 1);
+        if (unknownVer.length > 0) {
+          const ok = confirm(`${unknownVer.length} record(s) have a newer schema_version than this app supports. They may contain fields this version doesn't understand. Continue anyway?`);
+          if (!ok) return;
+        }
         const existingIds = new Set(events.map(e => e.id));
-        const newEvents = imported.filter(e => e.id && !existingIds.has(e.id));
+        const newEvents = imported.filter(e => !existingIds.has(e.id));
         events = [...events, ...newEvents];
         persistLocal();
         // Sync new events to Supabase
