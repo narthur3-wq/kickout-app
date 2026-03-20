@@ -1,8 +1,8 @@
 # Páirc — Technical Specification
 
-**Version:** 1.0
+**Version:** 1.1
 **Date:** March 2026
-**Stack:** Svelte 4 · Vite 7 · Supabase · TypeScript
+**Stack:** Svelte 5 · Vite 7 · Supabase · JavaScript
 
 ---
 
@@ -24,7 +24,7 @@ Páirc is a progressive web app (PWA) for live GAA match analysis. A single anal
 │      ├── Pitch.svelte        (SVG pitch + click/kb nav)  │
 │      ├── AnalyticsPanel.svelte (stats, charts)           │
 │      ├── DigestPanel.svelte  (shareable match summary)   │
-│      ├── EventsTable.svelte  (raw event log)             │
+│      ├── EventsTable.svelte  (searchable event log)      │
 │      └── Login.svelte        (Supabase Auth)             │
 │                                                          │
 │  localStorage ── ko_events, ko_meta, ko_sync_queue       │
@@ -53,6 +53,8 @@ Páirc is a progressive web app (PWA) for live GAA match analysis. A single anal
 
 ### Event object (stored in `ko_events` and Supabase `events` table)
 
+All coordinates are stored flat — no nested objects.
+
 | Field | Type | Description |
 |---|---|---|
 | `id` | string (UUID) | Unique event identifier |
@@ -64,43 +66,53 @@ Páirc is a progressive web app (PWA) for live GAA match analysis. A single anal
 | `event_type` | `kickout` \| `shot` \| `turnover` | Type of match event |
 | `direction` | `ours` \| `theirs` | Whose kickout/possession |
 | `period` | `H1` \| `H2` \| `ET` | Match period |
-| `contest` | `clean` \| `break` \| `foul` \| `out` | How ball was contested |
+| `clock` | string | Match clock at event (`mm:ss`) |
+| `contest_type` | `clean` \| `break` \| `foul` \| `out` | How ball was contested |
 | `outcome` | string | Result (Retained/Lost/Score/Wide/Goal/Point/Foul/Out/Won) |
 | `break_outcome` | `won` \| `lost` \| `neutral` | Result of contested ball |
-| `restart_reason` | `Score` \| `Wide` \| `Foul` \| `Out` \| `''` | What caused this kickout |
-| `target_player` | number \| string | Jersey number of target player (1–15 or custom) |
-| `landing` | `{x, y}` | Normalised landing coords (see §4) |
-| `pickup` | `{x, y}` | Normalised pickup coords (break contests only) |
-| `clock` | string | Match clock at event (`mm:ss`) |
-| `flag` | boolean | Flagged for review |
+| `restart_reason` | `Score` \| `Wide` \| `Foul` \| `Out` \| `null` | What caused this kickout |
+| `target_player` | string | Jersey number of target player (1–15 or custom) |
+| `x` | number | Normalised side position (0 = top touchline, 1 = bottom) |
+| `y` | number | Normalised depth, **always 0 = own goal end** (see §4) |
+| `x_m` | number | Side position in metres (0–90) |
+| `y_m` | number | Depth in metres from own goal (0–145) |
+| `depth_from_own_goal_m` | number | Convenience alias for `y_m` |
+| `side_band` | `Left` \| `Centre` \| `Right` | Thirds across pitch width |
+| `depth_band` | `Short` \| `Medium` \| `Long` \| `Very Long` | Depth bracket (0–20 / 20–45 / 45–65 / 65+) |
+| `zone_code` | string | Combined zone e.g. `C-M` (Centre-Medium) |
+| `our_goal_at_top` | boolean | Pitch orientation at time of capture |
+| `pickup_x` | number \| null | Break contest: pickup side (normalised) |
+| `pickup_y` | number \| null | Break contest: pickup depth (normalised, own-goal-normalised) |
+| `pickup_x_m` | number \| null | Pickup side in metres |
+| `pickup_y_m` | number \| null | Pickup depth in metres |
+| `break_displacement_m` | number \| null | Distance between landing and pickup (metres) |
 | `score_us` | string | Derived score at time of event (`G-P` format) |
-| `at_target` | boolean | Ball reached intended target player |
+| `score_them` | string | Opponent derived score at time of event |
+| `flag` | boolean | Flagged for review |
+| `ko_sequence` | integer | Sequential number within match |
 
 ### Supabase table schema
 
+See [`supabase/schema.sql`](../supabase/schema.sql) for the canonical definition. Key columns:
+
 ```sql
-create table events (
-  id           text primary key,
-  schema_version integer not null default 1,
-  created_at   timestamptz not null,
-  match_date   date,
-  team         text,
-  opponent     text,
-  event_type   text,
-  direction    text,
-  period       text,
-  contest      text,
-  outcome      text,
-  break_outcome text,
-  restart_reason text,
-  target_player text,
-  landing      jsonb,
-  pickup       jsonb,
-  clock        text,
-  flag         boolean default false,
-  score_us     text,
-  at_target    boolean default false,
-  user_id      uuid references auth.users(id)
+create table if not exists events (
+  id                    text primary key,
+  schema_version        integer not null default 1,
+  created_at            timestamptz not null default now(),
+  event_type            text not null default 'kickout',
+  direction             text not null default 'ours',
+  contest_type          text not null,
+  outcome               text not null,
+  restart_reason        text,
+  x                     numeric not null,
+  y                     numeric not null,
+  pickup_x              numeric,
+  pickup_y              numeric,
+  score_us              text,
+  score_them            text,
+  flag                  boolean default false,
+  -- ... full list in supabase/schema.sql
 );
 ```
 
@@ -139,6 +151,8 @@ const svgY = (o) => o.x * H;                        // stored x → SVG y
 4. On `online` event (browser connectivity restored), `flushSyncQueue()` retries all pending IDs.
 5. The header shows sync state: `Offline`, `⚠ N pending`, `↻ syncing`, `✓ synced`.
 
+> **Note:** There is currently no service worker. Assets are not cached by the browser between sessions, so the app requires network access on first load. Subsequent loads within the same browser session use the HTTP cache.
+
 ---
 
 ## 6. Analytics Derivations
@@ -148,7 +162,7 @@ All analytics are computed client-side from the `events` array using Svelte reac
 | Stat | Derivation |
 |---|---|
 | Retention % | `RETAINED.has(outcome)` / total. `RETAINED = {Retained, Score, Won}` |
-| Zone stats | Events grouped by `zoneCode(x, y)` — 3 sides × 4 depths = 12 zones |
+| Zone stats | Events grouped by `zone_code` — 3 sides × 4 depths = up to 12 zones |
 | Player stats | Events grouped by `target_player`, sorted by volume |
 | Clock trend | Events grouped into 10-minute windows by `clock` field |
 | Restart retention | Events grouped by `restart_reason` (min 3 events to show) |
@@ -159,7 +173,7 @@ All analytics are computed client-side from the `events` array using Svelte reac
 
 ## 7. Pitch SVG
 
-File: `src/lib/Pitch.svelte`
+File: `src/lib/Pitch.svelte` (TypeScript `<script lang="ts">`)
 
 Markings rendered at 1:1 GAA regulation dimensions (metres):
 
@@ -179,6 +193,7 @@ Arrow key navigation + Enter/Space for keyboard accessibility.
 ## 8. Build & Deploy
 
 ```bash
+npm install
 npm run dev      # Vite dev server
 npm run build    # Build to dist/
 npm run preview  # Preview build
@@ -188,11 +203,11 @@ npm run preview  # Preview build
 
 - `vite.config.js`: `base: '/'`
 - `vercel.json`: SPA rewrite — all routes → `index.html`
-- GitHub Actions: not currently configured; push to `main` triggers Vercel auto-deploy
+- Push to `main` triggers Vercel auto-deploy
 
 ### GitHub Pages (docs/)
 
-The `docs/` directory serves the static build for GitHub Pages at `https://[user].github.io/ko-app/`. This is a secondary deployment target; Vercel is primary.
+The `docs/` directory contains the static build for GitHub Pages. This is a secondary deployment target; Vercel is primary.
 
 ---
 
@@ -211,8 +226,8 @@ If neither is set, Supabase is disabled and the app runs fully offline in localS
 
 | Item | Notes |
 |---|---|
-| No RLS on Supabase | Currently all authenticated users can read all rows. Per-user RLS policy needed before multi-team use. |
+| No per-user data isolation | RLS is enabled. All authenticated users share one data view. Add a `user_id` column and per-user policies for multi-team use. |
+| No service worker | App assets are not cached between sessions — first load requires network. |
 | No push sync | Changes on another device only appear after manual refresh or re-login. |
 | No video integration | Clip timestamping not yet implemented. |
-| Single-analyst model | No concurrent capture from multiple devices for same match. |
-| Export | JSON export of raw events is available; CSV export not yet implemented. |
+| Single-analyst model | No concurrent capture from multiple devices for the same match. |
