@@ -5,7 +5,6 @@
 
   // ── Read-only data props ─────────────────────────────────────────────────
   export let vizEvents    = [];
-  export let totalEvents  = 0;
   export let overlays     = [];
   export let zoneTableRet = [];
   export let zoneTableBreak = [];
@@ -64,12 +63,14 @@
     fOutcome.size !== OUTCOMES.length,
   ].filter(Boolean).length;
 
-  // Local: heatmap density vs quality toggle
-  let heatmapWeighted = false;
+  // Local: heatmap split — all density, won only, or lost only
+  let heatMode = 'all'; // 'all' | 'won' | 'lost'
+  const HEAT_POS = new Set(['retained','score','won','goal','point']);
 
-  $: heatPoints = heatmapWeighted
-    ? overlays
-    : overlays.map(o => ({ ...o, weight: 1 }));
+  $: wonPoints  = overlays.filter(o => HEAT_POS.has((o.outcome || '').toLowerCase())).map(o => ({ ...o, weight: 1 }));
+  $: lostPoints = overlays.filter(o => !HEAT_POS.has((o.outcome || '').toLowerCase())).map(o => ({ ...o, weight: 1 }));
+  $: heatPoints = heatMode === 'won' ? wonPoints : heatMode === 'lost' ? lostPoints : overlays.map(o => ({ ...o, weight: 1 }));
+  $: heatScheme = heatMode === 'won' ? 'positive' : heatMode === 'lost' ? 'negative' : 'density';
 
   function cellColor(pct) {
     const t = Math.max(0, Math.min(1, pct / 100));
@@ -268,12 +269,16 @@
           <button class="vseg {overlayMode === 'pickup' ? 'vseg-on' : ''}" on:click={() => overlayMode = 'pickup'}>Pickup</button>
         </div>
         {#if vizMode === 'heat'}
-          <label class="fpill-check"><input type="checkbox" bind:checked={heatmapWeighted}/> Weighted</label>
+          <div class="viz-seg">
+            <button class="vseg {heatMode === 'all'  ? 'vseg-on' : ''}" on:click={() => heatMode = 'all'}>All</button>
+            <button class="vseg {heatMode === 'won'  ? 'vseg-on' : ''}" on:click={() => heatMode = 'won'}>Won</button>
+            <button class="vseg {heatMode === 'lost' ? 'vseg-on' : ''}" on:click={() => heatMode = 'lost'}>Lost</button>
+          </div>
         {/if}
       </div>
       <div class="pitch-viz-card">
         {#if vizMode === 'heat'}
-          <Heatmap points={heatPoints} cols={140} radius={3} smooth={2} />
+          <Heatmap points={heatPoints} cols={140} radius={3} smooth={2} colorScheme={heatScheme} />
         {:else}
           <Pitch
             contestType="clean"

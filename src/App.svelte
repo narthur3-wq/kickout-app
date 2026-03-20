@@ -941,7 +941,6 @@
   <div class="full-panel">
     <AnalyticsPanel
       {vizEvents}
-      totalEvents={events.length}
       {overlays}
       {zoneTableRet}
       {zoneTableBreak}

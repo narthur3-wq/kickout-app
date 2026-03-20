@@ -91,6 +91,66 @@
   function pctStr(v) { return v === null ? '–' : v + '%'; }
   function netStr(n) { return n > 0 ? '+' + n : String(n); }
 
+  // ── Auto-narrative ────────────────────────────────────────────────────────
+  $: narrative = (() => {
+    if (!filtered.length || koUs.n < 3) return [];
+    const lines = [];
+
+    // Line 1 — our kickout retention + zone insight
+    const quality = koUs.pct >= 60 ? 'strong' : koUs.pct >= 50 ? 'solid' : koUs.pct >= 40 ? 'mixed' : 'poor';
+    const zonesWithData = retByZone.filter(z => z.pct !== null && z.n >= 2);
+    const best  = zonesWithData.length ? zonesWithData.reduce((a, b) => b.pct > a.pct ? b : a) : null;
+    const worst = zonesWithData.length >= 2 ? zonesWithData.reduce((a, b) => b.pct < a.pct ? b : a) : null;
+    let l1 = `Our kickout retention was ${quality} at ${koUs.pct}% (${koUs.won}/${koUs.n})`;
+    if (best && worst && best.zone !== worst.zone) {
+      l1 += ` — best ${best.zone.toLowerCase()} (${best.pct}%), weakest ${worst.zone.toLowerCase()} (${worst.pct}%)`;
+    } else if (best) {
+      l1 += ` — strongest in ${best.zone.toLowerCase()} (${best.pct}%)`;
+    }
+    lines.push(l1 + '.');
+
+    // Line 2 — their kickouts + tendency
+    if (koThem.n >= 3) {
+      const result = koThem.pct >= 50 ? `won ${koThem.pct}%` : `won only ${koThem.pct}%`;
+      let l2 = `We ${result} of their ${koThem.n} kickouts`;
+      if (oppTendency) {
+        const topZone = Object.entries(oppTendency.z)
+          .filter(([, v]) => v.tot > 0)
+          .sort(([, a], [, b]) => b.tot - a.tot)[0];
+        if (topZone) {
+          const [zk, zv] = topZone;
+          const vol = Math.round(100 * zv.tot / oppTendency.n);
+          if (vol >= 20) {
+            const winR = zv.tot ? Math.round(100 * zv.won / zv.tot) : 0;
+            l2 += ` — they favoured ${zk} (${vol}% of kicks, we won ${winR}%)`;
+          }
+        }
+      }
+      lines.push(l2 + '.');
+    }
+
+    // Line 3 — game shape
+    const items = [];
+    if (toTotal >= 3) {
+      if (toNet > 0) items.push(`won the turnover battle (+${toNet})`);
+      else if (toNet < 0) items.push(`lost more turnovers than we won (${toNet})`);
+      else items.push('turnover battle even');
+    }
+    if (shotUs.n >= 3 && shotUs.pct !== null) {
+      items.push(`scored on ${shotUs.pct}% of our ${shotUs.n} shots`);
+    }
+    if (recentForm.length >= 6) {
+      const mid = Math.floor(recentForm.length / 2);
+      const p1 = recentForm.slice(0, mid).filter(r => r === 'W').length / mid;
+      const p2 = recentForm.slice(mid).filter(r => r === 'W').length / (recentForm.length - mid);
+      if (p2 - p1 >= 0.25) items.push('improving as the game went on');
+      else if (p1 - p2 >= 0.25) items.push('faded as the match progressed');
+    }
+    if (items.length) lines.push(`Overall: ${items.join(', ')}.`);
+
+    return lines;
+  })();
+
   let digestEl;
   let sharing = false;
 
@@ -155,6 +215,15 @@
         <button class="share-btn" on:click={shareDigest} disabled={sharing}>
           {sharing ? '…' : '⬆ Share'}
         </button>
+      </div>
+    {/if}
+
+    <!-- ── Narrative ── -->
+    {#if narrative.length > 0}
+      <div class="narrative-card">
+        {#each narrative as line}
+          <p class="narrative-line">{line}</p>
+        {/each}
       </div>
     {/if}
 
@@ -343,6 +412,16 @@
   }
   .share-btn:hover { background: #163270; }
   .share-btn:disabled { opacity: 0.5; cursor: default; }
+
+  /* ── Narrative ── */
+  .narrative-card {
+    background: #f0f7ff; border: 1px solid #bfdbfe; border-radius: 12px;
+    padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .narrative-line {
+    margin: 0; font-size: 13px; line-height: 1.55; color: #1e3a5f; font-weight: 500;
+  }
+  .narrative-line + .narrative-line { padding-top: 4px; border-top: 1px solid #dbeafe; }
 
   /* ── Hero KPI tiles ── */
   .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }

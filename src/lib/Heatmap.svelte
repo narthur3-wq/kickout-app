@@ -6,6 +6,9 @@
   // points: [{ x:0..1, y:0..1, weight?:number }]
   export let points = [];
 
+  // colour scheme: 'density' (blue→red), 'positive' (→green), 'negative' (→red)
+  export let colorScheme = 'density';
+
   // tuning
   export let cols = 140;   // grid columns (higher = smoother)
   export let radius = 3;   // per-point influence radius (in grid cells)
@@ -110,14 +113,16 @@
   }
 
   function heatColor(t) {
-    // blue→cyan→lime→yellow→red with rising alpha
     const a = Math.min(0.85, 0.08 + t * 0.77);
+    if (colorScheme === 'positive') return `hsla(120, 68%, 36%, ${a})`;
+    if (colorScheme === 'negative') return `hsla(0, 72%, 46%, ${a})`;
+    // density: blue→cyan→lime→yellow→red
     const hue = (1 - t) * 220;
     return `hsla(${hue}, 85%, 50%, ${a})`;
   }
 
-  // Redraw whenever points prop changes (not on every app state change)
-  $: if (points !== undefined) { draw(); }
+  // Redraw whenever points or colorScheme changes
+  $: if (points !== undefined || colorScheme) { draw(); }
 
   onMount(() => {
     draw();
@@ -149,6 +154,12 @@
       hsla(0,85%,50%,0.85)
     );
   }
+  .legend-bar.positive {
+    background: linear-gradient(to right, hsla(120,68%,36%,0.05), hsla(120,68%,36%,0.85));
+  }
+  .legend-bar.negative {
+    background: linear-gradient(to right, hsla(0,72%,46%,0.05), hsla(0,72%,46%,0.85));
+  }
 </style>
 
 <div class="stack">
@@ -169,8 +180,8 @@
 <!-- colour scale legend -->
 {#if points && points.length > 0}
   <div class="legend">
-    <span>Low</span>
-    <div class="legend-bar"></div>
-    <span>High</span>
+    <span>Few</span>
+    <div class="legend-bar" class:positive={colorScheme === 'positive'} class:negative={colorScheme === 'negative'}></div>
+    <span>Many</span>
   </div>
 {/if}

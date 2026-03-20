@@ -324,23 +324,12 @@
     font-size: 14px; background: #fff; color: #111827; font-family: inherit;
     transition: border-color 0.12s, box-shadow 0.12s;
   }
-  input:focus, select:focus {
+  input:focus {
     outline: none; border-color: #1c3f8a; box-shadow: 0 0 0 3px rgba(28,63,138,0.12);
   }
   input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
   .small { padding: 5px 11px; font-size: 12px; border-radius: 7px; }
 
-  /* ── Notes ── */
-  .notes-row { display: flex; gap: 8px; align-items: flex-start; }
-  .notes-row textarea {
-    flex: 1; padding: 8px 10px; border: 1.5px solid #e5e7eb; border-radius: 8px;
-    font-size: 13px; font-family: inherit; resize: none; min-height: 50px;
-    color: #111827; background: #fff; line-height: 1.4;
-    transition: border-color 0.12s, box-shadow 0.12s;
-  }
-  .notes-row textarea:focus {
-    outline: none; border-color: #1c3f8a; box-shadow: 0 0 0 3px rgba(28,63,138,0.12);
-  }
   .flag-label { white-space: nowrap; font-size: 12px; font-weight: 600; color: #6b7280; }
 
   /* ── Action row ── */
@@ -399,7 +388,7 @@
   .setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 10px; }
   .full-row { grid-column: 1 / -1; }
   .setup-grid label { font-size: 12px; font-weight: 500; flex-direction: column; align-items: flex-start; gap: 3px; color: #6b7280; }
-  .setup-grid input, .setup-grid select { width: 100%; font-size: 13px; padding: 7px 9px; }
+  .setup-grid input { width: 100%; font-size: 13px; padding: 7px 9px; }
 
   @media (max-width: 480px) {
     .setup-grid { grid-template-columns: 1fr; }
