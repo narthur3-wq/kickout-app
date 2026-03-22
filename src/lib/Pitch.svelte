@@ -60,21 +60,23 @@
     }
   }
 
-  function arcPath(acx: number, acy: number, r: number, a0: number, a1: number) {
+  function arcPath(acx: number, acy: number, r: number, a0: number, a1: number, sweepOverride: number | null = null) {
     const sx = acx + r * Math.cos(a0), sy = acy + r * Math.sin(a0);
     const ex = acx + r * Math.cos(a1), ey = acy + r * Math.sin(a1);
     const large = Math.abs(a1 - a0) > Math.PI ? 1 : 0;
-    const sweep = a1 > a0 ? 1 : 0;
+    const sweep = sweepOverride !== null ? sweepOverride : (a1 > a0 ? 1 : 0);
     return `M ${sx} ${sy} A ${r} ${r} 0 ${large} ${sweep} ${ex} ${ey}`;
   }
 
   // D arcs — centred on the goal line (x=0 and x=W), R=13m, curving into the field
-  const pathDLeft  = () => arcPath(0, cy, R_D, -Math.PI / 2,  Math.PI / 2);
-  const pathDRight = () => arcPath(W, cy, R_D,  -Math.PI / 2,  Math.PI / 2);
+  // Left arc: sweep=1 (clockwise in SVG = curves right, into field)
+  // Right arc: sweep=0 (counter-clockwise in SVG = curves left, into field)
+  const pathDLeft  = () => arcPath(0, cy, R_D,  -Math.PI / 2, Math.PI / 2);
+  const pathDRight = () => arcPath(W, cy, R_D,  -Math.PI / 2, Math.PI / 2, 0);
 
   // 40m arcs — same centre, R=40m, curving into the field
-  const path40Left  = () => arcPath(0, cy, R_40, -Math.PI / 2,  Math.PI / 2);
-  const path40Right = () => arcPath(W, cy, R_40,  -Math.PI / 2,  Math.PI / 2);
+  const path40Left  = () => arcPath(0, cy, R_40, -Math.PI / 2, Math.PI / 2);
+  const path40Right = () => arcPath(W, cy, R_40, -Math.PI / 2, Math.PI / 2, 0);
 
   // stored x = side (0–1) → SVG y;  stored y = depth (0–1) → SVG x
   function svgX(o: { x: number; y: number }) { return (flip ? 1 - o.y : o.y) * W; }
@@ -159,24 +161,14 @@
   <!-- distance lines from each end — weight hierarchy -->
   {#each [L13, L20, L45, L65] as d}
     <line x1={d}   y1="0" x2={d}   y2={H}
-      stroke={d === L65 ? 'rgba(255,255,255,0.22)' : d === L13 ? 'rgba(255,255,255,0.52)' : 'rgba(255,255,255,0.72)'}
-      stroke-width={d === L65 ? '0.55' : '0.9'}
-      stroke-dasharray={d === L65 ? '3 3' : 'none'}
+      stroke={d === L65 ? 'rgba(255,255,255,0.62)' : d === L13 ? 'rgba(255,255,255,0.52)' : 'rgba(255,255,255,0.72)'}
+      stroke-width="0.9"
       vector-effect="non-scaling-stroke" />
     <line x1={W-d} y1="0" x2={W-d} y2={H}
-      stroke={d === L65 ? 'rgba(255,255,255,0.22)' : d === L13 ? 'rgba(255,255,255,0.52)' : 'rgba(255,255,255,0.72)'}
-      stroke-width={d === L65 ? '0.55' : '0.9'}
-      stroke-dasharray={d === L65 ? '3 3' : 'none'}
+      stroke={d === L65 ? 'rgba(255,255,255,0.62)' : d === L13 ? 'rgba(255,255,255,0.52)' : 'rgba(255,255,255,0.72)'}
+      stroke-width="0.9"
       vector-effect="non-scaling-stroke" />
   {/each}
-
-  <!-- centre circle -->
-  <circle cx={W/2} cy={cy} r={R_CENTRE}
-    fill="none" stroke="rgba(255,255,255,0.72)" stroke-width="1.0"
-    vector-effect="non-scaling-stroke" />
-  <!-- centre spot -->
-  <circle cx={W/2} cy={cy} r="0.8"
-    fill="rgba(255,255,255,0.72)" vector-effect="non-scaling-stroke" />
 
   <!-- goal small rectangles (parallelograms) — left and right ends -->
   <rect x="0" y={cy - SMALL_W/2} width={SMALL_D} height={SMALL_W}
