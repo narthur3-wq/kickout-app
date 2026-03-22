@@ -70,7 +70,7 @@
   $: wonPoints  = overlays.filter(o => HEAT_POS.has((o.outcome || '').toLowerCase())).map(o => ({ ...o, weight: 1 }));
   $: lostPoints = overlays.filter(o => !HEAT_POS.has((o.outcome || '').toLowerCase())).map(o => ({ ...o, weight: 1 }));
   $: heatPoints = heatMode === 'won' ? wonPoints : heatMode === 'lost' ? lostPoints : overlays.map(o => ({ ...o, weight: 1 }));
-  $: heatScheme = heatMode === 'won' ? 'positive' : heatMode === 'lost' ? 'negative' : 'density';
+  $: heatScheme = heatMode === 'won' ? 'positive' : heatMode === 'lost' ? 'negative' : 'outcome';
 
   function cellColor(pct) {
     const t = Math.max(0, Math.min(1, pct / 100));
@@ -111,6 +111,8 @@
   })();
 
   $: isKickoutView = analyticsEventType === 'kickout' || analyticsEventType === 'ALL';
+  $: hasBreakEvents = vizEvents.some(e => e.contest_type === 'break');
+  $: zoneRetTotal = zoneTableRet.reduce((s, row) => s + row.cells.reduce((rs, c) => rs + c.tot, 0), 0);
 
   const TYPE_LABELS = { 'kickout': 'Kickouts', 'shot': 'Shots', 'turnover': 'Turnovers', 'ALL': 'Analytics' };
   $: panelTitle = TYPE_LABELS[analyticsEventType] || 'Analytics';
@@ -264,10 +266,12 @@
           <button class="vseg {vizMode === 'dots' ? 'vseg-on' : ''}" on:click={() => vizMode = 'dots'}>Dots</button>
           <button class="vseg {vizMode === 'heat' ? 'vseg-on' : ''}" on:click={() => vizMode = 'heat'}>Heat</button>
         </div>
-        <div class="viz-seg">
-          <button class="vseg {overlayMode === 'landing' ? 'vseg-on' : ''}" on:click={() => overlayMode = 'landing'}>Landing</button>
-          <button class="vseg {overlayMode === 'pickup' ? 'vseg-on' : ''}" on:click={() => overlayMode = 'pickup'}>Pickup</button>
-        </div>
+        {#if isKickoutView && hasBreakEvents}
+          <div class="viz-seg">
+            <button class="vseg {overlayMode === 'landing' ? 'vseg-on' : ''}" on:click={() => overlayMode = 'landing'}>Landing</button>
+            <button class="vseg {overlayMode === 'pickup' ? 'vseg-on' : ''}" on:click={() => overlayMode = 'pickup'}>Pickup</button>
+          </div>
+        {/if}
         {#if vizMode === 'heat'}
           <div class="viz-seg">
             <button class="vseg {heatMode === 'all'  ? 'vseg-on' : ''}" on:click={() => heatMode = 'all'}>All</button>
@@ -369,32 +373,36 @@
         <div class="kpi-grid">
           <div class="kpi">
             <div class="kpi-title">Retention by Zone</div>
-            <table class="kpi-table">
-              <thead><tr><th></th><th>L</th><th>C</th><th>R</th></tr></thead>
-              <tbody>
-                {#each zoneTableRet as row}
-                  <tr>
-                    <th>{row.D}</th>
-                    {#each row.cells as c}
-                      {@const trend = retTrend(c.pct, c.zk)}
-                      <td
-                        style="background:{c.tot >= 8 ? cellColor(c.pct) : 'transparent'}"
-                        class="{c.tot > 0 && c.tot < 8 ? 'low-n' : ''}"
-                        title="{c.ret}/{c.tot} retained"
-                      >
-                        {#if c.tot >= 8}
-                          {Math.round(c.pct)}%{#if trend}<span class="trend-{trend}">{trend === 'up' ? ' ▲' : ' ▼'}</span>{/if}
-                        {:else if c.tot > 0}
-                          n={c.tot}
-                        {:else}
-                          —
-                        {/if}
-                      </td>
-                    {/each}
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
+            {#if zoneRetTotal < 5}
+              <p class="hint">Too few events to show zone breakdown</p>
+            {:else}
+              <table class="kpi-table">
+                <thead><tr><th></th><th>L</th><th>C</th><th>R</th></tr></thead>
+                <tbody>
+                  {#each zoneTableRet as row}
+                    <tr>
+                      <th>{row.D}</th>
+                      {#each row.cells as c}
+                        {@const trend = retTrend(c.pct, c.zk)}
+                        <td
+                          style="background:{c.tot >= 8 ? cellColor(c.pct) : 'transparent'}"
+                          class="{c.tot >= 3 && c.tot < 8 ? 'low-n' : ''}"
+                          title="{c.ret}/{c.tot} retained"
+                        >
+                          {#if c.tot >= 8}
+                            {Math.round(c.pct)}%{#if trend}<span class="trend-{trend}">{trend === 'up' ? ' ▲' : ' ▼'}</span>{/if}
+                          {:else if c.tot >= 3}
+                            n={c.tot}
+                          {:else}
+                            —
+                          {/if}
+                        </td>
+                      {/each}
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {/if}
           </div>
 
           <div class="kpi">
@@ -567,7 +575,6 @@
   .filter-flags-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .flag-check { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #6b7280; cursor: pointer; }
   .flag-check input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: #1c3f8a; }
-  .fpill-check input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: #1c3f8a; }
   .reset-btn {
     padding: 5px 11px; border: 1.5px solid #e5e7eb; border-radius: 7px;
     background: #fff; cursor: pointer; font-size: 12px; font-weight: 600;

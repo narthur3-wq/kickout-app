@@ -70,11 +70,11 @@
 
   // D arcs — centred on the goal line (x=0 and x=W), R=13m, curving into the field
   const pathDLeft  = () => arcPath(0, cy, R_D, -Math.PI / 2,  Math.PI / 2);
-  const pathDRight = () => arcPath(W, cy, R_D,  Math.PI / 2, -Math.PI / 2);
+  const pathDRight = () => arcPath(W, cy, R_D,  -Math.PI / 2,  Math.PI / 2);
 
   // 40m arcs — same centre, R=40m, curving into the field
   const path40Left  = () => arcPath(0, cy, R_40, -Math.PI / 2,  Math.PI / 2);
-  const path40Right = () => arcPath(W, cy, R_40,  Math.PI / 2, -Math.PI / 2);
+  const path40Right = () => arcPath(W, cy, R_40,  -Math.PI / 2,  Math.PI / 2);
 
   // stored x = side (0–1) → SVG y;  stored y = depth (0–1) → SVG x
   function svgX(o: { x: number; y: number }) { return (flip ? 1 - o.y : o.y) * W; }
@@ -119,9 +119,14 @@
 <style>
   svg {
     touch-action: manipulation; user-select: none;
-    display: block; width: 100%; cursor: crosshair;
+    display: block; width: 100%; flex: 1; min-height: 0; cursor: crosshair;
   }
   :global(.zlabel) { font-size: 3px; fill: rgba(255,255,255,0.55); pointer-events: none; font-weight: 700; }
+  .zone-legend {
+    display: flex; gap: 12px; justify-content: center;
+    font-size: 10px; color: #6b7280; padding: 4px 0;
+    flex-shrink: 0;
+  }
 </style>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions -->
@@ -230,3 +235,10 @@
     fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="0.55"
     vector-effect="non-scaling-stroke" />
 </svg>
+
+{#if showZoneLabels}
+  <div class="zone-legend">
+    <span>L / C / R — side band</span>
+    <span>20 / 45 / 65 — metres from goal</span>
+  </div>
+{/if}

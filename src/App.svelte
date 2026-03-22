@@ -7,7 +7,7 @@
   import AnalyticsPanel from './lib/AnalyticsPanel.svelte';
   import DigestPanel from './lib/DigestPanel.svelte';
   import CaptureForm from './lib/CaptureForm.svelte';
-  import { supabase, supabaseConfigured } from './lib/supabase.js';
+  import { supabase, supabaseConfigured, userHasAccess } from './lib/supabase.js';
   import { onMount } from 'svelte';
 
   // ── Constants ────────────────────────────────────────────────────────────
@@ -33,6 +33,7 @@
   let eventType = 'kickout';
   let direction = 'ours';
 
+  let shotType = 'point';
   let flagEvent = false;
   let restartReason = '';
 
@@ -48,8 +49,12 @@
   let pitchError = false;
   let activeTab = 'capture';
   let savedFlash = false;
-  let pendingSync = new Set(); // IDs awaiting upload to Supabase
+  let pendingSync = new Map(); // id -> 'upsert' | 'delete'
   let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+  let metaReady = false;
+  let authSubscription = null;
+  let realtimeChannel = null;
+  let realtimeRefreshTimer = null;
 
   // ── Viz filters ───────────────────────────────────────────────────────────
   let fContest = new Set(CONTESTS);
@@ -152,21 +157,80 @@
     }
   }
 
+  // Persist only match metadata after the initial local load has completed.
+  function persistMeta() {
+    try {
+      localStorage.setItem('ko_meta', JSON.stringify({
+        team, opponent, our_goal_at_top: ourGoalAtTop
+      }));
+    } catch (e) {
+      console.error('localStorage meta write failed', e);
+    }
+  }
+
+  $: if (metaReady) {
+    team;
+    opponent;
+    ourGoalAtTop;
+    persistMeta();
+  }
+
   // ── Sync queue ───────────────────────────────────────────────────────────
   function loadPendingSync() {
-    try { pendingSync = new Set(JSON.parse(localStorage.getItem('ko_sync_queue') || '[]')); }
-    catch { pendingSync = new Set(); }
+    try {
+      const raw = JSON.parse(localStorage.getItem('ko_sync_queue') || '[]');
+      if (!Array.isArray(raw)) {
+        pendingSync = new Map();
+        return;
+      }
+
+      // Backwards compatibility: older builds stored a plain array of IDs.
+      if (raw.every(item => typeof item === 'string')) {
+        pendingSync = new Map(raw.map(id => [id, 'upsert']));
+        return;
+      }
+
+      pendingSync = new Map(
+        raw
+          .filter(item => item && typeof item.id === 'string')
+          .map(item => [item.id, item.op === 'delete' ? 'delete' : 'upsert'])
+      );
+    } catch {
+      pendingSync = new Map();
+    }
   }
   function savePendingSync() {
-    try { localStorage.setItem('ko_sync_queue', JSON.stringify([...pendingSync])); } catch {}
+    try {
+      localStorage.setItem(
+        'ko_sync_queue',
+        JSON.stringify([...pendingSync].map(([id, op]) => ({ id, op })))
+      );
+    } catch {}
+  }
+  function queuePendingSync(id, op) {
+    pendingSync.set(id, op);
+    savePendingSync();
+  }
+  function clearPendingSync(id) {
+    pendingSync.delete(id);
+    savePendingSync();
   }
   async function flushSyncQueue() {
     if (!supabase || !user || pendingSync.size === 0 || !isOnline) return;
-    for (const id of [...pendingSync]) {
+    for (const [id, op] of [...pendingSync]) {
+      if (op === 'delete') {
+        const { error } = await supabase.from('events').delete().eq('id', id);
+        if (!error) clearPendingSync(id);
+        continue;
+      }
+
       const ev = events.find(e => e.id === id);
-      if (!ev) { pendingSync.delete(id); continue; }
+      if (!ev) {
+        clearPendingSync(id);
+        continue;
+      }
       const { error } = await supabase.from('events').upsert(ev);
-      if (!error) { pendingSync.delete(id); savePendingSync(); }
+      if (!error) clearPendingSync(id);
     }
     if (pendingSync.size === 0) syncStatus = 'synced';
   }
@@ -178,17 +242,20 @@
     try {
       const { data, error } = await supabase.from('events').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      if (data && data.length > 0) {
-        // Merge: Supabase is source of truth; keep any local-only events not yet uploaded
-        const remoteIds = new Set(data.map(e => e.id));
-        const localOnly = events.filter(e => !remoteIds.has(e.id));
-        events = [...data, ...localOnly];
-        // Push local-only events up to Supabase
-        if (localOnly.length > 0) {
-          await supabase.from('events').upsert(localOnly);
-        }
-        persistLocal();
+      const remoteEvents = data || [];
+      // Merge: Supabase is source of truth for events not in the pending queue.
+      // Any event currently queued (pending upsert or delete) is authoritative locally —
+      // do not overwrite it with the remote version, and do not re-add locally deleted events.
+      const remoteIds = new Set(remoteEvents.map(e => e.id));
+      const localOnly = events.filter(e => !remoteIds.has(e.id) && !pendingSync.has(e.id));
+      const remoteFiltered = remoteEvents.filter(e => !pendingSync.has(e.id));
+      const pendingLocal = events.filter(e => pendingSync.get(e.id) === 'upsert');
+      events = [...remoteFiltered, ...localOnly, ...pendingLocal];
+      // Push local-only events up to Supabase
+      if (localOnly.length > 0) {
+        await supabase.from('events').upsert(localOnly);
       }
+      persistLocal();
       syncStatus = 'synced';
       flushSyncQueue();
     } catch (e) {
@@ -198,44 +265,124 @@
   }
 
   async function upsertToSupabase(ev) {
-    if (!supabase || !user) {
-      if (user) { pendingSync.add(ev.id); savePendingSync(); }
+    if (!supabase || !user || !isOnline) {
+      if (user) queuePendingSync(ev.id, 'upsert');
       return;
     }
     const { error } = await supabase.from('events').upsert(ev);
     if (error) {
       console.error('Supabase upsert failed', ev.id, error.message);
-      pendingSync.add(ev.id); savePendingSync();
+      queuePendingSync(ev.id, 'upsert');
     } else {
-      pendingSync.delete(ev.id); savePendingSync();
+      clearPendingSync(ev.id);
     }
   }
 
   async function deleteFromSupabase(id) {
-    if (!supabase || !user) return;
+    if (!supabase || !user || !isOnline) {
+      if (user) queuePendingSync(id, 'delete');
+      return;
+    }
     const { error } = await supabase.from('events').delete().eq('id', id);
-    if (error) console.error('Supabase delete failed', id, error.message);
+    if (error) {
+      console.error('Supabase delete failed', id, error.message);
+      queuePendingSync(id, 'delete');
+    } else {
+      clearPendingSync(id);
+    }
+  }
+
+  function scheduleRealtimeSync() {
+    if (realtimeRefreshTimer || !isOnline) return;
+    realtimeRefreshTimer = setTimeout(async () => {
+      realtimeRefreshTimer = null;
+      await syncFromSupabase();
+    }, 300);
+  }
+
+  function stopRealtimeSync() {
+    if (realtimeRefreshTimer) {
+      clearTimeout(realtimeRefreshTimer);
+      realtimeRefreshTimer = null;
+    }
+    if (realtimeChannel && supabase) {
+      supabase.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
+  }
+
+  function startRealtimeSync() {
+    if (!supabase || !user) return;
+    stopRealtimeSync();
+    realtimeChannel = supabase
+      .channel(`events-live-${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, (payload) => {
+        const changedId = payload.new?.id ?? payload.old?.id;
+        if (changedId && pendingSync.has(changedId)) return;
+        scheduleRealtimeSync();
+      })
+      .subscribe();
   }
 
   // ── Auth ──────────────────────────────────────────────────────────────────
-  onMount(async () => {
+  onMount(() => {
     loadFromLocalStorage();
+    metaReady = true;
     loadPendingSync();
-    window.addEventListener('online',  () => { isOnline = true;  flushSyncQueue(); });
-    window.addEventListener('offline', () => { isOnline = false; });
 
-    if (supabaseConfigured) {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) { user = session.user; await syncFromSupabase(); }
-      supabase.auth.onAuthStateChange((_event, session) => {
-        user = session?.user ?? null;
-        if (user) syncFromSupabase();
-      });
-    }
-    authChecked = true;
+    const handleOnline = () => {
+      isOnline = true;
+      flushSyncQueue();
+      scheduleRealtimeSync();
+    };
+    const handleOffline = () => {
+      isOnline = false;
+    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    let disposed = false;
+    (async () => {
+      if (supabaseConfigured) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (disposed) return;
+        if (session) {
+          if (await userHasAccess()) {
+            user = session.user;
+            await syncFromSupabase();
+            if (!disposed) startRealtimeSync();
+          } else {
+            await supabase.auth.signOut();
+          }
+        }
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+          if (!session?.user) {
+            user = null;
+            stopRealtimeSync();
+            return;
+          }
+          if (!(await userHasAccess())) {
+            await supabase.auth.signOut();
+            user = null;
+            stopRealtimeSync();
+            return;
+          }
+          user = session.user;
+          await syncFromSupabase();
+          if (!disposed) startRealtimeSync();
+        });
+        authSubscription = subscription;
+      }
+      authChecked = true;
+    })();
 
     return () => {
+      disposed = true;
       if (timerInterval) clearInterval(timerInterval);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      authSubscription?.unsubscribe();
+      stopRealtimeSync();
     };
   });
 
@@ -336,10 +483,11 @@
       break_displacement_m: contest === 'break'
         ? +breakDispM(landing.x, landing.y, pickup.x, pickup.y).toFixed(2)
         : null,
-      score_us:    currentMatchScore.us.str,
-      score_them:  currentMatchScore.them.str,
+      score_us:    editingId ? (events.find(r => r.id === editingId)?.score_us ?? currentMatchScore.us.str) : currentMatchScore.us.str,
+      score_them:  editingId ? (events.find(r => r.id === editingId)?.score_them ?? currentMatchScore.them.str) : currentMatchScore.them.str,
       flag:        !!flagEvent,
       restart_reason: eventType === 'kickout' ? (restartReason || null) : null,
+      shot_type: eventType === 'shot' ? shotType : null,
       ko_sequence: koSequence,
       schema_version: 1,
     };
@@ -363,6 +511,7 @@
     targetPlayer = '';
     flagEvent = false;
     restartReason = '';
+    shotType = 'point';
 
     // Haptic + visual feedback
     navigator.vibrate?.(50);
@@ -382,9 +531,17 @@
   function undoLast() {
     if (undoStack.length === 0) return;
     if (!confirm('Remove the last saved event?')) return;
-    events = undoStack[undoStack.length - 1];
+    const nextEvents = undoStack[undoStack.length - 1];
+    const prevEvents = events;
+    events = nextEvents;
     undoStack = undoStack.slice(0, -1);
     persistLocal();
+
+    const nextIds = new Set(nextEvents.map((e) => e.id));
+    for (const ev of nextEvents) upsertToSupabase(ev);
+    for (const ev of prevEvents) {
+      if (!nextIds.has(ev.id)) deleteFromSupabase(ev.id);
+    }
   }
 
   function delEvent(id) {
@@ -394,6 +551,22 @@
     persistLocal();
     if (editingId === id) { editingId = null; clearPoints(); }
     deleteFromSupabase(id);
+  }
+
+  async function deleteAllEvents() {
+    if (events.length === 0) return;
+    if (!confirm(`Delete all ${events.length} events? This cannot be undone.`)) return;
+    undoStack = [...undoStack.slice(-9), [...events]];
+    const allIds = events.map(e => e.id);
+    events = [];
+    if (editingId) {
+      editingId = null;
+      clearPoints();
+    }
+    persistLocal();
+    for (const id of allIds) {
+      deleteFromSupabase(id);
+    }
   }
 
   function loadToForm(e) {
@@ -408,18 +581,18 @@
     breakOutcome = e.break_outcome || '';
     targetPlayer = e.target_player || '';
     matchDate    = e.match_date || (e.created_at || '').slice(0,10) || new Date().toISOString().slice(0,10);
-    landing      = { x: e.x, y: e.y };
+    ourGoalAtTop = e.our_goal_at_top !== undefined ? !!e.our_goal_at_top : true;
+    // De-normalize stored y back to display coords using the event's saved orientation.
+    landing      = { x: e.x, y: ourGoalAtTop ? e.y : 1 - e.y };
     pickup       = (e.pickup_x == null || e.pickup_y == null)
       ? { x: NaN, y: NaN }
-      : { x: e.pickup_x, y: e.pickup_y };
+      : { x: e.pickup_x, y: ourGoalAtTop ? e.pickup_y : 1 - e.pickup_y };
     // Restore new fields
     flagEvent      = !!e.flag;
     restartReason  = e.restart_reason || '';
     eventType      = e.event_type  || 'kickout';
-    direction    = e.direction   || 'ours';
-    // NOTE: ourGoalAtTop is NOT restored from the event so the analyst's
-    // current orientation preference is preserved for subsequent captures.
-    // Don't force-expand match setup — only open if team/opponent differ from current session
+    direction      = e.direction   || 'ours';
+    shotType       = e.shot_type || 'point';
     setupOpen = false;
     activeTab = 'capture';
   }
@@ -432,7 +605,7 @@
       'x','y','x_m','y_m','depth_from_own_goal_m','side_band','depth_band','zone_code','our_goal_at_top',
       'pickup_x','pickup_y','pickup_x_m','pickup_y_m','break_displacement_m',
       'score_us','score_them','flag','ko_sequence','event_type','direction',
-      'restart_reason','schema_version',
+      'restart_reason','shot_type','schema_version',
     ];
     const rows = [headers.join(',')].concat(
       subset.map(e => headers.map(h => {
@@ -483,7 +656,7 @@
         persistLocal();
         // Sync new events to Supabase
         if (newEvents.length > 0) {
-          await supabase?.from('events').upsert(newEvents);
+          for (const ev of newEvents) upsertToSupabase(ev);
         }
         alert(`Imported ${newEvents.length} new event(s). ${imported.length - newEvents.length} duplicate(s) skipped.`);
       } catch (e) {
@@ -636,6 +809,10 @@
     for (const e of vizEvents) if (e.contest_type === 'break') { tot++; if (e.break_outcome === 'won') won++; }
     return { tot, won, pct: tot ? (100 * won / tot) : 0 };
   })();
+
+  // ── Current match events (for Digest tab) ────────────────────────────────
+  $: currentKey = `${matchDate}|${norm(team)}|${norm(opponent)}`;
+  $: currentMatchEvents = events.filter(e => matchKey(e) === currentKey);
 
   // ── Timeline ──────────────────────────────────────────────────────────────
   $: timelineEvents = [...vizEvents].sort((a, b) => {
@@ -814,7 +991,7 @@
       {/if}
       <button class="flip-pill" on:click={() => ourGoalAtTop = !ourGoalAtTop} title="Swap which goal end is ours on the pitch (use at half-time if not auto-detected)">End ⇄</button>
       <button class="icon-btn" title="{wakeLock ? 'Screen locked on' : 'Keep screen on'}"
-        on:click={toggleWakeLock}>{wakeLock ? '🔆' : '🔅'}</button>
+        on:click={toggleWakeLock}>{wakeLock ? 'Screen on' : 'Screen off'}</button>
       {#if supabaseConfigured && user}
         <span class="user-email">{user.email}</span>
         <button class="hdr-sm" on:click={signOut}>Sign out</button>
@@ -846,6 +1023,13 @@
 
   <!-- ══ CAPTURE TAB ══ -->
   {#if activeTab === 'capture'}
+  <div class="match-ctx-bar">
+    {#if team || opponent}
+      {team || '—'} vs {opponent || '—'}{matchDate ? ' · ' + matchDate : ''}
+    {:else}
+      Set up match →
+    {/if}
+  </div>
   <div class="capture-layout">
 
     <!-- Left: form controls -->
@@ -865,6 +1049,7 @@
         bind:period
         bind:ourGoalAtTop
         bind:restartReason
+        bind:shotType
         {CONTESTS}
         {BREAK_OUTS}
         {opponentChoices}
@@ -906,6 +1091,7 @@
           landing={landing}
           pickup={pickup}
           overlays={[]}
+          flip={!ourGoalAtTop}
           on:landed={onLanding}
           on:picked={onPickup}
         />
@@ -933,7 +1119,7 @@
   <!-- ══ DIGEST TAB ══ -->
   {:else if activeTab === 'digest'}
   <div class="full-panel">
-    <DigestPanel {events} {periodFilter} />
+    <DigestPanel events={currentMatchEvents} {periodFilter} />
   </div>
 
   <!-- ══ ANALYTICS TABS (Kickouts / Shots / Turnovers) ══ -->
@@ -977,6 +1163,11 @@
   <!-- ══ EVENTS TAB ══ -->
   {:else}
   <div class="full-panel">
+    <div class="events-toolbar-danger">
+      <button class="btn-delete-all" on:click={deleteAllEvents} disabled={events.length === 0}>
+        Delete all ({events.length})
+      </button>
+    </div>
     <EventsTable
       {events}
       {editingId}
@@ -1072,7 +1263,7 @@
   .chip.pending { background: rgba(245,158,11,0.15);  color: #f59e0b; }
 
   .match-ctx-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0; }
-  .match-score { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.7); letter-spacing: 0.04em; }
+  .match-score { font-size: 15px; font-weight: 700; color: rgba(255,255,255,0.95); letter-spacing: 0.04em; }
 
   /* Flip button — dark header */
   .flip-pill {
@@ -1109,6 +1300,27 @@
   .tab-count { background: #f3f4f6; color: #b0b8c4; font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 99px; }
   .tab-btn.active .tab-count { background: #dbeafe; color: #1e40af; }
   .edit-dot { color: #f59e0b; font-size: 10px; }
+
+  /* ── Match context bar (Capture tab, always visible) ── */
+  .match-ctx-bar {
+    font-size: 12px; font-weight: 600; color: #374151;
+    padding: 5px 14px; background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    flex-shrink: 0;
+  }
+
+  /* ── Events tab danger toolbar ── */
+  .events-toolbar-danger {
+    display: flex; justify-content: flex-end; margin-bottom: 8px;
+  }
+  .btn-delete-all {
+    padding: 5px 12px; font-size: 12px; font-weight: 600;
+    background: #fff; color: #dc2626;
+    border: 1.5px solid #fca5a5; border-radius: 8px;
+    cursor: pointer; font-family: inherit; transition: background 0.12s, border-color 0.12s;
+  }
+  .btn-delete-all:hover:not(:disabled) { background: #fef2f2; border-color: #dc2626; }
+  .btn-delete-all:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* ── Capture layout ── */
   .capture-layout { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
@@ -1156,7 +1368,7 @@
   .pitch-card {
     border: none; border-radius: 10px;
     box-shadow: 0 6px 28px rgba(0,50,0,0.22), 0 2px 8px rgba(0,0,0,0.12);
-    overflow: hidden; flex-shrink: 0;
+    overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; background: #3d7642;
   }
   .pitch-panel.pitch-error { outline: 3px solid #dc2626; outline-offset: 2px; animation: pitchFlash 0.4s ease 2; }
   @keyframes pitchFlash { 0%,100% { outline-color: #dc2626; } 50% { outline-color: #fca5a5; } }

@@ -1,5 +1,5 @@
 <script>
-  import { supabase } from './supabase.js'
+  import { supabase, userHasAccess } from './supabase.js'
   import { createEventDispatcher } from 'svelte'
 
   const dispatch = createEventDispatcher()
@@ -9,21 +9,15 @@
   async function signIn() {
     error = ''; loading = true
     const { data, error: err } = await supabase.auth.signInWithPassword({ email, password })
+    if (err) { loading = false; error = err.message; return }
+    const allowed = await userHasAccess()
     loading = false
-    if (err) { error = err.message; return }
-    dispatch('login', data.session)
-  }
-
-  async function signUp() {
-    error = ''; loading = true
-    const { data, error: err } = await supabase.auth.signUp({ email, password })
-    loading = false
-    if (err) { error = err.message; return }
-    if (data.session) {
-      dispatch('login', data.session)
-    } else {
-      error = 'Check your email to confirm your account, then sign in.'
+    if (!allowed) {
+      await supabase.auth.signOut()
+      error = 'This account has not been granted beta access.'
+      return
     }
+    dispatch('login', data.session)
   }
 
   function handleKey(e) {
@@ -69,9 +63,7 @@
       <button class="primary" on:click={signIn} disabled={loading || !email || !password}>
         {loading ? 'Signing in…' : 'Sign in'}
       </button>
-      <button class="secondary" on:click={signUp} disabled={loading || !email || !password}>
-        Create account
-      </button>
+      <p class="invite-note">Access by invitation only — contact your administrator.</p>
     </div>
   </div>
 </div>
@@ -131,9 +123,8 @@
   button:disabled { opacity: 0.5; cursor: not-allowed; }
   .primary { background: #1c3f8a; color: #fff; border: none; margin-top: 4px; }
   .primary:hover:not(:disabled) { background: #163270; }
-  .secondary {
-    background: #fff; color: #374151;
-    border: 1.5px solid #e2e8f0;
+  .invite-note {
+    text-align: center; font-size: 12px; color: #94a3b8;
+    margin: 4px 0 0; padding: 0;
   }
-  .secondary:hover:not(:disabled) { background: #f8fafc; }
 </style>

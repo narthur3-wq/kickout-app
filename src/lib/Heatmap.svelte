@@ -6,7 +6,8 @@
   // points: [{ x:0..1, y:0..1, weight?:number }]
   export let points = [];
 
-  // colour scheme: 'density' (blue→red), 'positive' (→green), 'negative' (→red)
+  // colour scheme: 'density' (blue→red), 'positive' (→green), 'negative' (→red),
+  //               'outcome' (green where won, red where lost — uses point.outcome field)
   export let colorScheme = 'density';
 
   // tuning
@@ -20,6 +21,9 @@
   let container;   // wrapper around the pitch
   let canvas;      // overlay canvas
   let ro;          // ResizeObserver
+
+  // Positive-outcome outcomes (same set used in AnalyticsPanel)
+  const HEAT_POS = new Set(['retained','score','won','goal','point']);
 
   function draw() {
     if (!container || !canvas) return;
@@ -43,7 +47,15 @@
     // Build grid in the same aspect as the pitch
     const C = cols;
     const R = Math.round(C * (H / W));
-    const grid = Array.from({ length: R }, () => new Float32Array(C));
+
+    // For 'outcome' mode we keep separate won/lost grids; otherwise a single grid.
+    const grid    = Array.from({ length: R }, () => new Float32Array(C));
+    const gridWon  = colorScheme === 'outcome'
+      ? Array.from({ length: R }, () => new Float32Array(C))
+      : null;
+    const gridLost = colorScheme === 'outcome'
+      ? Array.from({ length: R }, () => new Float32Array(C))
+      : null;
 
     // Splat each point with a small radial kernel
     const r = Math.max(1, Math.floor(radius));
@@ -57,13 +69,21 @@
       const cx = Math.floor(depth * C);  // depth → column (horizontal)
       const cy = Math.floor(side  * R);  // side  → row    (vertical)
       const w = p.weight ?? 1;
+      const isPos = colorScheme === 'outcome'
+        ? HEAT_POS.has((p.outcome || '').toLowerCase())
+        : null;
       for (let dy = -r; dy <= r; dy++) {
         const ry = cy + dy; if (ry < 0 || ry >= R) continue;
         for (let dx = -r; dx <= r; dx++) {
           const rx = cx + dx; if (rx < 0 || rx >= C) continue;
           const dist2 = dx*dx + dy*dy;
           const k = Math.exp(-dist2 / (2 * sigma2));
-          grid[ry][rx] += w * k;
+          if (colorScheme === 'outcome') {
+            if (isPos) gridWon[ry][rx]  += w * k;
+            else        gridLost[ry][rx] += w * k;
+          } else {
+            grid[ry][rx] += w * k;
+          }
         }
       }
     }
@@ -93,29 +113,67 @@
       }
       return v;
     }
-    let smoothed = grid;
-    for (let i=0;i<smooth;i++) smoothed = blur(smoothed);
-
-    // Normalise and draw
-    let max = 0;
-    for (let y=0;y<R;y++) for (let x=0;x<C;x++) if (smoothed[y][x] > max) max = smoothed[y][x];
-    if (max <= 0) return;
 
     const cellW = cssW / C, cellH = cssH / R;
-    for (let y=0;y<R;y++) {
-      for (let x=0;x<C;x++) {
-        const t = Math.sqrt(smoothed[y][x] / max); // lift lows
-        if (t <= 0) continue;
-        ctx.fillStyle = heatColor(t);
-        ctx.fillRect(x*cellW, y*cellH, cellW+1, cellH+1);
+
+    if (colorScheme === 'outcome') {
+      // Smooth each grid independently, then compute net score per cell.
+      let smWon  = gridWon;
+      let smLost = gridLost;
+      for (let i = 0; i < smooth; i++) { smWon = blur(smWon); smLost = blur(smLost); }
+
+      // Find max of either grid for normalisation.
+      let maxVal = 0;
+      for (let y=0;y<R;y++) for (let x=0;x<C;x++) {
+        if (smWon[y][x]  > maxVal) maxVal = smWon[y][x];
+        if (smLost[y][x] > maxVal) maxVal = smLost[y][x];
+      }
+      if (maxVal <= 0) return;
+
+      for (let y=0;y<R;y++) {
+        for (let x=0;x<C;x++) {
+          const w = smWon[y][x]  / maxVal;
+          const l = smLost[y][x] / maxVal;
+          if (w <= 0 && l <= 0) continue;
+          // net in [-1, 1]: +1 = all won, -1 = all lost
+          const net = (w - l) / Math.max(w + l, 0.0001);
+          // intensity = total activity, sqrt-lifted
+          const intensity = Math.sqrt((w + l) / 2);
+          const alpha = Math.min(0.85, 0.08 + intensity * 0.77);
+          if (net >= 0) {
+            // green — stronger as net approaches +1
+            ctx.fillStyle = `hsla(105, 100%, 62%, ${alpha * net + alpha * 0.15})`;
+          } else {
+            // red — stronger as net approaches -1
+            ctx.fillStyle = `hsla(0, 90%, 62%, ${alpha * (-net) + alpha * 0.15})`;
+          }
+          ctx.fillRect(x*cellW, y*cellH, cellW+1, cellH+1);
+        }
+      }
+    } else {
+      let smoothed = grid;
+      for (let i=0;i<smooth;i++) smoothed = blur(smoothed);
+
+      // Normalise and draw
+      let max = 0;
+      for (let y=0;y<R;y++) for (let x=0;x<C;x++) if (smoothed[y][x] > max) max = smoothed[y][x];
+      if (max <= 0) return;
+
+      for (let y=0;y<R;y++) {
+        for (let x=0;x<C;x++) {
+          const t = Math.sqrt(smoothed[y][x] / max); // lift lows
+          if (t <= 0) continue;
+          ctx.fillStyle = heatColor(t);
+          ctx.fillRect(x*cellW, y*cellH, cellW+1, cellH+1);
+        }
       }
     }
   }
 
   function heatColor(t) {
     const a = Math.min(0.85, 0.08 + t * 0.77);
-    if (colorScheme === 'positive') return `hsla(120, 68%, 36%, ${a})`;
-    if (colorScheme === 'negative') return `hsla(0, 72%, 46%, ${a})`;
+    if (colorScheme === 'positive') return `hsla(105, 100%, 62%, ${a})`;
+    if (colorScheme === 'negative') return `hsla(0, 90%, 62%, ${a})`;
     // density: blue→cyan→lime→yellow→red
     const hue = (1 - t) * 220;
     return `hsla(${hue}, 85%, 50%, ${a})`;
@@ -155,10 +213,18 @@
     );
   }
   .legend-bar.positive {
-    background: linear-gradient(to right, hsla(120,68%,36%,0.05), hsla(120,68%,36%,0.85));
+    background: linear-gradient(to right, hsla(105,100%,62%,0.05), hsla(105,100%,62%,0.85));
   }
   .legend-bar.negative {
-    background: linear-gradient(to right, hsla(0,72%,46%,0.05), hsla(0,72%,46%,0.85));
+    background: linear-gradient(to right, hsla(0,90%,62%,0.05), hsla(0,90%,62%,0.85));
+  }
+  .legend-bar.outcome {
+    background: linear-gradient(to right,
+      hsla(0,90%,62%,0.85),
+      hsla(0,90%,62%,0.15),
+      hsla(105,100%,62%,0.15),
+      hsla(105,100%,62%,0.85)
+    );
   }
 </style>
 
@@ -179,9 +245,17 @@
 
 <!-- colour scale legend -->
 {#if points && points.length > 0}
-  <div class="legend">
-    <span>Few</span>
-    <div class="legend-bar" class:positive={colorScheme === 'positive'} class:negative={colorScheme === 'negative'}></div>
-    <span>Many</span>
-  </div>
+  {#if colorScheme === 'outcome'}
+    <div class="legend">
+      <span>Lost</span>
+      <div class="legend-bar outcome"></div>
+      <span>Won</span>
+    </div>
+  {:else}
+    <div class="legend">
+      <span>Few</span>
+      <div class="legend-bar" class:positive={colorScheme === 'positive'} class:negative={colorScheme === 'negative'}></div>
+      <span>Many</span>
+    </div>
+  {/if}
 {/if}

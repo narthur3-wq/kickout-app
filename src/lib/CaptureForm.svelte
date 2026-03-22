@@ -32,6 +32,9 @@
   export let restartReason = '';
   const RESTART_REASONS = ['Score','Wide','Foul','Out'];
 
+  // ── Shot type (Wide / Blocked goal-attempt flag) ──────────────────────
+  export let shotType = 'point'; // 'point' | 'goal'
+
   // ── Visual feedback ───────────────────────────────────────────────────
   export let savedFlash = false;
 
@@ -57,6 +60,9 @@
   $: if (activeOutcomes.length > 0 && !activeOutcomes.includes(outcome)) {
     outcome = activeOutcomes[0];
   }
+
+  // Reset shotType when outcome is no longer Wide or Blocked
+  $: if (outcome !== 'Wide' && outcome !== 'Blocked') shotType = 'point';
 
   const EVENT_TYPES = ['kickout', 'turnover', 'shot'];
   const JERSEY_NUMS = Array.from({ length: 15 }, (_, i) => i + 1);
@@ -119,6 +125,9 @@
         >{c}</button>
       {/each}
     </div>
+    {#if contest === 'break'}
+      <p class="break-hint">Tap pitch: 1 landing · 2 pickup. Then set break outcome below.</p>
+    {/if}
   {/if}
 
   <!-- ── Outcome ── -->
@@ -131,6 +140,18 @@
       >{o}</button>
     {/each}
   </div>
+
+  {#if eventType === 'shot' && (outcome === 'Wide' || outcome === 'Blocked')}
+    <div class="shot-type-row">
+      <span class="shot-type-label">Goal attempt?</span>
+      <div class="shot-type-toggle">
+        <button class="stt-btn {shotType === 'point' ? 'stt-active' : ''}"
+          on:click={() => shotType = 'point'} type="button">No</button>
+        <button class="stt-btn {shotType === 'goal' ? 'stt-active' : ''}"
+          on:click={() => shotType = 'goal'} type="button">Yes</button>
+      </div>
+    </div>
+  {/if}
 
   <!-- ── Break outcome (kickout + break only) ── -->
   {#if eventType === 'kickout' && contest === 'break'}
@@ -261,6 +282,13 @@
     box-shadow: 0 1px 3px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.05);
   }
   .seg-dir:active { transform: scale(0.97); }
+
+  /* ── Break hint ── */
+  .break-hint {
+    font-size: 11px; color: #6b7280; margin: 4px 0 0;
+    padding: 5px 8px; background: #f3f4f6; border-radius: 6px;
+    line-height: 1.4;
+  }
 
   /* ── Seg buttons (contest / break outcome) ── */
   .btn-group { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -394,5 +422,24 @@
     .setup-grid { grid-template-columns: 1fr; }
     .outcome-grid { grid-template-columns: repeat(3, 1fr); }
     .form-content { padding: 12px 14px 16px; }
+  }
+
+  /* ── Shot type toggle (Wide / Blocked goal-attempt) ── */
+  .shot-type-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 0;
+  }
+  .shot-type-label {
+    font-size: 11px; font-weight: 700; color: #6b7280;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .shot-type-toggle { display: flex; gap: 4px; }
+  .stt-btn {
+    padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    border: 1.5px solid #e5e7eb; background: #f9fafb; color: #6b7280;
+    cursor: pointer; font-family: inherit; transition: all 0.1s;
+  }
+  .stt-btn.stt-active {
+    background: #1c3f8a; border-color: #1c3f8a; color: #fff;
   }
 </style>
