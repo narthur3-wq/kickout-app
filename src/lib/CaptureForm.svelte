@@ -14,17 +14,11 @@
   export let flagEvent    = false;
 
   // ── Match setup (bindable) ────────────────────────────────────────────
-  export let setupOpen    = true;
-  export let team         = '';
-  export let opponent     = '';
-  export let matchDate    = new Date().toISOString().slice(0, 10);
   export let period       = 'H1';
-  export let ourGoalAtTop = true;
 
   // ── Read-only props ───────────────────────────────────────────────────
   export let CONTESTS        = [];
   export let BREAK_OUTS      = [];
-  export let opponentChoices = [];
   export let editingId       = null;
   export let undoStack       = [];
 
@@ -42,7 +36,6 @@
   export let onSave         = () => {};
   export let onClearPoints  = () => {};
   export let onUndoLast     = () => {};
-  export let onPersist      = () => {};
 
   // ── Outcome sets per event type + direction ───────────────────────────
   const OUTCOME_MAP = {
@@ -221,25 +214,6 @@
     </div>
   </div>
 
-  <!-- ── Match setup (collapsible) ── -->
-  <details bind:open={setupOpen} class="setup-details">
-    <summary>Match setup
-      <span class="setup-summary">{team || '?'} vs {opponent || '?'} · {matchDate} · {period}</span>
-    </summary>
-    <div class="setup-grid">
-      <label>Team     <input bind:value={team}     placeholder="Clontarf"/></label>
-      <label>Opponent
-        <input bind:value={opponent} placeholder="Crokes" on:change={onPersist} list="opps"/>
-        <datalist id="opps">
-          {#each opponentChoices as [,lbl]}<option value={lbl}></option>{/each}
-        </datalist>
-      </label>
-      <label>Date     <input type="date" bind:value={matchDate}/></label>
-      <label class="full-row">
-        <input type="checkbox" bind:checked={ourGoalAtTop}/> Our goal at left end
-      </label>
-    </div>
-  </details>
 
 </div>
 
@@ -402,21 +376,6 @@
   button:hover { background: #f9fafb; }
   button:disabled { opacity: 0.35; cursor: not-allowed; }
 
-  /* ── Match setup (collapsible) ── */
-  .setup-details { margin-top: 18px; border-top: 1px solid #f0f2f0; padding-top: 12px; }
-  .setup-details summary {
-    cursor: pointer; font-size: 10px; font-weight: 800; color: #9ca3af;
-    list-style: none; display: flex; align-items: center; gap: 8px; padding: 4px 0;
-    text-transform: uppercase; letter-spacing: 0.08em; user-select: none;
-  }
-  .setup-details summary::-webkit-details-marker { display: none; }
-  .setup-details summary::before { content: '▶'; font-size: 7px; transition: transform 0.2s; color: #c4c9c4; }
-  .setup-details[open] summary::before { transform: rotate(90deg); }
-  .setup-summary { font-weight: 400; color: #b0b5b0; font-size: 11px; text-transform: none; letter-spacing: 0; }
-  .setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 10px; }
-  .full-row { grid-column: 1 / -1; }
-  .setup-grid label { font-size: 12px; font-weight: 500; flex-direction: column; align-items: flex-start; gap: 3px; color: #6b7280; }
-  .setup-grid input { width: 100%; font-size: 13px; padding: 7px 9px; }
 
   @media (max-width: 480px) {
     .setup-grid { grid-template-columns: 1fr; }

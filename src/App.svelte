@@ -41,7 +41,7 @@
   let events = [];
   let editingId = null;
   let undoStack = []; // last saved state for undo
-  let setupOpen = true;
+  let setupModalOpen = false;
   let syncStatus = ''; // '', 'syncing', 'synced', 'error'
   let wakeLock = null;
   let backupReminder = false;
@@ -593,7 +593,6 @@
     eventType      = e.event_type  || 'kickout';
     direction      = e.direction   || 'ours';
     shotType       = e.shot_type || 'point';
-    setupOpen = false;
     activeTab = 'capture';
   }
 
@@ -1023,13 +1022,36 @@
 
   <!-- ══ CAPTURE TAB ══ -->
   {#if activeTab === 'capture'}
-  <div class="match-ctx-bar">
+  <button class="match-ctx-bar" on:click={() => setupModalOpen = true}>
     {#if team || opponent}
-      {team || '—'} vs {opponent || '—'}{matchDate ? ' · ' + matchDate : ''}
+      {team || '—'} vs {opponent || '—'}{matchDate ? ' · ' + matchDate : ''} <span class="ctx-edit">✎</span>
     {:else}
-      Set up match →
+      Tap to set up match →
     {/if}
-  </div>
+  </button>
+
+  <!-- Match setup modal -->
+  {#if setupModalOpen}
+    <div class="modal-backdrop" role="button" tabindex="-1" on:click={() => setupModalOpen = false} on:keydown={(e) => e.key === 'Escape' && (setupModalOpen = false)}>
+      <div class="modal-card" role="dialog" aria-label="Match setup" on:click|stopPropagation on:keydown|stopPropagation>
+        <div class="modal-header">
+          <span class="modal-title">Match Setup</span>
+          <button class="modal-close" on:click={() => setupModalOpen = false}>✕</button>
+        </div>
+        <div class="setup-grid">
+          <label>Team<input bind:value={team} placeholder="Clontarf" /></label>
+          <label>Opponent
+            <input bind:value={opponent} placeholder="Crokes" on:change={persistLocal} list="opps-modal"/>
+            <datalist id="opps-modal">
+              {#each opponentChoices as [,lbl]}<option value={lbl}></option>{/each}
+            </datalist>
+          </label>
+          <label class="full-row">Date<input type="date" bind:value={matchDate} /></label>
+        </div>
+        <button class="modal-done" on:click={() => setupModalOpen = false}>Done</button>
+      </div>
+    </div>
+  {/if}
   <div class="capture-layout">
 
     <!-- Left: form controls -->
@@ -1042,24 +1064,17 @@
         bind:breakOutcome
         bind:targetPlayer
         bind:flagEvent
-        bind:setupOpen
-        bind:team
-        bind:opponent
-        bind:matchDate
         bind:period
-        bind:ourGoalAtTop
         bind:restartReason
         bind:shotType
         {CONTESTS}
         {BREAK_OUTS}
-        {opponentChoices}
         {editingId}
         {undoStack}
         {savedFlash}
         onSave={saveEvent}
         onClearPoints={clearPoints}
         onUndoLast={undoLast}
-        onPersist={persistLocal}
         on:periodChange={(e) => {
           const p = e.detail;
           const wasH2 = period === 'H2';
@@ -1084,7 +1099,8 @@
       </div>
       <div class="pitch-card">
         <div class="goal-indicator">
-          {ourGoalAtTop ? '◀ Your goal — left end' : 'Your goal — right end ▶'}
+          <span>{ourGoalAtTop ? '◀ Your goal — left end' : 'Your goal — right end ▶'}</span>
+          <button class="flip-btn" on:click={() => ourGoalAtTop = !ourGoalAtTop} title="Swap ends">⇄ Swap ends</button>
         </div>
         <Pitch
           contestType={contest}
@@ -1305,9 +1321,73 @@
   .match-ctx-bar {
     font-size: 12px; font-weight: 600; color: #374151;
     padding: 5px 14px; background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
-    flex-shrink: 0;
+    border-bottom: 1px solid #e5e7eb; border: none; border-bottom: 1px solid #e5e7eb;
+    flex-shrink: 0; cursor: pointer; text-align: left; width: 100%;
+    font-family: inherit; display: flex; align-items: center; gap: 6px;
+    transition: background 0.12s;
   }
+  .match-ctx-bar:hover { background: #f3f4f6; }
+  .ctx-edit { font-size: 11px; color: #9ca3af; margin-left: auto; }
+
+  /* ── Match setup modal ── */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200; padding: 20px;
+  }
+  .modal-card {
+    background: #fff; border-radius: 14px; width: 100%; max-width: 360px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25); overflow: hidden;
+  }
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px 12px; border-bottom: 1px solid #f0f2f0;
+  }
+  .modal-title { font-size: 15px; font-weight: 800; color: #111827; }
+  .modal-close {
+    padding: 4px 8px; font-size: 14px; color: #9ca3af; background: none;
+    border: none; cursor: pointer; border-radius: 6px; font-family: inherit;
+    transition: color 0.12s, background 0.12s;
+  }
+  .modal-close:hover { color: #374151; background: #f3f4f6; }
+  .setup-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px 20px;
+  }
+  .setup-grid label {
+    display: flex; flex-direction: column; gap: 4px;
+    font-size: 11px; font-weight: 700; color: #6b7280;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .setup-grid input {
+    padding: 9px 11px; border: 1.5px solid #e5e7eb; border-radius: 8px;
+    font-size: 14px; background: #f8fafc; color: #111827; font-family: inherit;
+    width: 100%; box-sizing: border-box; transition: border-color 0.12s;
+  }
+  .setup-grid input:focus { outline: none; border-color: #1c3f8a; background: #fff; }
+  .full-row { grid-column: 1 / -1; }
+  .modal-done {
+    display: block; width: calc(100% - 40px); margin: 0 20px 20px;
+    padding: 12px; background: #1c3f8a; color: #fff; border: none;
+    border-radius: 9px; font-size: 14px; font-weight: 800;
+    cursor: pointer; font-family: inherit; transition: background 0.15s;
+  }
+  .modal-done:hover { background: #163270; }
+
+  /* ── Goal indicator + flip button ── */
+  .goal-indicator {
+    font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.9); background: #2d5a33;
+    padding: 5px 12px; letter-spacing: 0.05em;
+    flex-shrink: 0; text-transform: uppercase; border-radius: 0;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .flip-btn {
+    padding: 3px 9px; font-size: 10px; font-weight: 700;
+    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3);
+    color: rgba(255,255,255,0.85); border-radius: 5px; cursor: pointer;
+    font-family: inherit; letter-spacing: 0.04em; text-transform: uppercase;
+    transition: background 0.12s; line-height: 1.4;
+  }
+  .flip-btn:hover { background: rgba(255,255,255,0.28); }
 
   /* ── Events tab danger toolbar ── */
   .events-toolbar-danger {
@@ -1360,11 +1440,6 @@
   }
 
   /* ── Pitch card ── */
-  .goal-indicator {
-    font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.9); background: #2d5a33;
-    padding: 5px 12px; text-align: center; letter-spacing: 0.05em;
-    flex-shrink: 0; text-transform: uppercase; border-radius: 0;
-  }
   .pitch-card {
     border: none; border-radius: 10px;
     box-shadow: 0 6px 28px rgba(0,50,0,0.22), 0 2px 8px rgba(0,0,0,0.12);
