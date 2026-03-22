@@ -8,3 +8,27 @@ export const supabase = (url && key) ? createClient(url, key) : null
 
 /** True when Supabase is configured and network features are available */
 export const supabaseConfigured = !!(url && key)
+
+/**
+ * Returns true if the currently signed-in user's email is in the
+ * allowed_users allowlist table.  Returns true unconditionally when
+ * Supabase is not configured (offline / dev mode).
+ */
+export async function userHasAccess() {
+  if (!supabase) return true; // offline mode — no gate
+  try {
+    const { data, error } = await supabase
+      .from('allowed_users')
+      .select('email')
+      .limit(1);
+    if (error) {
+      // If the table doesn't exist yet (pre-migration env) fail open
+      // so existing single-user installs keep working.
+      if (error.code === '42P01') return true;
+      return false;
+    }
+    return Array.isArray(data) && data.length > 0;
+  } catch {
+    return false;
+  }
+}

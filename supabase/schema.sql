@@ -20,6 +20,7 @@ create table if not exists events (
   event_type            text not null default 'kickout',
   direction             text not null default 'ours',
   restart_reason        text,
+  shot_type             text,
   x                     numeric not null,
   y                     numeric not null,
   x_m                   numeric,
@@ -41,22 +42,50 @@ create table if not exists events (
   updated_at            timestamptz default now()
 );
 
--- Row Level Security — all authenticated users share a single team view.
--- For a small trusted team this is the right trade-off.
--- Add a user_id column and per-user policies if you need per-user isolation.
+-- Invite allowlist — only emails in this table can access the app.
+-- Add rows via: INSERT INTO allowed_users (email) VALUES ('user@example.com');
+create table if not exists allowed_users (
+  email    text primary key check (email = lower(email)),
+  added_at timestamptz not null default now()
+);
+
+-- Row Level Security — access gated to invited users only.
 alter table events enable row level security;
+alter table allowed_users enable row level security;
 
-create policy "authenticated users can read all events"
-  on events for select to authenticated using (true);
+-- Invited users can read their own allowlist entry (used by userHasAccess()).
+create policy "allowed_user_self_read"
+  on allowed_users for select to authenticated
+  using (email = lower(coalesce(auth.jwt() ->> 'email', '')));
 
-create policy "authenticated users can insert events"
-  on events for insert to authenticated with check (true);
+-- Invited users can read/write/delete events.
+create policy "authenticated_read"
+  on events for select to authenticated
+  using (exists (
+    select 1 from allowed_users
+    where email = lower(coalesce(auth.jwt() ->> 'email', ''))
+  ));
 
-create policy "authenticated users can update events"
-  on events for update to authenticated using (true);
+create policy "authenticated_write"
+  on events for insert to authenticated
+  with check (exists (
+    select 1 from allowed_users
+    where email = lower(coalesce(auth.jwt() ->> 'email', ''))
+  ));
 
-create policy "authenticated users can delete events"
-  on events for delete to authenticated using (true);
+create policy "authenticated_update"
+  on events for update to authenticated
+  using (exists (
+    select 1 from allowed_users
+    where email = lower(coalesce(auth.jwt() ->> 'email', ''))
+  ));
+
+create policy "authenticated_delete"
+  on events for delete to authenticated
+  using (exists (
+    select 1 from allowed_users
+    where email = lower(coalesce(auth.jwt() ->> 'email', ''))
+  ));
 
 -- Keep updated_at current automatically
 create or replace function set_updated_at()
