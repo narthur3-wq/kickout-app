@@ -39,8 +39,8 @@
 
   // ── Outcome sets per event type + direction ───────────────────────────
   const OUTCOME_MAP = {
-    'kickout-ours':    ['Retained', 'Lost', 'Score', 'Wide', 'Out', 'Foul'],
-    'kickout-theirs':  ['Won', 'Lost', 'Wide', 'Out', 'Foul'],
+    'kickout-ours':    ['Retained', 'Lost'],
+    'kickout-theirs':  ['Won', 'Lost'],
     'turnover-ours':   ['Won', 'Lost'],
     'turnover-theirs': ['Won', 'Lost'],
     'shot-ours':       ['Goal', 'Point', 'Wide', 'Blocked', 'Saved'],

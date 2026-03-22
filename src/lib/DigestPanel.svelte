@@ -206,42 +206,48 @@
     {#if koUs.n > 0 || koThem.n > 0}
       <div class="section-card">
         <div class="section-hd">Kickout Battle</div>
-        <div class="ko-row">
-          <span class="ko-label">Our kickouts</span>
-          <span class="ko-stat">{koUs.won}/{koUs.n}</span>
-          <span class="ko-pct">{koUs.pct !== null ? koUs.pct + '%' : '–'}</span>
-        </div>
-        <div class="ko-row">
-          <span class="ko-label">Their kickouts</span>
-          <span class="ko-stat">{koThem.won}/{koThem.n}</span>
-          <span class="ko-pct">{koThem.pct !== null ? koThem.pct + '%' : '–'}</span>
-        </div>
+        {#each [{ label: 'Our kickouts', s: koUs }, { label: 'Their kickouts', s: koThem }] as row}
+          <div class="ko-row">
+            <span class="ko-label">{row.label}</span>
+            <span class="ko-stat">{row.s.won}/{row.s.n}</span>
+            <span class="ko-pct">{row.s.pct !== null ? row.s.pct + '%' : '–'}</span>
+          </div>
+          {#if row.s.n > 0}
+            <div class="ko-bar-wrap">
+              <div class="ko-bar-fill" style="width:{row.s.pct ?? 0}%"></div>
+            </div>
+          {/if}
+        {/each}
       </div>
     {/if}
 
     <!-- Shots -->
     {#if ourShots.length > 0 || theirShots.length > 0}
       <div class="two-col">
-        <div class="section-card">
-          <div class="section-hd">Our Shots</div>
-          {#if shotUs2.goalChances > 0}
-            <div class="shot-row"><span>Goal chances</span><strong>{shotUs2.goalScored}/{shotUs2.goalChances}</strong></div>
-          {/if}
-          {#if shotUs2.pointChances > 0}
-            <div class="shot-row"><span>Point attempts</span><strong>{shotUs2.pointScored}/{shotUs2.pointChances}</strong></div>
-          {/if}
-          <div class="shot-row total-row"><span>Overall</span><strong>{shotUs2.pct !== null ? shotUs2.pct + '%' : '–'} <small>({shotUs2.scored}/{shotUs2.total})</small></strong></div>
-        </div>
-        <div class="section-card">
-          <div class="section-hd">Their Shots</div>
-          {#if shotThem2.goalChances > 0}
-            <div class="shot-row"><span>Goal chances</span><strong>{shotThem2.goalScored}/{shotThem2.goalChances}</strong></div>
-          {/if}
-          {#if shotThem2.pointChances > 0}
-            <div class="shot-row"><span>Point attempts</span><strong>{shotThem2.pointScored}/{shotThem2.pointChances}</strong></div>
-          {/if}
-          <div class="shot-row total-row"><span>Overall</span><strong>{shotThem2.pct !== null ? shotThem2.pct + '%' : '–'} <small>({shotThem2.scored}/{shotThem2.total})</small></strong></div>
-        </div>
+        {#if ourShots.length > 0}
+          <div class="section-card">
+            <div class="section-hd">Our Shots</div>
+            {#if shotUs2.goalChances > 0}
+              <div class="shot-row"><span>Goal chances</span><strong>{shotUs2.goalScored}/{shotUs2.goalChances}</strong></div>
+            {/if}
+            {#if shotUs2.pointChances > 0}
+              <div class="shot-row"><span>Point attempts</span><strong>{shotUs2.pointScored}/{shotUs2.pointChances}</strong></div>
+            {/if}
+            <div class="shot-row total-row"><span>Overall</span><strong>{shotUs2.pct !== null ? shotUs2.pct + '%' : '–'} <small>({shotUs2.scored}/{shotUs2.total})</small></strong></div>
+          </div>
+        {/if}
+        {#if theirShots.length > 0}
+          <div class="section-card">
+            <div class="section-hd">Their Shots</div>
+            {#if shotThem2.goalChances > 0}
+              <div class="shot-row"><span>Goal chances</span><strong>{shotThem2.goalScored}/{shotThem2.goalChances}</strong></div>
+            {/if}
+            {#if shotThem2.pointChances > 0}
+              <div class="shot-row"><span>Point attempts</span><strong>{shotThem2.pointScored}/{shotThem2.pointChances}</strong></div>
+            {/if}
+            <div class="shot-row total-row"><span>Overall</span><strong>{shotThem2.pct !== null ? shotThem2.pct + '%' : '–'} <small>({shotThem2.scored}/{shotThem2.total})</small></strong></div>
+          </div>
+        {/if}
       </div>
     {/if}
 
@@ -299,11 +305,12 @@
   .section-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px 16px; }
   .section-hd { font-size: 11px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: #6b7280; margin-bottom: 12px; }
 
-  .ko-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f3f4f6; font-size: 13px; color: #374151; }
-  .ko-row:last-child { border-bottom: none; }
+  .ko-row { display: flex; align-items: baseline; gap: 8px; padding: 8px 0 4px; font-size: 13px; color: #374151; }
   .ko-label { flex: 1; }
-  .ko-stat { font-weight: 700; color: #111827; font-variant-numeric: tabular-nums; }
-  .ko-pct { font-weight: 900; font-size: 15px; color: #111827; font-variant-numeric: tabular-nums; min-width: 40px; text-align: right; }
+  .ko-stat { font-weight: 600; color: #6b7280; font-variant-numeric: tabular-nums; font-size: 12px; }
+  .ko-pct { font-weight: 900; font-size: 20px; color: #111827; font-variant-numeric: tabular-nums; min-width: 48px; text-align: right; }
+  .ko-bar-wrap { height: 5px; background: #f3f4f6; border-radius: 99px; margin-bottom: 10px; overflow: hidden; }
+  .ko-bar-fill { height: 100%; background: #1c3f8a; border-radius: 99px; transition: width 0.4s ease; }
 
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .shot-row { display: flex; justify-content: space-between; align-items: baseline; padding: 5px 0; font-size: 13px; color: #4b5563; border-bottom: 1px solid #f3f4f6; }

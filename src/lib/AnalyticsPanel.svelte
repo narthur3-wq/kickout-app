@@ -636,7 +636,7 @@
   .pitch-viz-card {
     border-radius: 10px; overflow: hidden;
     box-shadow: 0 4px 20px rgba(0,50,0,0.18), 0 1px 6px rgba(0,0,0,0.08);
-    margin-bottom: 14px;
+    margin-bottom: 14px; aspect-ratio: 145 / 90; width: 100%;
   }
 
   /* ── Timeline ── */
