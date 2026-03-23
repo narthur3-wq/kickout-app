@@ -163,7 +163,7 @@
   }
   .half-divider { width: 1px; background: #e8eee6; flex-shrink: 0; }
   .half-label {
-    font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.08em;
     text-transform: uppercase; color: #9ca3af; margin-bottom: 4px;
   }
   .half-n { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
@@ -186,7 +186,7 @@
   .zone-card.best  .zone-icon { color: #16a34a; }
   .zone-card.worst .zone-icon { color: #ea580c; }
   .zone-title {
-    font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.06em;
     text-transform: uppercase; color: #9ca3af; margin-bottom: 2px;
   }
   .zone-val { font-size: 13px; font-weight: 700; color: #111827; font-variant-numeric: tabular-nums; }

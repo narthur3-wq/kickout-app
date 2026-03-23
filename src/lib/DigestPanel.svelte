@@ -397,7 +397,7 @@
   .margin-label.level { color: #d97706; background: rgba(217,119,6,0.15); }
 
   .section-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px 16px; }
-  .section-hd { font-size: 11px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: #6b7280; margin-bottom: 12px; }
+  .section-hd { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #6b7280; margin-bottom: 12px; }
 
   .ko-row { display: flex; align-items: baseline; gap: 8px; padding: 8px 0 4px; font-size: 13px; color: #374151; }
   .ko-label { flex: 1; }

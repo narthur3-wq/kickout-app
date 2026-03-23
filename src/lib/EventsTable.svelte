@@ -196,9 +196,9 @@
   .search-input:focus { border-color: #1c3f8a; background: #fff; }
   .filter-group { display: flex; gap: 1px; background: #f3f4f6; border-radius: 7px; padding: 2px; }
   .fpill {
-    padding: 4px 9px; border-radius: 5px; font-size: 11px; font-weight: 700;
+    padding: 0 9px; height: 28px; border-radius: 5px; font-size: 12px; font-weight: 700;
     border: none; background: transparent; cursor: pointer; color: #6b7280;
-    font-family: inherit; transition: all 0.12s; line-height: 1.4;
+    font-family: inherit; transition: all 0.12s; line-height: 1;
   }
   .fpill.active { background: #fff; color: #111827; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
   .flag-toggle {
@@ -223,7 +223,7 @@
   table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
   th {
     padding: 8px 10px; background: #f8faf8; text-align: left;
-    font-size: 11px; font-weight: 700; color: #6b7280; letter-spacing: 0.04em; text-transform: uppercase;
+    font-size: 11px; font-weight: 700; color: #6b7280; letter-spacing: 0.06em; text-transform: uppercase;
     border-bottom: 1px solid #e8eee6; white-space: nowrap; position: sticky; top: 0;
   }
   td { padding: 8px 10px; border-bottom: 1px solid #f5f5f5; color: #374151; white-space: nowrap; vertical-align: middle; }

@@ -236,8 +236,8 @@
 
   /* ── Section labels ── */
   .field-label {
-    font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
-    text-transform: uppercase; color: #9ca3af; margin: 16px 0 7px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: #6b7280; margin: 16px 0 7px;
   }
 
   /* ── Event type — segmented control ── */
@@ -337,7 +337,7 @@
     font-family: inherit; transition: all 0.12s;
   }
   .jersey-clear:hover { background: #fef2f2; }
-  .label-hint { font-size: 10px; font-weight: 500; color: #9ca3af; }
+  .label-hint { font-size: 11px; font-weight: 500; color: #9ca3af; }
 
   /* ── Inline fields (clock, score) ── */
   .inline-fields { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
@@ -411,7 +411,7 @@
   }
   .shot-type-label {
     font-size: 11px; font-weight: 700; color: #6b7280;
-    text-transform: uppercase; letter-spacing: 0.04em;
+    text-transform: uppercase; letter-spacing: 0.06em;
   }
   .shot-type-toggle { display: flex; gap: 4px; }
   .stt-btn {
