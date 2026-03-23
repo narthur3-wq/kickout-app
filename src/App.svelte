@@ -56,6 +56,7 @@
   let authSubscription = null;
   let realtimeChannel = null;
   let realtimeRefreshTimer = null;
+  let accountOpen = false;
 
   // ── Viz filters ───────────────────────────────────────────────────────────
   let fContest = new Set(CONTESTS);
@@ -1019,8 +1020,18 @@
       <button class="icon-btn" title="{wakeLock ? 'Screen locked on' : 'Keep screen on'}"
         on:click={toggleWakeLock}>{wakeLock ? 'Awake' : 'Keep awake'}</button>
       {#if supabaseConfigured && user}
-        <span class="user-email">{user.email}</span>
-        <button class="hdr-sm" on:click={signOut}>Sign out</button>
+        <div class="account-wrap">
+          <button class="avatar-btn" on:click={() => accountOpen = !accountOpen} title={user.email}>
+            {user.email[0].toUpperCase()}
+          </button>
+          {#if accountOpen}
+            <div class="account-overlay" on:click={() => accountOpen = false}></div>
+            <div class="account-dropdown">
+              <p class="account-email">{user.email}</p>
+              <button class="account-signout" on:click={() => { accountOpen = false; signOut(); }}>Sign out</button>
+            </div>
+          {/if}
+        </div>
       {/if}
     </div>
   </header>
@@ -1300,8 +1311,28 @@
   .period-pill.active { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.9); }
   .period-pill:hover:not(.active) { color: rgba(255,255,255,0.65); }
 
-  .header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-  .user-email { font-size: 10px; color: rgba(255,255,255,0.28); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; position: relative; }
+  .account-wrap { position: relative; }
+  .avatar-btn {
+    width: 28px; height: 28px; border-radius: 50%; background: #1c3f8a; color: #fff;
+    font-size: 13px; font-weight: 700; border: none; cursor: pointer; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; line-height: 1;
+  }
+  .avatar-btn:hover { background: #2450aa; }
+  .account-overlay {
+    position: fixed; inset: 0; z-index: 199;
+  }
+  .account-dropdown {
+    position: absolute; right: 0; top: calc(100% + 6px);
+    background: #fff; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+    padding: 10px 14px; min-width: 180px; z-index: 200;
+  }
+  .account-email { font-size: 11px; color: #6b7280; margin: 0 0 8px; word-break: break-all; }
+  .account-signout {
+    width: 100%; text-align: left; background: none; border: none; cursor: pointer;
+    font-size: 13px; color: #111; padding: 4px 0; font-family: inherit;
+  }
+  .account-signout:hover { color: #e11d48; }
   .icon-btn {
     background: none; border: none; cursor: pointer; font-size: 14px;
     padding: 5px 6px; border-radius: 6px; color: rgba(255,255,255,0.55); transition: all 0.15s;
