@@ -117,11 +117,45 @@
   const TYPE_LABELS = { 'kickout': 'Kickouts', 'shot': 'Shots', 'turnover': 'Turnovers', 'ALL': 'Analytics' };
   $: panelTitle = TYPE_LABELS[analyticsEventType] || 'Analytics';
 
+  // Headline summary stats for shots and turnovers
+  $: shotSummary = (() => {
+    if (analyticsEventType !== 'shot') return null;
+    const total = vizEvents.length;
+    if (total < 3) return { tooFew: true };
+    const goals   = vizEvents.filter(e => (e.outcome||'').toLowerCase() === 'goal').length;
+    const points  = vizEvents.filter(e => (e.outcome||'').toLowerCase() === 'point').length;
+    const scored  = goals + points;
+    const wide    = vizEvents.filter(e => (e.outcome||'').toLowerCase() === 'wide').length;
+    const blocked = vizEvents.filter(e => (e.outcome||'').toLowerCase() === 'blocked').length;
+    const saved   = vizEvents.filter(e => (e.outcome||'').toLowerCase() === 'saved').length;
+    const goalAttempts  = goals + wide + blocked + saved;
+    const pointAttempts = points + wide;
+    return {
+      total, scored,
+      scoredPct: Math.round(100 * scored / total),
+      goalAttempts, goals,
+      pointAttempts, points,
+      small: total < 5
+    };
+  })();
+
+  $: turnoverSummary = (() => {
+    if (analyticsEventType !== 'turnover') return null;
+    const total = vizEvents.length;
+    if (total < 3) return { tooFew: true };
+    const won  = vizEvents.filter(e => {
+      const o = (e.outcome||'').toLowerCase();
+      return o === 'retained' || o === 'won';
+    }).length;
+    const lost = vizEvents.filter(e => (e.outcome||'').toLowerCase() === 'lost').length;
+    const net  = won - lost;
+    return { total, won, lost, net, small: total < 5 };
+  })();
+
   // Active filter tags for summary bar
   $: filterTags = (() => {
     const tags = [];
     if (periodFilter !== 'ALL') tags.push(periodFilter);
-    if (directionFilter !== 'ALL') tags.push(directionFilter === 'ours' ? 'Ours' : 'Theirs');
     if (oppFilter !== 'ALL') {
       const m = opponentChoices.find(([k]) => k === oppFilter);
       tags.push('vs ' + (m ? m[1] : oppFilter));
@@ -144,7 +178,7 @@
   }
 </script>
 
-<section class="card">
+<section class="card" data-etype={analyticsEventType}>
 
   <!-- Panel header -->
   <div class="panel-header">
@@ -252,12 +286,70 @@
   {#if vizEvents.length === 0}
     <div class="empty-analytics">
       <div class="empty-icon">📊</div>
-      <div class="empty-title">No events match the current filters</div>
+      <div class="empty-title">No {panelTitle} logged yet. Switch to Capture to start recording.</div>
       <div class="empty-sub">Adjust or clear your filters to see data.</div>
       <button class="empty-reset" on:click={resetFilters}>Reset filters</button>
     </div>
 
   {:else}
+
+    {#if vizEvents.length < 5 && analyticsEventType !== 'shot' && analyticsEventType !== 'turnover'}
+      <p class="small-sample-notice">(small sample — interpret with caution)</p>
+    {/if}
+
+    <!-- ── Shot headline summary ── -->
+    {#if shotSummary}
+      {#if shotSummary.tooFew}
+        <div class="summary-kpi-row"><span class="summary-kpi-empty">Not enough data yet</span></div>
+      {:else}
+        <div class="summary-kpi-row {shotSummary.small ? 'summary-kpi-small' : ''}">
+          <div class="summary-chip">
+            <span class="summary-chip-val">{shotSummary.total}</span>
+            <span class="summary-chip-lbl">Total shots</span>
+          </div>
+          <div class="summary-chip">
+            <span class="summary-chip-val">{shotSummary.scored} <span class="summary-chip-pct">({shotSummary.scoredPct}%)</span></span>
+            <span class="summary-chip-lbl">Scored</span>
+          </div>
+          <div class="summary-chip">
+            <span class="summary-chip-val">{shotSummary.goalAttempts} <span class="summary-chip-pct">→ {shotSummary.goals}</span></span>
+            <span class="summary-chip-lbl">Goal chances / scored</span>
+          </div>
+          <div class="summary-chip">
+            <span class="summary-chip-val">{shotSummary.pointAttempts} <span class="summary-chip-pct">→ {shotSummary.points}</span></span>
+            <span class="summary-chip-lbl">Point attempts / scored</span>
+          </div>
+        </div>
+        {#if shotSummary.small}<p class="small-sample-notice">(small sample — interpret with caution)</p>{/if}
+      {/if}
+    {/if}
+
+    <!-- ── Turnover headline summary ── -->
+    {#if turnoverSummary}
+      {#if turnoverSummary.tooFew}
+        <div class="summary-kpi-row"><span class="summary-kpi-empty">Not enough data yet</span></div>
+      {:else}
+        <div class="summary-kpi-row {turnoverSummary.small ? 'summary-kpi-small' : ''}">
+          <div class="summary-chip">
+            <span class="summary-chip-val">{turnoverSummary.total}</span>
+            <span class="summary-chip-lbl">Total turnovers</span>
+          </div>
+          <div class="summary-chip">
+            <span class="summary-chip-val" style="color:#16a34a">{turnoverSummary.won}</span>
+            <span class="summary-chip-lbl">Won</span>
+          </div>
+          <div class="summary-chip">
+            <span class="summary-chip-val" style="color:#dc2626">{turnoverSummary.lost}</span>
+            <span class="summary-chip-lbl">Lost</span>
+          </div>
+          <div class="summary-chip">
+            <span class="summary-chip-val" style="color:{turnoverSummary.net >= 0 ? '#16a34a' : '#dc2626'}">{turnoverSummary.net >= 0 ? '+' : ''}{turnoverSummary.net}</span>
+            <span class="summary-chip-lbl">Net</span>
+          </div>
+        </div>
+        {#if turnoverSummary.small}<p class="small-sample-notice">(small sample — interpret with caution)</p>{/if}
+      {/if}
+    {/if}
 
     <!-- ── Viz section: Pitch (dots) or Heatmap ── -->
     <div class="section-card viz-section">
@@ -266,7 +358,7 @@
           <button class="vseg {vizMode === 'dots' ? 'vseg-on' : ''}" on:click={() => vizMode = 'dots'}>Dots</button>
           <button class="vseg {vizMode === 'heat' ? 'vseg-on' : ''}" on:click={() => vizMode = 'heat'}>Heat</button>
         </div>
-        {#if isKickoutView && hasBreakEvents}
+        {#if analyticsEventType === 'kickout' && hasBreakEvents}
           <div class="viz-seg">
             <button class="vseg {overlayMode === 'landing' ? 'vseg-on' : ''}" on:click={() => overlayMode = 'landing'}>Landing</button>
             <button class="vseg {overlayMode === 'pickup' ? 'vseg-on' : ''}" on:click={() => overlayMode = 'pickup'}>Pickup</button>
@@ -374,7 +466,7 @@
           <div class="kpi">
             <div class="kpi-title">Retention by Zone</div>
             {#if zoneRetTotal < 5}
-              <p class="hint">Too few events to show zone breakdown</p>
+              <p class="hint">Add more events to see zone breakdown.</p>
             {:else}
               <table class="kpi-table">
                 <thead><tr><th></th><th>L</th><th>C</th><th>R</th></tr></thead>
@@ -385,7 +477,7 @@
                       {#each row.cells as c}
                         {@const trend = retTrend(c.pct, c.zk)}
                         <td
-                          style="background:{c.tot >= 8 ? cellColor(c.pct) : 'transparent'}"
+                          style="background:{c.tot >= 8 ? cellColor(c.pct) : c.tot > 0 && c.tot < 3 ? '#f3f4f6' : 'transparent'}"
                           class="{c.tot >= 3 && c.tot < 8 ? 'low-n' : ''}"
                           title="{c.ret}/{c.tot} retained"
                         >
@@ -410,21 +502,35 @@
               Break Win-Rate — {overallBreak.tot ? Math.round(overallBreak.pct)+'%' : '—'}
               ({overallBreak.won}/{overallBreak.tot})
             </div>
-            <table class="kpi-table">
-              <thead><tr><th></th><th>L</th><th>C</th><th>R</th></tr></thead>
-              <tbody>
-                {#each zoneTableBreak as row}
-                  <tr>
-                    <th>{row.D}</th>
-                    {#each row.cells as c}
-                      <td style="background:{cellColor(c.pct)}" title="{c.won}/{c.tot}">
-                        {c.tot ? `${Math.round(c.pct)}%` : '—'}
-                      </td>
-                    {/each}
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
+            {#if overallBreak.tot < 5}
+              <p class="hint">Add more events to see zone breakdown.</p>
+            {:else}
+              <table class="kpi-table">
+                <thead><tr><th></th><th>L</th><th>C</th><th>R</th></tr></thead>
+                <tbody>
+                  {#each zoneTableBreak as row}
+                    <tr>
+                      <th>{row.D}</th>
+                      {#each row.cells as c}
+                        <td
+                          style="background:{c.tot >= 3 ? cellColor(c.pct) : '#f3f4f6'}"
+                          class="{c.tot > 0 && c.tot < 3 ? 'low-n' : ''}"
+                          title="{c.won}/{c.tot}"
+                        >
+                          {#if c.tot >= 3}
+                            {Math.round(c.pct)}%
+                          {:else if c.tot > 0}
+                            n={c.tot}
+                          {:else}
+                            —
+                          {/if}
+                        </td>
+                      {/each}
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {/if}
           </div>
         </div>
         <div class="zone-legend">S = 0–20m · M = 20–45m · L = 45–65m · V = 65m+ &nbsp;|&nbsp; L = Left · C = Centre · R = Right</div>
@@ -508,7 +614,7 @@
     background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
     padding: 7px 12px; margin-bottom: 10px; font-size: 12px;
   }
-  .filter-summary-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: #3b82f6; }
+  .filter-summary-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #3b82f6; }
   .filter-tag {
     background: #1c3f8a; color: #fff;
     border-radius: 5px; padding: 2px 8px; font-size: 11px; font-weight: 700;
@@ -550,7 +656,7 @@
   /* Pill controls */
   .filter-pills-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .fpill-group { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-  .fpill-label { font-size: 10px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: #9ca3af; margin-right: 2px; white-space: nowrap; }
+  .fpill-label { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #9ca3af; margin-right: 2px; white-space: nowrap; }
   .fpill {
     padding: 5px 11px; border: 1.5px solid #e5e7eb; border-radius: 7px;
     background: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
@@ -563,7 +669,7 @@
   /* Select row */
   .filter-selects-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
   .fselect-wrap { display: flex; flex-direction: column; gap: 3px; }
-  .fselect-label { font-size: 10px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: #9ca3af; }
+  .fselect-label { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #9ca3af; }
   .fselect-wrap select {
     padding: 7px 10px; border: 1.5px solid #e5e7eb; border-radius: 7px;
     font-size: 13px; background: #fff; color: #111827; font-family: inherit;
@@ -605,7 +711,7 @@
     box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   }
   .section-hd {
-    font-size: 12px; font-weight: 700; letter-spacing: -0.01em;
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
     color: #374151;
     display: flex; align-items: center; gap: 8px;
     margin-bottom: 14px;
@@ -660,21 +766,21 @@
   .player-table { width: 100%; }
   .player-sort {
     margin-left: auto; display: flex; align-items: center; gap: 4px;
-    font-size: 10px; font-weight: 600; color: #9ca3af; text-transform: none; letter-spacing: 0;
+    font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: none; letter-spacing: 0;
   }
   .psort {
     padding: 2px 7px; border: 1px solid #e5e7eb; border-radius: 5px;
-    background: #fff; cursor: pointer; font-size: 10px; font-weight: 600;
+    background: #fff; cursor: pointer; font-size: 11px; font-weight: 600;
     color: #6b7280; font-family: inherit;
   }
   .psort.psort-on { background: #1c3f8a; color: #fff; border-color: #1c3f8a; }
-  .low-n { color: #b0b8b0; font-size: 11px; font-style: italic; }
+  .low-n { color: #b0b8b0; font-size: 11px; font-style: italic; background: #f3f4f6; }
   :global(.trend-up)   { color: #16a34a; font-weight: 800; }
   :global(.trend-down) { color: #dc2626; font-weight: 800; }
 
   /* ── Zone legend ── */
   .zone-legend {
-    font-size: 10px; color: #9ca3af; margin-top: 10px;
+    font-size: 11px; color: #9ca3af; margin-top: 10px;
     padding-top: 8px; border-top: 1px solid #f0f0f0; line-height: 1.5;
   }
 
@@ -692,7 +798,7 @@
   .clock-track { flex: 1; height: 10px; background: #f0f0f0; border-radius: 99px; overflow: hidden; }
   .clock-fill { height: 100%; border-radius: 99px; transition: width 0.3s; }
   .clock-pct { font-size: 12px; font-weight: 700; width: 36px; text-align: right; flex-shrink: 0; }
-  .clock-n { font-size: 10px; color: #9ca3af; width: 34px; flex-shrink: 0; }
+  .clock-n { font-size: 11px; color: #9ca3af; width: 34px; flex-shrink: 0; }
 
   /* ── Player row tap-to-filter ── */
   .player-row { cursor: pointer; transition: background 0.1s; }
@@ -707,6 +813,57 @@
   button { padding: 7px 14px; border: 1.5px solid #e5e7eb; border-radius: 7px; background: #fff; cursor: pointer; font-size: 13px; font-weight: 600; font-family: inherit; transition: all 0.12s; }
   button:hover { background: #f9fafb; }
   label { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+
+  /* ── Headline summary KPI row (shots / turnovers) ── */
+  .summary-kpi-row {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-bottom: 14px;
+  }
+  .summary-kpi-row.summary-kpi-small { opacity: 0.85; }
+  .summary-kpi-empty {
+    font-size: 13px; color: #9ca3af; font-style: italic; padding: 8px 0;
+  }
+  .summary-chip {
+    display: flex; flex-direction: column; align-items: center;
+    background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px;
+    padding: 10px 16px; flex: 1; min-width: 80px;
+  }
+  .summary-chip-val {
+    font-size: 20px; font-weight: 800; color: #111827;
+    font-variant-numeric: tabular-nums; line-height: 1.2;
+  }
+  .summary-chip-pct { font-size: 13px; font-weight: 600; color: #6b7280; }
+  .summary-chip-lbl {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #9ca3af; margin-top: 2px; text-align: center;
+  }
+  .small-sample-notice {
+    font-size: 11px; color: #b45309; font-style: italic; margin: 0 0 10px;
+  }
+
+  /* ── Tab accent colours ── */
+  /* Shots: green accent */
+  :global(.analytics-shots) .panel-title { color: #15803d; }
+  :global(.analytics-shots) .section-hd  { color: #15803d; }
+  /* Turnovers: amber accent */
+  :global(.analytics-turnovers) .panel-title { color: #b45309; }
+  :global(.analytics-turnovers) .section-hd  { color: #b45309; }
+
+  /* Panel title accent via data attribute on root section */
+  .card[data-etype="shot"]     .panel-title { color: #15803d; border-left: 3px solid #15803d; padding-left: 8px; }
+  .card[data-etype="shot"]     .section-hd  { color: #15803d; }
+  .card[data-etype="turnover"] .panel-title { color: #b45309; border-left: 3px solid #b45309; padding-left: 8px; }
+  .card[data-etype="turnover"] .section-hd  { color: #b45309; }
+  .card[data-etype="kickout"]  .panel-title { border-left: 3px solid #1c3f8a; padding-left: 8px; }
+
+  /* ── Desktop whitespace ── */
+  @media (min-width: 900px) {
+    .section-card { margin-bottom: 12px; padding: 14px 16px; }
+    .card { margin-bottom: 10px; }
+    .kpi-grid { gap: 10px; }
+    .kpi { padding: 12px 14px; }
+    .viz-controls-bar { margin-bottom: 8px; }
+  }
 
   @media (max-width: 480px) {
     .kpi-grid { grid-template-columns: 1fr; }
