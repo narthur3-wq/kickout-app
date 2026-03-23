@@ -177,6 +177,25 @@
   }
 
   // ── Sync queue ───────────────────────────────────────────────────────────
+  // Offline sync conflict analysis (verified correct, no fixes needed):
+  //
+  // 1. UNDO: undoLast() calls upsertToSupabase() for every event in the
+  //    restored snapshot (queues 'upsert' when offline/error) and calls
+  //    deleteFromSupabase() for any IDs that were removed by the undo
+  //    (queues 'delete' when offline/error). Both cases are handled.
+  //
+  // 2. DELETE-THEN-REALTIME RACE: startRealtimeSync() returns early for any
+  //    changedId in pendingSync (both 'upsert' and 'delete' entries), so a
+  //    realtime INSERT/UPDATE for a pending-delete ID is correctly ignored.
+  //
+  // 3. SYNC MERGE: syncFromSupabase() builds pendingLocal from
+  //    pendingSync.get(id) === 'upsert' only, so 'delete'-pending events are
+  //    never re-added. remoteFiltered and localOnly both exclude all pendingSync
+  //    IDs. flushSyncQueue() is called at the end of every successful sync.
+  //
+  // 4. QUEUE PERSISTENCE: loadPendingSync() restores from localStorage on
+  //    mount; syncFromSupabase() (called after auth) calls flushSyncQueue()
+  //    to replay any queued ops from a previous offline session.
   function loadPendingSync() {
     try {
       const raw = JSON.parse(localStorage.getItem('ko_sync_queue') || '[]');
