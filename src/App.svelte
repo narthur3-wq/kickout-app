@@ -582,12 +582,19 @@
     breakOutcome = e.break_outcome || '';
     targetPlayer = e.target_player || '';
     matchDate    = e.match_date || (e.created_at || '').slice(0,10) || new Date().toISOString().slice(0,10);
-    ourGoalAtTop = e.our_goal_at_top !== undefined ? !!e.our_goal_at_top : true;
-    // De-normalize stored y back to display coords using the event's saved orientation.
-    landing      = { x: e.x, y: ourGoalAtTop ? e.y : 1 - e.y };
-    pickup       = (e.pickup_x == null || e.pickup_y == null)
+    // Do NOT change ourGoalAtTop here — keep the analyst's current orientation.
+    // e.y / e.pickup_y are stored in "our goal at top = true" normalised space:
+    //   stored = savedFlip ? rawY : (1 - rawY)
+    // We need to recover rawY then re-express in the current display orientation.
+    const savedFlip = e.our_goal_at_top !== undefined ? !!e.our_goal_at_top : true;
+    const rawLandingY  = savedFlip ? e.y          : (1 - e.y);
+    landing = { x: e.x, y: ourGoalAtTop ? rawLandingY : (1 - rawLandingY) };
+    pickup  = (e.pickup_x == null || e.pickup_y == null)
       ? { x: NaN, y: NaN }
-      : { x: e.pickup_x, y: ourGoalAtTop ? e.pickup_y : 1 - e.pickup_y };
+      : (() => {
+          const rawPickupY = savedFlip ? e.pickup_y : (1 - e.pickup_y);
+          return { x: e.pickup_x, y: ourGoalAtTop ? rawPickupY : (1 - rawPickupY) };
+        })();
     // Restore new fields
     flagEvent      = !!e.flag;
     restartReason  = e.restart_reason || '';
