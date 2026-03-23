@@ -7,7 +7,7 @@
   import AnalyticsPanel from './lib/AnalyticsPanel.svelte';
   import DigestPanel from './lib/DigestPanel.svelte';
   import CaptureForm from './lib/CaptureForm.svelte';
-  import { supabase, supabaseConfigured, userHasAccess } from './lib/supabase.js';
+  import { supabase, supabaseConfigured, userHasAccess, getUserTeamId } from './lib/supabase.js';
   import { onMount } from 'svelte';
 
   // ── Constants ────────────────────────────────────────────────────────────
@@ -18,6 +18,7 @@
 
   // ── Auth state ───────────────────────────────────────────────────────────
   let user = null;
+  let teamId = null;
   let authChecked = false; // prevents login flash on load
 
   // ── Match setup (set once per match, persisted to localStorage) ──────────
@@ -272,9 +273,14 @@
       const remoteFiltered = remoteEvents.filter(e => !pendingSync.has(e.id));
       const pendingLocal = events.filter(e => pendingSync.get(e.id) === 'upsert');
       events = [...remoteFiltered, ...localOnly, ...pendingLocal];
-      // Push local-only events up to Supabase
+      // Push local-only events up to Supabase. If this fails, keep those
+      // records queued locally so the UI does not imply they are safely synced.
       if (localOnly.length > 0) {
-        await supabase.from('events').upsert(localOnly);
+        const { error: upsertError } = await supabase.from('events').upsert(localOnly);
+        if (upsertError) {
+          for (const ev of localOnly) queuePendingSync(ev.id, 'upsert');
+          throw upsertError;
+        }
       }
       persistLocal();
       syncStatus = 'synced';
@@ -370,6 +376,7 @@
         if (session) {
           if (await userHasAccess()) {
             user = session.user;
+            teamId = await getUserTeamId();
             await syncFromSupabase();
             if (!disposed) startRealtimeSync();
           } else {
@@ -379,16 +386,19 @@
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
           if (!session?.user) {
             user = null;
+            teamId = null;
             stopRealtimeSync();
             return;
           }
           if (!(await userHasAccess())) {
             await supabase.auth.signOut();
             user = null;
+            teamId = null;
             stopRealtimeSync();
             return;
           }
           user = session.user;
+          teamId = await getUserTeamId();
           await syncFromSupabase();
           if (!disposed) startRealtimeSync();
         });
@@ -407,13 +417,15 @@
     };
   });
 
-  function handleLogin(e) {
+  async function handleLogin(e) {
     user = e.detail.user;
+    teamId = await getUserTeamId();
   }
 
   async function signOut() {
     if (supabase) await supabase.auth.signOut();
     user = null;
+    teamId = null;
   }
 
   // ── Wake lock ─────────────────────────────────────────────────────────────
@@ -483,6 +495,7 @@
     return {
       id:           editingId ?? crypto.randomUUID(),
       created_at:   originalCreatedAt,
+      team_id:      teamId,
       match_date:   matchDate,
       team:         team.trim(),
       opponent:     opponent.trim(),

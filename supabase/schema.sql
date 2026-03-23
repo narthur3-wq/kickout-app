@@ -1,35 +1,62 @@
 -- ============================================================
--- Páirc — Supabase schema
--- Run this once in your project's SQL editor:
+-- Páirc — Supabase schema (current, including team RLS)
+-- Run this once on a fresh project in the SQL editor:
 --   https://supabase.com/dashboard → your project → SQL Editor
+--
+-- For existing databases, apply migrations in order instead:
+--   supabase/migrations/20260322000000_add_rls.sql
+--   supabase/migrations/20260323000000_team_rls.sql
 -- ============================================================
 
+-- ── Teams ────────────────────────────────────────────────────
+-- One row per club. Create a team first, then assign users to it.
+create table if not exists teams (
+  id         uuid        primary key default gen_random_uuid(),
+  name       text        not null,
+  created_at timestamptz not null default now()
+);
+
+-- ── Invite allowlist ─────────────────────────────────────────
+-- Only emails in this table can access the app.
+-- Each user must be assigned to a team before they can read/write events.
+--
+-- To invite a user:
+--   INSERT INTO allowed_users (email, team_id)
+--     VALUES ('analyst@example.com', '<team-uuid>');
+create table if not exists allowed_users (
+  email    text primary key check (email = lower(email)),
+  team_id  uuid references teams(id),
+  added_at timestamptz not null default now()
+);
+
+-- ── Events ───────────────────────────────────────────────────
 create table if not exists events (
-  id                    text primary key,
-  schema_version        integer not null default 1,
+  id                    text        primary key,
+  schema_version        integer     not null default 1,
   created_at            timestamptz not null default now(),
+  team_id               uuid        references teams(id),
   match_date            date,
   team                  text,
   opponent              text,
   period                text,
   clock                 text,
   target_player         text,
-  outcome               text not null,
-  contest_type          text not null,
+  outcome               text        not null,
+  contest_type          text        not null,
   break_outcome         text,
-  event_type            text not null default 'kickout',
-  direction             text not null default 'ours',
+  event_type            text        not null default 'kickout',
+  direction             text        not null default 'ours',
   restart_reason        text,
   shot_type             text,
-  x                     numeric not null,
-  y                     numeric not null,
+  x                     numeric     not null,
+  y                     numeric     not null,
   x_m                   numeric,
   y_m                   numeric,
   depth_from_own_goal_m numeric,
   side_band             text,
   depth_band            text,
   zone_code             text,
-  our_goal_at_top       boolean default true,
+  our_goal_at_top       boolean     default true,
   pickup_x              numeric,
   pickup_y              numeric,
   pickup_x_m            numeric,
@@ -37,57 +64,54 @@ create table if not exists events (
   break_displacement_m  numeric,
   score_us              text,
   score_them            text,
-  flag                  boolean default false,
+  flag                  boolean     default false,
   ko_sequence           integer,
   updated_at            timestamptz default now()
 );
 
--- Invite allowlist — only emails in this table can access the app.
--- Add rows via: INSERT INTO allowed_users (email) VALUES ('user@example.com');
-create table if not exists allowed_users (
-  email    text primary key check (email = lower(email)),
-  added_at timestamptz not null default now()
-);
-
--- Row Level Security — access gated to invited users only.
-alter table events enable row level security;
+-- ── Row Level Security ───────────────────────────────────────
+alter table teams        enable row level security;
 alter table allowed_users enable row level security;
+alter table events        enable row level security;
 
--- Invited users can read their own allowlist entry (used by userHasAccess()).
+-- Users can read their own allowlist entry (used by userHasAccess()).
 create policy "allowed_user_self_read"
   on allowed_users for select to authenticated
   using (email = lower(coalesce(auth.jwt() ->> 'email', '')));
 
--- Invited users can read/write/delete events.
-create policy "authenticated_read"
+-- Helper: returns the current user's team_id.
+-- SECURITY DEFINER so event policies can call it without recursion.
+create or replace function auth_team_id()
+returns uuid language sql stable security definer as $$
+  select team_id
+  from   allowed_users
+  where  email = lower(coalesce(auth.jwt() ->> 'email', ''))
+  limit  1
+$$;
+
+-- Users can read their own team record.
+create policy "team_self_read"
+  on teams for select to authenticated
+  using (id = auth_team_id());
+
+-- Events are fully scoped to the user's team.
+create policy "team_read"
   on events for select to authenticated
-  using (exists (
-    select 1 from allowed_users
-    where email = lower(coalesce(auth.jwt() ->> 'email', ''))
-  ));
+  using (team_id = auth_team_id());
 
-create policy "authenticated_write"
+create policy "team_insert"
   on events for insert to authenticated
-  with check (exists (
-    select 1 from allowed_users
-    where email = lower(coalesce(auth.jwt() ->> 'email', ''))
-  ));
+  with check (team_id = auth_team_id());
 
-create policy "authenticated_update"
+create policy "team_update"
   on events for update to authenticated
-  using (exists (
-    select 1 from allowed_users
-    where email = lower(coalesce(auth.jwt() ->> 'email', ''))
-  ));
+  using (team_id = auth_team_id());
 
-create policy "authenticated_delete"
+create policy "team_delete"
   on events for delete to authenticated
-  using (exists (
-    select 1 from allowed_users
-    where email = lower(coalesce(auth.jwt() ->> 'email', ''))
-  ));
+  using (team_id = auth_team_id());
 
--- Keep updated_at current automatically
+-- ── Triggers ─────────────────────────────────────────────────
 create or replace function set_updated_at()
 returns trigger language plpgsql as $$
 begin new.updated_at = now(); return new; end;
@@ -96,13 +120,3 @@ $$;
 create trigger events_updated_at
   before update on events
   for each row execute function set_updated_at();
-
--- ── Migration: run on an existing DB created from an older schema ──────────
--- alter table events add column if not exists event_type     text not null default 'kickout';
--- alter table events add column if not exists direction      text not null default 'ours';
--- alter table events add column if not exists restart_reason text;
--- alter table events add column if not exists schema_version integer not null default 1;
--- alter table events drop column if exists time_to_tee_s;
--- alter table events drop column if exists total_time_s;
--- alter table events drop column if exists scored_20s;
--- alter table events drop column if exists notes;

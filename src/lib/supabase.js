@@ -10,6 +10,25 @@ export const supabase = (url && key) ? createClient(url, key) : null
 export const supabaseConfigured = !!(url && key)
 
 /**
+ * Returns the team_id for the currently signed-in user, or null if
+ * the user has no team assigned or Supabase is not configured.
+ */
+export async function getUserTeamId() {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('allowed_users')
+      .select('team_id')
+      .limit(1)
+      .single();
+    if (error || !data) return null;
+    return data.team_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Returns true if the currently signed-in user's email is in the
  * allowed_users allowlist table.  Returns true unconditionally when
  * Supabase is not configured (offline / dev mode).
