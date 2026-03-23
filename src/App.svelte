@@ -7,7 +7,8 @@
   import AnalyticsPanel from './lib/AnalyticsPanel.svelte';
   import DigestPanel from './lib/DigestPanel.svelte';
   import CaptureForm from './lib/CaptureForm.svelte';
-  import { supabase, supabaseConfigured, userHasAccess, getUserTeamId } from './lib/supabase.js';
+  import AdminPanel from './lib/AdminPanel.svelte';
+  import { supabase, supabaseConfigured, userHasAccess, getUserTeamId, isConfiguredAdmin } from './lib/supabase.js';
   import { onMount } from 'svelte';
 
   // ── Constants ────────────────────────────────────────────────────────────
@@ -58,6 +59,7 @@
   let realtimeChannel = null;
   let realtimeRefreshTimer = null;
   let accountOpen = false;
+  let isAdminUser = false;
 
   // ── Viz filters ───────────────────────────────────────────────────────────
   let fContest = new Set(CONTESTS);
@@ -376,6 +378,7 @@
         if (session) {
           if (await userHasAccess()) {
             user = session.user;
+            isAdminUser = isConfiguredAdmin(session.user.email);
             teamId = await getUserTeamId();
             await syncFromSupabase();
             if (!disposed) startRealtimeSync();
@@ -387,6 +390,7 @@
           if (!session?.user) {
             user = null;
             teamId = null;
+            isAdminUser = false;
             stopRealtimeSync();
             return;
           }
@@ -394,10 +398,12 @@
             await supabase.auth.signOut();
             user = null;
             teamId = null;
+            isAdminUser = false;
             stopRealtimeSync();
             return;
           }
           user = session.user;
+          isAdminUser = isConfiguredAdmin(session.user.email);
           teamId = await getUserTeamId();
           await syncFromSupabase();
           if (!disposed) startRealtimeSync();
@@ -419,6 +425,7 @@
 
   async function handleLogin(e) {
     user = e.detail.user;
+    isAdminUser = isConfiguredAdmin(e.detail.user?.email);
     teamId = await getUserTeamId();
   }
 
@@ -426,6 +433,7 @@
     if (supabase) await supabase.auth.signOut();
     user = null;
     teamId = null;
+    isAdminUser = false;
   }
 
   // ── Wake lock ─────────────────────────────────────────────────────────────
@@ -1073,6 +1081,11 @@
     <button class="tab-btn {activeTab === 'events' ? 'active' : ''}" on:click={() => activeTab = 'events'}>
       Events <span class="tab-count">{events.length}</span>
     </button>
+    {#if isAdminUser}
+      <button class="tab-btn {activeTab === 'admin' ? 'active' : ''}" on:click={() => activeTab = 'admin'}>
+        Admin
+      </button>
+    {/if}
   </nav>
 
   <!-- ══ CAPTURE TAB ══ -->
@@ -1241,7 +1254,7 @@
   </div>
 
   <!-- ══ EVENTS TAB ══ -->
-  {:else}
+  {:else if activeTab === 'events'}
   <div class="full-panel">
     <div class="events-toolbar-danger">
       {#if confirmDeleteAll}
@@ -1264,6 +1277,10 @@
       on:load={(e) => loadToForm(e.detail)}
       on:delete={(e) => delEvent(e.detail)}
     />
+  </div>
+  {:else}
+  <div class="full-panel">
+    <AdminPanel {user} {teamId} />
   </div>
   {/if}
 

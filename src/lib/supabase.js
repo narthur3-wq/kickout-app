@@ -2,12 +2,21 @@ import { createClient } from '@supabase/supabase-js'
 
 const url  = import.meta.env.VITE_SUPABASE_URL
 const key  = import.meta.env.VITE_SUPABASE_ANON_KEY
+const adminEmails = String(import.meta.env.VITE_ADMIN_EMAILS || '')
+  .split(',')
+  .map((value) => value.trim().toLowerCase())
+  .filter(Boolean)
 
 /** Supabase client — null when env vars are not set (offline-only mode) */
 export const supabase = (url && key) ? createClient(url, key) : null
 
 /** True when Supabase is configured and network features are available */
 export const supabaseConfigured = !!(url && key)
+
+/** Client-side convenience only; the Edge Function enforces admin access server-side. */
+export function isConfiguredAdmin(email) {
+  return adminEmails.includes(String(email || '').trim().toLowerCase())
+}
 
 /**
  * Returns the team_id for the currently signed-in user, or null if
