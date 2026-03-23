@@ -48,12 +48,9 @@
     const C = cols;
     const R = Math.round(C * (H / W));
 
-    // For 'outcome' mode we keep separate won/lost grids; otherwise a single grid.
+    // For 'outcome' mode we keep separate total/won grids; otherwise a single grid.
     const grid    = Array.from({ length: R }, () => new Float32Array(C));
     const gridWon  = colorScheme === 'outcome'
-      ? Array.from({ length: R }, () => new Float32Array(C))
-      : null;
-    const gridLost = colorScheme === 'outcome'
       ? Array.from({ length: R }, () => new Float32Array(C))
       : null;
 
@@ -78,11 +75,9 @@
           const rx = cx + dx; if (rx < 0 || rx >= C) continue;
           const dist2 = dx*dx + dy*dy;
           const k = Math.exp(-dist2 / (2 * sigma2));
-          if (colorScheme === 'outcome') {
-            if (isPos) gridWon[ry][rx]  += w * k;
-            else        gridLost[ry][rx] += w * k;
-          } else {
-            grid[ry][rx] += w * k;
+          grid[ry][rx] += w * k;
+          if (colorScheme === 'outcome' && isPos) {
+            gridWon[ry][rx] += w * k;
           }
         }
       }
@@ -117,36 +112,26 @@
     const cellW = cssW / C, cellH = cssH / R;
 
     if (colorScheme === 'outcome') {
-      // Smooth each grid independently, then compute net score per cell.
-      let smWon  = gridWon;
-      let smLost = gridLost;
-      for (let i = 0; i < smooth; i++) { smWon = blur(smWon); smLost = blur(smLost); }
+      // Smooth both grids, then colour by win-rate (hue) and density (alpha).
+      let smTotal = grid;
+      let smWon   = gridWon;
+      for (let i = 0; i < smooth; i++) { smTotal = blur(smTotal); smWon = blur(smWon); }
 
-      // Find max of either grid for normalisation.
-      let maxVal = 0;
+      // Find maxTotal across all cells for alpha normalisation.
+      let maxTotal = 0;
       for (let y=0;y<R;y++) for (let x=0;x<C;x++) {
-        if (smWon[y][x]  > maxVal) maxVal = smWon[y][x];
-        if (smLost[y][x] > maxVal) maxVal = smLost[y][x];
+        if (smTotal[y][x] > maxTotal) maxTotal = smTotal[y][x];
       }
-      if (maxVal <= 0) return;
+      if (maxTotal <= 0) return;
 
       for (let y=0;y<R;y++) {
         for (let x=0;x<C;x++) {
-          const w = smWon[y][x]  / maxVal;
-          const l = smLost[y][x] / maxVal;
-          if (w <= 0 && l <= 0) continue;
-          // net in [-1, 1]: +1 = all won, -1 = all lost
-          const net = (w - l) / Math.max(w + l, 0.0001);
-          // intensity = total activity, sqrt-lifted
-          const intensity = Math.sqrt((w + l) / 2);
-          const alpha = Math.min(0.92, 0.12 + intensity * 0.80);
-          if (net >= 0) {
-            // teal/cyan green — high contrast against dark green turf
-            ctx.fillStyle = `hsla(160, 100%, 65%, ${alpha * net + alpha * 0.15})`;
-          } else {
-            // bright red
-            ctx.fillStyle = `hsla(0, 90%, 65%, ${alpha * (-net) + alpha * 0.15})`;
-          }
+          const total = smTotal[y][x];
+          if (total <= 0) continue;
+          const winRate = smWon[y][x] / total;          // 0.0 → 1.0
+          const hue     = winRate * 120;                // 0 = red, 120 = green
+          const alpha   = 0.12 + 0.78 * (total / maxTotal); // 0.12 → 0.90
+          ctx.fillStyle = `hsla(${hue}, 85%, 55%, ${alpha})`;
           ctx.fillRect(x*cellW, y*cellH, cellW+1, cellH+1);
         }
       }
@@ -219,10 +204,9 @@
   }
   .legend-bar.outcome {
     background: linear-gradient(to right,
-      hsla(0,90%,65%,0.92),
-      hsla(0,90%,65%,0.15),
-      hsla(160,100%,65%,0.15),
-      hsla(160,100%,65%,0.92)
+      hsla(0,85%,55%,0.90),
+      hsla(60,85%,55%,0.55),
+      hsla(120,85%,55%,0.90)
     );
   }
 </style>
