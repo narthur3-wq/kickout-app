@@ -5,14 +5,11 @@ export default [
   {
     ignores: ["dist/**", "node_modules/**"],
   },
+  ...svelte.configs["flat/recommended"],
   {
-    files: ["**/*.svelte", "**/*.js"],
-    plugins: { svelte },
+    files: ["**/*.js", "**/*.svelte"],
     languageOptions: {
       globals: { window: "readonly", document: "readonly" },
-    },
-    rules: {
-      ...svelte.configs["flat/recommended"].rules,
     },
   },
   prettier,

@@ -16,7 +16,7 @@ Páirc is a phone-friendly app for capturing and analysing GAA match events in r
 
 1. Open the app in your browser (works on iPhone, Android, desktop).
 2. Tap **Add to Home Screen** from your browser menu for the best experience (full-screen, no address bar).
-3. Sign in if prompted (or continue without an account — data saves locally regardless).
+3. Sign in if prompted. If Supabase is configured for your deployment, an account is required to access the app.
 4. In the **Capture** tab, open **Match Setup** and enter:
    - **Our Team** name
    - **Opponent** name
@@ -136,7 +136,7 @@ Tap **Share** to:
 
 ## Working Offline
 
-Páirc works fully offline. Events save to your device immediately. When connectivity returns, any unsynced events are automatically uploaded to the cloud (if you are signed in).
+Páirc keeps working if connectivity drops during a match. Events save to your device immediately, and when connectivity returns any unsynced events are automatically uploaded to the cloud (if you are signed in).
 
 The sync status chip in the header shows:
 - **● Offline** — no internet connection

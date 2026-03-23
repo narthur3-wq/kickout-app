@@ -151,7 +151,7 @@ const svgY = (o) => o.x * H;                        // stored x → SVG y
 4. On `online` event (browser connectivity restored), `flushSyncQueue()` retries all pending IDs.
 5. The header shows sync state: `Offline`, `⚠ N pending`, `↻ syncing`, `✓ synced`.
 
-> **Note:** There is currently no service worker. Assets are not cached by the browser between sessions, so the app requires network access on first load. Subsequent loads within the same browser session use the HTTP cache.
+> **Note:** The production build includes a service worker via `vite-plugin-pwa`, so the app shell and static assets are precached after first successful load. A network connection is still required for the first visit and for Supabase-backed sync/auth operations.
 
 ---
 
@@ -227,7 +227,7 @@ If neither is set, Supabase is disabled and the app runs fully offline in localS
 | Item | Notes |
 |---|---|
 | No per-user data isolation | RLS is enabled. All authenticated users share one data view. Add a `user_id` column and per-user policies for multi-team use. |
-| No service worker | App assets are not cached between sessions — first load requires network. |
+| First load still needs network | The app shell is cached after initial load, but first install/visit still requires connectivity. |
 | No push sync | Changes on another device only appear after manual refresh or re-login. |
 | No video integration | Clip timestamping not yet implemented. |
 | Single-analyst model | No concurrent capture from multiple devices for the same match. |
