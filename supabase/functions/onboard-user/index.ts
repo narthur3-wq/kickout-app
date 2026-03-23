@@ -19,6 +19,12 @@ function normalizeEmail(value: string) {
   return String(value || '').trim().toLowerCase()
 }
 
+function generatePassword() {
+  const bytes = crypto.getRandomValues(new Uint8Array(12))
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*'
+  return Array.from(bytes, (value) => chars[value % chars.length]).join('')
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -61,6 +67,8 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}))
     const targetEmail = normalizeEmail(body?.email)
     const requestedTeamName = String(body?.teamName || '').trim()
+    const requestedPassword = String(body?.password || '').trim()
+    const createAuthUser = body?.createAuthUser !== false
 
     if (!targetEmail) {
       return json({ ok: false, error: 'Email is required.' }, 400)
@@ -121,6 +129,35 @@ Deno.serve(async (req) => {
       targetTeamName = team.name
     }
 
+    let createdAuthUser = false
+    let temporaryPassword: string | null = null
+
+    if (createAuthUser) {
+      temporaryPassword = requestedPassword || generatePassword()
+      const { error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+        email: targetEmail,
+        password: temporaryPassword,
+        email_confirm: true,
+      })
+
+      if (createUserError) {
+        const msg = String(createUserError.message || '').toLowerCase()
+        const alreadyExists =
+          msg.includes('already') ||
+          msg.includes('exists') ||
+          msg.includes('registered') ||
+          msg.includes('duplicate')
+
+        if (alreadyExists) {
+          temporaryPassword = null
+        } else {
+          return json({ ok: false, error: createUserError.message }, 500)
+        }
+      } else {
+        createdAuthUser = true
+      }
+    }
+
     const { error: upsertError } = await supabaseAdmin
       .from('allowed_users')
       .upsert({ email: targetEmail, team_id: targetTeamId }, { onConflict: 'email' })
@@ -136,6 +173,10 @@ Deno.serve(async (req) => {
         id: targetTeamId,
         name: targetTeamName,
         created,
+      },
+      auth: {
+        created: createdAuthUser,
+        temporaryPassword,
       },
     })
   } catch (error) {
