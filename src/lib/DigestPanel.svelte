@@ -20,11 +20,6 @@
     const won = evs.filter(e => KO_RETAINED.has((e.outcome || '').toLowerCase())).length;
     return { n, won, pct: n ? Math.round(100 * won / n) : null };
   }
-  function shotStat(evs) {
-    const n = evs.length;
-    const scored = evs.filter(e => SHOT_SCORED.has((e.outcome || '').toLowerCase())).length;
-    return { n, scored, pct: n ? Math.round(100 * scored / n) : null };
-  }
 
   $: koUs   = koStat(ourKickouts);
   $: koThem = koStat(theirKickouts);
@@ -92,6 +87,56 @@
     return { hasEnoughData: true, line: null, direction: 'neutral' };
   })();
 
+  // Turnover net
+  // "We won N of their turnovers" = direction=theirs AND outcome='lost' (they lost the ball)
+  // "They won N of ours"          = direction=ours  AND outcome='lost' (we lost the ball)
+  $: turnoverNet = (() => {
+    const theirLost = theirTurnovers.filter(e => (e.outcome||'').toLowerCase() === 'lost').length;
+    const ourLost   = ourTurnovers.filter(e => (e.outcome||'').toLowerCase() === 'lost').length;
+    const net = theirLost - ourLost;
+    const hasData = theirTurnovers.length > 0 || ourTurnovers.length > 0;
+    return { theirLost, ourLost, net, hasData };
+  })();
+
+  // Opposition danger players (their shots grouped by target_player)
+  $: dangerPlayers = (() => {
+    const map = {};
+    for (const e of theirShots) {
+      const p = e.target_player;
+      if (!p) continue;
+      if (!map[p]) map[p] = { player: p, shots: 0, goals: 0, points: 0 };
+      map[p].shots++;
+      const o = (e.outcome||'').toLowerCase();
+      if (o === 'goal')  map[p].goals++;
+      if (o === 'point') map[p].points++;
+    }
+    return Object.values(map)
+      .map(d => ({ ...d, scores: d.goals + d.points }))
+      .filter(d => d.scores >= 1)
+      .sort((a, b) => b.scores - a.scores || b.shots - a.shots)
+      .slice(0, 3);
+  })();
+
+  $: hasDangerPlayerData = theirShots.some(e => e.target_player);
+
+  // Their kickout targets (theirKickouts grouped by target_player)
+  $: theirKoTargets = (() => {
+    const map = {};
+    for (const e of theirKickouts) {
+      const p = e.target_player;
+      if (!p) continue;
+      if (!map[p]) map[p] = { player: p, times: 0, retained: 0 };
+      map[p].times++;
+      if (KO_RETAINED.has((e.outcome||'').toLowerCase())) map[p].retained++;
+    }
+    return Object.values(map)
+      .sort((a, b) => b.times - a.times)
+      .slice(0, 3)
+      .map(d => ({ ...d, retPct: d.times ? Math.round(100 * d.retained / d.times) : null }));
+  })();
+
+  $: hasKoTargetData = theirKickouts.some(e => e.target_player);
+
   // Watch bullets (plain English)
   $: watchBullets = (() => {
     const bullets = [];
@@ -117,13 +162,6 @@
       }
       const top = Object.entries(playerCounts).sort((a,b) => b[1]-a[1])[0];
       if (top && top[1] >= 2) bullets.push(`#${top[0]} their main kickout target — ${top[1]} times`);
-    }
-    // Turnover net
-    const toUsWon   = ourTurnovers.filter(e => (e.outcome||'').toLowerCase() === 'won').length;
-    const toThemWon = theirTurnovers.filter(e => (e.outcome||'').toLowerCase() === 'won').length;
-    const net = toUsWon - toThemWon;
-    if (Math.abs(net) >= 2) {
-      bullets.push(net > 0 ? `Turnover battle: us +${net}` : `Turnover battle: them +${Math.abs(net)}`);
     }
     return bullets;
   })();
@@ -179,12 +217,12 @@
       </div>
     {/if}
 
-    <!-- Score block -->
+    <!-- 1. Score block (hero) -->
     <div class="score-block {margin > 0 ? 'ahead' : margin < 0 ? 'behind' : 'level'}">
       <div class="score-side">
         <div class="score-team">{matchCtx?.team || 'Us'}</div>
-        <div class="score-val">{scoreUs.goals}-{String(scoreUs.points).padStart(2,'0')}</div>
-        <div class="score-total">({scoreUs.total})</div>
+        <div class="score-val">{scoreUs.goals}–{String(scoreUs.points).padStart(2,'0')}</div>
+        <div class="score-total">{scoreUs.total} pts</div>
       </div>
       <div class="score-margin">
         {#if margin === 0}
@@ -197,12 +235,12 @@
       </div>
       <div class="score-side">
         <div class="score-team">{matchCtx?.opp || 'Them'}</div>
-        <div class="score-val">{scoreThem.goals}-{String(scoreThem.points).padStart(2,'0')}</div>
-        <div class="score-total">({scoreThem.total})</div>
+        <div class="score-val">{scoreThem.goals}–{String(scoreThem.points).padStart(2,'0')}</div>
+        <div class="score-total">{scoreThem.total} pts</div>
       </div>
     </div>
 
-    <!-- Kickout battle -->
+    <!-- 2. Kickout battle -->
     {#if koUs.n > 0 || koThem.n > 0}
       <div class="section-card">
         <div class="section-hd">Kickout Battle</div>
@@ -221,37 +259,43 @@
       </div>
     {/if}
 
-    <!-- Shots -->
+    <!-- 3. Shot efficiency — both sides always shown side by side -->
     {#if ourShots.length > 0 || theirShots.length > 0}
-      <div class="two-col">
-        {#if ourShots.length > 0}
-          <div class="section-card">
-            <div class="section-hd">Our Shots</div>
-            {#if shotUs2.goalChances > 0}
-              <div class="shot-row"><span>Goal chances</span><strong>{shotUs2.goalScored}/{shotUs2.goalChances}</strong></div>
+      <div class="section-card">
+        <div class="section-hd">Shot Efficiency</div>
+        <div class="shot-compare">
+          <!-- Our shots -->
+          <div class="shot-col">
+            <div class="shot-col-hd">{matchCtx?.team || 'Us'}</div>
+            {#if ourShots.length === 0}
+              <div class="shot-empty">—</div>
+            {:else}
+              <div class="shot-big">{shotUs2.pct !== null ? shotUs2.pct + '%' : '—'}</div>
+              <div class="shot-sub">{shotUs2.scored}/{shotUs2.total} scored</div>
+              <div class="shot-gc">
+                Goal ch: {shotUs2.goalChances > 0 ? `${shotUs2.goalScored}/${shotUs2.goalChances}` : '—'}
+              </div>
             {/if}
-            {#if shotUs2.pointChances > 0}
-              <div class="shot-row"><span>Point attempts</span><strong>{shotUs2.pointScored}/{shotUs2.pointChances}</strong></div>
-            {/if}
-            <div class="shot-row total-row"><span>Overall</span><strong>{shotUs2.pct !== null ? shotUs2.pct + '%' : '–'} <small>({shotUs2.scored}/{shotUs2.total})</small></strong></div>
           </div>
-        {/if}
-        {#if theirShots.length > 0}
-          <div class="section-card">
-            <div class="section-hd">Their Shots</div>
-            {#if shotThem2.goalChances > 0}
-              <div class="shot-row"><span>Goal chances</span><strong>{shotThem2.goalScored}/{shotThem2.goalChances}</strong></div>
+          <div class="shot-divider"></div>
+          <!-- Their shots -->
+          <div class="shot-col">
+            <div class="shot-col-hd">{matchCtx?.opp || 'Them'}</div>
+            {#if theirShots.length === 0}
+              <div class="shot-empty">—</div>
+            {:else}
+              <div class="shot-big">{shotThem2.pct !== null ? shotThem2.pct + '%' : '—'}</div>
+              <div class="shot-sub">{shotThem2.scored}/{shotThem2.total} scored</div>
+              <div class="shot-gc">
+                Goal ch: {shotThem2.goalChances > 0 ? `${shotThem2.goalScored}/${shotThem2.goalChances}` : '—'}
+              </div>
             {/if}
-            {#if shotThem2.pointChances > 0}
-              <div class="shot-row"><span>Point attempts</span><strong>{shotThem2.pointScored}/{shotThem2.pointChances}</strong></div>
-            {/if}
-            <div class="shot-row total-row"><span>Overall</span><strong>{shotThem2.pct !== null ? shotThem2.pct + '%' : '–'} <small>({shotThem2.scored}/{shotThem2.total})</small></strong></div>
           </div>
-        {/if}
+        </div>
       </div>
     {/if}
 
-    <!-- Momentum -->
+    <!-- 4. Momentum -->
     <div class="section-card momentum-section momentum-{momentum.direction}">
       <div class="section-hd">Momentum</div>
       {#if !momentum.hasEnoughData}
@@ -263,7 +307,49 @@
       {/if}
     </div>
 
-    <!-- Watch -->
+    <!-- 5. Turnover net -->
+    {#if turnoverNet.hasData}
+      <div class="section-card">
+        <div class="section-hd">Turnovers</div>
+        <div class="to-row">
+          <span class="to-label">Turnovers</span>
+          <span class="to-net {turnoverNet.net > 0 ? 'net-pos' : turnoverNet.net < 0 ? 'net-neg' : 'net-even'}">
+            Net {turnoverNet.net > 0 ? '+' : ''}{turnoverNet.net}
+          </span>
+          <span class="to-detail">won {turnoverNet.theirLost}, lost {turnoverNet.ourLost}</span>
+        </div>
+      </div>
+    {/if}
+
+    <!-- 6. Their danger players -->
+    {#if hasDangerPlayerData && dangerPlayers.length > 0}
+      <div class="section-card danger-card">
+        <div class="section-hd">Their danger players</div>
+        {#each dangerPlayers as p}
+          <div class="dp-row">
+            <span class="dp-num">#{p.player}</span>
+            <span class="dp-scores">{p.scores} score{p.scores !== 1 ? 's' : ''}</span>
+            <span class="dp-breakdown">({p.goals}G {p.points}P)</span>
+          </div>
+        {/each}
+      </div>
+    {/if}
+
+    <!-- 7. Their kickout targets -->
+    {#if hasKoTargetData && theirKoTargets.length > 0}
+      <div class="section-card">
+        <div class="section-hd">Their kickout targets</div>
+        {#each theirKoTargets as t}
+          <div class="kot-row">
+            <span class="kot-num">#{t.player}</span>
+            <span class="kot-times">{t.times} time{t.times !== 1 ? 's' : ''}</span>
+            <span class="kot-ret">{t.retPct !== null ? t.retPct + '% retention' : '—'}</span>
+          </div>
+        {/each}
+      </div>
+    {/if}
+
+    <!-- 8. Watch bullets -->
     {#if watchBullets.length > 0}
       <div class="section-card">
         <div class="section-hd">Watch</div>
@@ -295,19 +381,20 @@
   .share-btn { margin-left: auto; padding: 5px 12px; border-radius: 7px; font-size: 12px; font-weight: 700; border: 1.5px solid #1c3f8a; background: #1c3f8a; color: #fff; cursor: pointer; font-family: inherit; flex-shrink: 0; }
   .share-btn:disabled { opacity: 0.5; cursor: default; }
 
-  .score-block { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; padding: 24px 20px; border-radius: 14px; border: 1px solid rgba(0,0,0,0.08); }
+  /* Score block — hero element */
+  .score-block { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; padding: 28px 20px; border-radius: 16px; border: 1px solid rgba(0,0,0,0.08); }
   .score-block.ahead { background: #dcfce7; }
   .score-block.behind { background: #fee2e2; }
   .score-block.level { background: #fef9c3; }
   .score-side { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .score-team { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; }
-  .score-val { font-size: 36px; font-weight: 900; color: #111827; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
-  .score-total { font-size: 14px; font-weight: 600; color: #6b7280; font-variant-numeric: tabular-nums; }
+  .score-val { font-size: 48px; font-weight: 900; color: #111827; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+  .score-total { font-size: 13px; font-weight: 600; color: #6b7280; font-variant-numeric: tabular-nums; }
   .score-margin { text-align: center; }
-  .margin-label { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; padding: 6px 10px; border-radius: 8px; }
-  .margin-label.ahead { color: #16a34a; background: rgba(22,163,74,0.12); }
-  .margin-label.behind { color: #dc2626; background: rgba(220,38,38,0.12); }
-  .margin-label.level { color: #d97706; background: rgba(217,119,6,0.12); }
+  .margin-label { display: block; font-size: 16px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; padding: 8px 14px; border-radius: 10px; white-space: nowrap; }
+  .margin-label.ahead { color: #16a34a; background: rgba(22,163,74,0.15); }
+  .margin-label.behind { color: #dc2626; background: rgba(220,38,38,0.15); }
+  .margin-label.level { color: #d97706; background: rgba(217,119,6,0.15); }
 
   .section-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px 16px; }
   .section-hd { font-size: 11px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: #6b7280; margin-bottom: 12px; }
@@ -319,14 +406,17 @@
   .ko-bar-wrap { height: 5px; background: #f3f4f6; border-radius: 99px; margin-bottom: 10px; overflow: hidden; }
   .ko-bar-fill { height: 100%; background: #1c3f8a; border-radius: 99px; transition: width 0.4s ease; }
 
-  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .shot-row { display: flex; justify-content: space-between; align-items: baseline; padding: 5px 0; font-size: 13px; color: #4b5563; border-bottom: 1px solid #f3f4f6; }
-  .shot-row:last-child { border-bottom: none; }
-  .shot-row strong { font-weight: 700; color: #111827; font-variant-numeric: tabular-nums; }
-  .total-row { margin-top: 2px; }
-  .total-row span { font-weight: 700; color: #374151; }
-  .total-row strong { font-size: 15px; }
-  small { font-size: 11px; color: #9ca3af; font-weight: 400; }
+  /* Shot efficiency — side by side */
+  .shot-compare { display: grid; grid-template-columns: 1fr 1px 1fr; gap: 0; align-items: start; }
+  .shot-col { padding: 0 12px; display: flex; flex-direction: column; gap: 4px; }
+  .shot-col:first-child { padding-left: 0; }
+  .shot-col:last-child { padding-right: 0; }
+  .shot-col-hd { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #9ca3af; margin-bottom: 4px; }
+  .shot-big { font-size: 28px; font-weight: 900; color: #111827; font-variant-numeric: tabular-nums; line-height: 1; }
+  .shot-sub { font-size: 12px; color: #6b7280; font-variant-numeric: tabular-nums; }
+  .shot-gc { font-size: 12px; color: #9ca3af; }
+  .shot-empty { font-size: 22px; font-weight: 700; color: #d1d5db; padding: 4px 0; }
+  .shot-divider { width: 1px; background: #e5e7eb; align-self: stretch; margin: 0; }
 
   .momentum-section { }
   .momentum-positive { background: rgba(22, 163, 74, 0.08); border-left: 3px solid #16a34a; }
@@ -335,12 +425,36 @@
   .momentum-line { margin: 0; font-size: 14px; font-weight: 700; color: #111827; line-height: 1.4; }
   .momentum-insufficient { margin: 0; font-size: 13px; color: #9ca3af; font-style: italic; line-height: 1.4; }
 
+  /* Turnovers */
+  .to-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+  .to-label { font-weight: 600; color: #374151; }
+  .to-net { font-size: 16px; font-weight: 900; font-variant-numeric: tabular-nums; padding: 3px 8px; border-radius: 6px; }
+  .net-pos { color: #16a34a; background: rgba(22,163,74,0.12); }
+  .net-neg { color: #dc2626; background: rgba(220,38,38,0.12); }
+  .net-even { color: #d97706; background: rgba(217,119,6,0.12); }
+  .to-detail { font-size: 12px; color: #9ca3af; font-variant-numeric: tabular-nums; }
+
+  /* Danger players */
+  .danger-card { border-left: 3px solid #ef4444; }
+  .dp-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f3f4f6; font-size: 13px; }
+  .dp-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .dp-num { font-weight: 900; color: #111827; min-width: 32px; }
+  .dp-scores { font-weight: 700; color: #374151; flex: 1; }
+  .dp-breakdown { font-size: 12px; color: #9ca3af; font-variant-numeric: tabular-nums; }
+
+  /* Kickout targets */
+  .kot-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f3f4f6; font-size: 13px; }
+  .kot-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .kot-num { font-weight: 900; color: #111827; min-width: 32px; }
+  .kot-times { font-weight: 600; color: #374151; flex: 1; }
+  .kot-ret { font-size: 12px; color: #9ca3af; font-variant-numeric: tabular-nums; }
+
   .watch-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
   .watch-list li { font-size: 13px; color: #374151; padding-left: 14px; position: relative; line-height: 1.4; }
   .watch-list li::before { content: '→'; position: absolute; left: 0; color: #9ca3af; font-weight: 700; }
 
   @media (max-width: 480px) {
-    .score-val { font-size: 28px; }
-    .two-col { grid-template-columns: 1fr; }
+    .score-val { font-size: 36px; }
+    .shot-big { font-size: 22px; }
   }
 </style>
