@@ -51,9 +51,9 @@ Once deployed, configured admin emails will see an **Admin** tab in the app wher
 
 - add a user to their current club
 - create/find another club and assign a user to it
-- create the user's Supabase sign-in account with a temporary password in the same flow
+- create the user's Supabase sign-in account and send the invite email in the same flow
 
-The function upserts the user's row in `allowed_users` and can also create the Supabase Auth user. If the auth user already exists, it simply updates the club assignment.
+The function upserts the user's row in `allowed_users` and sends a Supabase Auth invite email. If the auth user already exists, it simply updates the club assignment.
 
 ## Stack
 

@@ -7,9 +7,6 @@
   let email = '';
   let teamMode = 'current'; // 'current' | 'named'
   let teamName = '';
-  let createAuthUser = true;
-  let passwordMode = 'generated'; // 'generated' | 'manual'
-  let password = '';
   let loading = false;
   let result = null;
   let error = '';
@@ -20,7 +17,6 @@
 
     const cleanedEmail = email.trim().toLowerCase();
     const cleanedTeamName = teamName.trim();
-    const cleanedPassword = password.trim();
 
     if (!cleanedEmail) {
       error = 'Enter an email address.';
@@ -32,18 +28,12 @@
       return;
     }
 
-    if (createAuthUser && passwordMode === 'manual' && cleanedPassword.length < 8) {
-      error = 'Manual passwords must be at least 8 characters.';
-      return;
-    }
-
     loading = true;
     try {
       const payload = {
         email: cleanedEmail,
         teamName: teamMode === 'named' ? cleanedTeamName : null,
-        createAuthUser,
-        password: createAuthUser && passwordMode === 'manual' ? cleanedPassword : null,
+        redirectTo: window.location.origin,
       };
 
       const { data, error: fnError } = await supabase.functions.invoke('onboard-user', {
@@ -56,7 +46,6 @@
       result = data;
       email = '';
       if (teamMode === 'named') teamName = '';
-      if (passwordMode === 'manual') password = '';
     } catch (err) {
       error = err?.message || 'Onboarding failed.';
     } finally {
@@ -69,7 +58,7 @@
   <div class="panel-header">
     <div>
       <h2>Admin Onboarding</h2>
-      <p class="sub">Create or reuse a club, then assign analysts without touching SQL.</p>
+      <p class="sub">Create or reuse a club, then send an invite email without touching SQL or passwords.</p>
     </div>
   </div>
 
@@ -125,47 +114,6 @@
         />
       </label>
     {/if}
-
-    <div class="full">
-      <label class="check-row">
-        <input type="checkbox" bind:checked={createAuthUser} />
-        <span>Create their sign-in account too</span>
-      </label>
-    </div>
-
-    {#if createAuthUser}
-      <div class="full">
-        <span class="field-title">Password</span>
-        <div class="mode-row">
-          <button
-            class:active={passwordMode === 'generated'}
-            on:click={() => passwordMode = 'generated'}
-            type="button"
-          >
-            Generate temporary password
-          </button>
-          <button
-            class:active={passwordMode === 'manual'}
-            on:click={() => passwordMode = 'manual'}
-            type="button"
-          >
-            Set password myself
-          </button>
-        </div>
-      </div>
-
-      {#if passwordMode === 'manual'}
-        <label class="full">
-          <span>Temporary password</span>
-          <input
-            type="text"
-            bind:value={password}
-            placeholder="At least 8 characters"
-            autocomplete="new-password"
-          />
-        </label>
-      {/if}
-    {/if}
   </div>
 
   {#if error}
@@ -180,27 +128,24 @@
       {:else}
         Existing team reused.
       {/if}
-      {#if result.auth?.created && result.auth?.temporaryPassword}
-        <div class="credential-box">
-          <div><strong>Temporary password:</strong> <span class="mono">{result.auth.temporaryPassword}</span></div>
-          <div class="credential-note">Share this securely. The user should change it after first sign-in.</div>
-        </div>
-      {:else if result.auth && !result.auth.created}
-        <div class="credential-note">Auth account already existed, so only the club assignment was updated.</div>
+      {#if result.auth?.invited}
+        <div class="credential-note">Invite email sent. They can open it and go straight into the app.</div>
+      {:else if result.auth?.existing}
+        <div class="credential-note">Sign-in account already existed, so only the club assignment was updated.</div>
       {/if}
     </div>
   {/if}
 
   <div class="actions">
     <button class="primary" on:click={onboardUser} disabled={loading}>
-      {loading ? 'Saving...' : 'Onboard user'}
+      {loading ? 'Sending invite...' : 'Onboard user'}
     </button>
   </div>
 
   <div class="help">
     <p><strong>Same club:</strong> leave it on "Your current team" and just enter the email.</p>
     <p><strong>New club:</strong> choose "Create / find another team" and enter the club name.</p>
-    <p><strong>Account creation:</strong> leave "Create their sign-in account too" enabled to make the Supabase login at the same time.</p>
+    <p><strong>Invite flow:</strong> the app creates the sign-in account and sends the email invite in one step.</p>
     <p><strong>Note:</strong> if the auth account already exists, the app will just update the allowlist/team assignment.</p>
   </div>
 </section>
@@ -306,19 +251,6 @@
     background: #eff6ff;
     color: #1c3f8a;
   }
-  .check-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 2px;
-  }
-  .check-row input {
-    width: 16px;
-    height: 16px;
-  }
-  .check-row span {
-    margin: 0;
-  }
   .notice {
     margin-top: 16px;
     border-radius: 10px;
@@ -338,11 +270,6 @@
   }
   .actions {
     margin-top: 16px;
-  }
-  .credential-box {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(22, 101, 52, 0.18);
   }
   .credential-note {
     margin-top: 6px;

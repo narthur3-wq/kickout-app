@@ -63,7 +63,7 @@
       <button class="primary" on:click={signIn} disabled={loading || !email || !password}>
         {loading ? 'Signing in…' : 'Sign in'}
       </button>
-      <p class="invite-note">Access is invite-only. Contact your administrator to request access.</p>
+      <p class="invite-note">Access is invite-only. Ask your administrator to send you an invite email.</p>
     </div>
   </div>
 </div>
