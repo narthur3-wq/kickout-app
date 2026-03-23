@@ -437,6 +437,10 @@
   function clearPoints()  { landing = {x:NaN, y:NaN}; pickup = {x:NaN, y:NaN}; }
 
   function validate() {
+    if (!team.trim() || !opponent.trim()) {
+      setupModalOpen = true;
+      return 'Set up the match (team and opponent) before logging events.';
+    }
     if (clock.trim() !== '' && !/^(\d{1,2}):\d{2}$/.test(clock))
       return 'Clock must be mm:ss or blank.';
     if (Number.isNaN(landing.x) || Number.isNaN(landing.y)) {
