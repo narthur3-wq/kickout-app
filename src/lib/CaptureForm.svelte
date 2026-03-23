@@ -13,6 +13,14 @@
   export let targetPlayer = '';
   export let flagEvent    = false;
 
+  // ── Team context (display-only) ──────────────────────────────────────
+  export let team     = '';
+  export let opponent = '';
+
+  // ── Break step state (for step guidance) ─────────────────────────────
+  export let landingSet = false;
+  export let pickupSet  = false;
+
   // ── Match setup (bindable) ────────────────────────────────────────────
   export let period       = 'H1';
 
@@ -89,11 +97,11 @@
     <button
       class="seg-dir {direction === 'ours' ? 'active' : ''}"
       on:click={() => direction = 'ours'}
-    >◀ Ours</button>
+    >◀ {team || 'Ours'}</button>
     <button
       class="seg-dir {direction === 'theirs' ? 'active' : ''}"
       on:click={() => direction = 'theirs'}
-    >Theirs ▶</button>
+    >{opponent || 'Theirs'} ▶</button>
   </div>
 
   <!-- ── Period ── -->
@@ -119,7 +127,13 @@
       {/each}
     </div>
     {#if contest === 'break'}
-      <p class="break-hint">Tap pitch: 1 landing · 2 pickup. Then set break outcome below.</p>
+      {#if !landingSet}
+        <p class="break-hint break-hint-step">Break: tap pitch for landing point <strong>(step 1 of 2)</strong></p>
+      {:else if !pickupSet}
+        <p class="break-hint break-hint-step break-hint-step2">Break: now tap for pickup point <strong>(step 2 of 2)</strong></p>
+      {:else}
+        <p class="break-hint">Both points set — choose break outcome below.</p>
+      {/if}
     {/if}
   {/if}
 
@@ -148,7 +162,7 @@
 
   <!-- ── Break outcome (kickout + break only) ── -->
   {#if eventType === 'kickout' && contest === 'break'}
-    <div class="field-label">Break outcome</div>
+    <div class="field-label">Who won the break?</div>
     <div class="btn-group">
       {#each BREAK_OUTS as b}
         <button
@@ -250,6 +264,7 @@
     flex: 1; padding: 8px 4px; font-size: 13px; font-weight: 700;
     border: none; border-radius: 7px; background: transparent;
     cursor: pointer; color: #6b7280; font-family: inherit; transition: all 0.15s;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%;
   }
   .seg-dir.active {
     background: #fff; color: #1c3f8a;
@@ -262,6 +277,12 @@
     font-size: 11px; color: #6b7280; margin: 4px 0 0;
     padding: 5px 8px; background: #f3f4f6; border-radius: 6px;
     line-height: 1.4;
+  }
+  .break-hint-step {
+    background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;
+  }
+  .break-hint-step2 {
+    background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0;
   }
 
   /* ── Seg buttons (contest / break outcome) ── */
