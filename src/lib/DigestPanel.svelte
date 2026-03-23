@@ -76,20 +76,20 @@
   $: shotUs2   = shotBreakdown(ourShots);
   $: shotThem2 = shotBreakdown(theirShots);
 
-  // Momentum sentence
-  $: momentumLine = (() => {
+  // Momentum
+  $: momentum = (() => {
     const scores = filtered
       .filter(e => e.event_type === 'shot' && SHOT_SCORED.has((e.outcome||'').toLowerCase()))
       .sort((a, b) => (a.created_at||'').localeCompare(b.created_at||''));
-    if (scores.length < 3) return null;
+    if (scores.length < 3) return { hasEnoughData: false, line: null, direction: 'neutral' };
     const last = scores.slice(-6);
     const usCount   = last.filter(e => (e.direction||'ours') === 'ours').length;
     const themCount = last.length - usCount;
-    if (usCount === last.length) return `We scored the last ${last.length} scores.`;
-    if (themCount === last.length) return `They scored the last ${last.length} scores.`;
-    if (themCount > usCount) return `They scored ${themCount} of the last ${last.length} scores.`;
-    if (usCount > themCount) return `We scored ${usCount} of the last ${last.length} scores.`;
-    return null;
+    if (usCount === last.length) return { hasEnoughData: true, line: `We scored the last ${last.length} scores.`, direction: 'positive' };
+    if (themCount === last.length) return { hasEnoughData: true, line: `They scored the last ${last.length} scores.`, direction: 'negative' };
+    if (usCount > themCount) return { hasEnoughData: true, line: `We scored ${usCount} of the last ${last.length} scores.`, direction: 'positive' };
+    if (themCount > usCount) return { hasEnoughData: true, line: `They scored ${themCount} of the last ${last.length} scores.`, direction: 'negative' };
+    return { hasEnoughData: true, line: null, direction: 'neutral' };
   })();
 
   // Watch bullets (plain English)
@@ -252,9 +252,16 @@
     {/if}
 
     <!-- Momentum -->
-    {#if momentumLine}
-      <div class="momentum-card">{momentumLine}</div>
-    {/if}
+    <div class="section-card momentum-section momentum-{momentum.direction}">
+      <div class="section-hd">Momentum</div>
+      {#if !momentum.hasEnoughData}
+        <p class="momentum-insufficient">Not enough scores logged to assess momentum.</p>
+      {:else if momentum.line}
+        <p class="momentum-line">{momentum.line}</p>
+      {:else}
+        <p class="momentum-line">Momentum is evenly balanced.</p>
+      {/if}
+    </div>
 
     <!-- Watch -->
     {#if watchBullets.length > 0}
@@ -321,7 +328,12 @@
   .total-row strong { font-size: 15px; }
   small { font-size: 11px; color: #9ca3af; font-weight: 400; }
 
-  .momentum-card { background: #f0f7ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 12px 16px; font-size: 14px; font-weight: 600; color: #1e3a5f; }
+  .momentum-section { }
+  .momentum-positive { background: rgba(22, 163, 74, 0.08); border-left: 3px solid #16a34a; }
+  .momentum-negative { background: rgba(220, 38, 38, 0.08); border-left: 3px solid #dc2626; }
+  .momentum-neutral { }
+  .momentum-line { margin: 0; font-size: 14px; font-weight: 700; color: #111827; line-height: 1.4; }
+  .momentum-insufficient { margin: 0; font-size: 13px; color: #9ca3af; font-style: italic; line-height: 1.4; }
 
   .watch-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
   .watch-list li { font-size: 13px; color: #374151; padding-left: 14px; position: relative; line-height: 1.4; }
