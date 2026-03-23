@@ -127,13 +127,15 @@
       {/each}
     </div>
     {#if contest === 'break'}
-      {#if !landingSet}
-        <p class="break-hint break-hint-step">Break: tap pitch for landing point <strong>(step 1 of 2)</strong></p>
-      {:else if !pickupSet}
-        <p class="break-hint break-hint-step break-hint-step2">Break: now tap for pickup point <strong>(step 2 of 2)</strong></p>
-      {:else}
-        <p class="break-hint">Both points set — choose break outcome below.</p>
-      {/if}
+      <p class="break-hint {!landingSet ? 'break-hint-step' : (!pickupSet ? 'break-hint-step2' : 'break-hint-done')}">
+        {#if !landingSet}
+          ● Land &nbsp;<span class="break-hint-dim">○ Pick</span>
+        {:else if !pickupSet}
+          ✓ Land &nbsp;● Pick
+        {:else}
+          ✓ Land &nbsp;✓ Pick
+        {/if}
+      </p>
     {/if}
   {/if}
 
@@ -274,16 +276,14 @@
 
   /* ── Break hint ── */
   .break-hint {
-    font-size: 11px; color: #6b7280; margin: 4px 0 0;
-    padding: 5px 8px; background: #f3f4f6; border-radius: 6px;
-    line-height: 1.4;
+    font-size: 12px; font-weight: 600; margin: 4px 0 0;
+    padding: 5px 8px; border-radius: 6px; line-height: 1.4;
+    background: #f3f4f6; color: #6b7280; border: 1px solid transparent;
   }
-  .break-hint-step {
-    background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;
-  }
-  .break-hint-step2 {
-    background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0;
-  }
+  .break-hint-step  { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+  .break-hint-step2 { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+  .break-hint-done  { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+  .break-hint-dim   { opacity: 0.45; }
 
   /* ── Seg buttons (contest / break outcome) ── */
   .btn-group { display: flex; gap: 4px; flex-wrap: wrap; }

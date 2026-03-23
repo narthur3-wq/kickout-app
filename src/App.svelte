@@ -1154,22 +1154,27 @@
           on:picked={onPickup}
         />
       </div>
-      <p class="coords">
-        {#if !Number.isNaN(landing.x)}
-          {sideBand(landing.x)} · {Math.round(depthMetersFromOwnGoal(landing.y))}m
-          {#if contest === 'break'}
-            {#if !Number.isNaN(pickup.x)}
-              &nbsp;→&nbsp; Pick: {sideBand(pickup.x)} · {Math.round(depthMetersFromOwnGoal(pickup.y))}m
-            {:else}
-              <span class="coords-hint">Now tap pickup point</span>
-            {/if}
+      <div class="pitch-status {contest === 'break' && (Number.isNaN(landing.x) || Number.isNaN(pickup.x)) ? 'pitch-status-active' : ''}">
+        {#if contest === 'break'}
+          {#if Number.isNaN(landing.x)}
+            <span class="ps-step-active">● Step 1 — tap pitch for landing point</span>
+            <span class="ps-sep">·</span>
+            <span class="ps-step-dim">○ Step 2 — pickup point</span>
+          {:else if Number.isNaN(pickup.x)}
+            <span class="ps-step-done">✓ Land: {sideBand(landing.x)} · {Math.round(depthMetersFromOwnGoal(landing.y))}m</span>
+            <span class="ps-sep">→</span>
+            <span class="ps-step-active">● Step 2 — tap pitch for pickup point</span>
+          {:else}
+            <span class="ps-step-done">✓ Land: {sideBand(landing.x)} · {Math.round(depthMetersFromOwnGoal(landing.y))}m</span>
+            <span class="ps-sep">→</span>
+            <span class="ps-step-done">✓ Pick: {sideBand(pickup.x)} · {Math.round(depthMetersFromOwnGoal(pickup.y))}m</span>
           {/if}
+        {:else if !Number.isNaN(landing.x)}
+          <span class="ps-coords">{sideBand(landing.x)} · {Math.round(depthMetersFromOwnGoal(landing.y))}m</span>
         {:else}
-          <span class="coords-hint">
-            {contest === 'break' ? 'Step 1 of 2 — tap pitch to set landing' : 'Tap pitch to place landing point'}
-          </span>
+          <span class="ps-prompt">Tap pitch — set landing point</span>
         {/if}
-      </p>
+      </div>
     </div><!-- /pitch-panel -->
 
   </div><!-- /capture-layout -->
@@ -1529,11 +1534,19 @@
   }
   .pitch-panel.pitch-error { outline: 3px solid #dc2626; outline-offset: 2px; animation: pitchFlash 0.4s ease 2; }
   @keyframes pitchFlash { 0%,100% { outline-color: #dc2626; } 50% { outline-color: #fca5a5; } }
-  .coords {
-    font-size: 11px; color: #374151; margin: 0; text-align: center;
-    font-variant-numeric: tabular-nums; letter-spacing: 0.01em; font-weight: 600;
+  .pitch-status {
+    font-size: 13px; text-align: center; padding: 6px 12px; margin: 0;
+    background: #f9fafb; border-top: 1px solid #e5e7eb;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 36px; flex-shrink: 0;
   }
-  .coords-hint { color: #9ca3af; font-weight: 400; }
+  .pitch-status-active { background: #eff6ff; border-top-color: #bfdbfe; }
+  .ps-prompt { color: #1d4ed8; font-weight: 600; font-size: 14px; }
+  .ps-coords { color: #374151; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ps-step-active { color: #1d4ed8; font-weight: 600; }
+  .ps-step-done { color: #15803d; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ps-step-dim { color: #9ca3af; }
+  .ps-sep { color: #9ca3af; }
 
   /* ── Generic shell buttons (toast etc.) ── */
   button {
