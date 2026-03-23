@@ -570,20 +570,26 @@
     {#if isKickoutView && scoreStateStats.length > 0}
       <div class="section-card">
         <div class="section-hd">By Score State</div>
-        <table class="kpi-table player-table">
-          <thead><tr><th>Score state</th><th>KOs</th><th>Retention</th></tr></thead>
-          <tbody>
-            {#each scoreStateStats as s}
-              <tr>
-                <td style="text-align:left">{s.bucket}</td>
-                <td>{s.tot}</td>
-                <td style="background:{s.pct != null ? cellColor(s.pct) : 'transparent'}">
-                  {s.pct != null ? s.pct + '%' : `(n=${s.tot})`}
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <div class="ss-bars">
+          {#each scoreStateStats as s}
+            {@const barColor = s.pct == null ? null : s.pct >= 60 ? '#16a34a' : s.pct >= 40 ? '#d97706' : '#dc2626'}
+            <div class="ss-row">
+              <span class="ss-lbl">{s.bucket}</span>
+              <div class="ss-track">
+                {#if s.pct != null}
+                  <div class="ss-fill" style="width:{s.pct}%;background:{barColor}"></div>
+                {/if}
+              </div>
+              {#if s.pct != null}
+                <span class="ss-n">{s.tot}</span>
+                <span class="ss-pct" style="color:{barColor}">{s.pct}%</span>
+              {:else}
+                <span class="ss-n">{s.tot}</span>
+                <span class="ss-null">—</span>
+              {/if}
+            </div>
+          {/each}
+        </div>
         <p class="hint">Retention rate in each score-state context. Derived from tracked shot events. Shown when n≥3.</p>
       </div>
     {/if}
@@ -855,6 +861,16 @@
   .card[data-etype="turnover"] .panel-title { color: #b45309; border-left: 3px solid #b45309; padding-left: 8px; }
   .card[data-etype="turnover"] .section-hd  { color: #b45309; }
   .card[data-etype="kickout"]  .panel-title { border-left: 3px solid #1c3f8a; padding-left: 8px; }
+
+  /* ── Score state bar chart ── */
+  .ss-bars { display: flex; flex-direction: column; gap: 7px; }
+  .ss-row { display: flex; align-items: center; gap: 8px; }
+  .ss-lbl { font-size: 11px; font-weight: 700; color: #6b7280; width: 72px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ss-track { flex: 1; height: 10px; background: #f0f0f0; border-radius: 99px; overflow: hidden; }
+  .ss-fill { height: 100%; border-radius: 99px; transition: width 0.3s; }
+  .ss-n { font-size: 11px; color: #9ca3af; width: 28px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+  .ss-pct { font-size: 12px; font-weight: 700; width: 38px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+  .ss-null { font-size: 12px; font-weight: 600; color: #d1d5db; width: 38px; text-align: right; flex-shrink: 0; }
 
   /* ── Desktop whitespace ── */
   @media (min-width: 900px) {
