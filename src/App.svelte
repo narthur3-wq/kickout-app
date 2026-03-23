@@ -49,6 +49,7 @@
   let pitchError = false;
   let activeTab = 'capture';
   let savedFlash = false;
+  let confirmDeleteAll = false;
   let pendingSync = new Map(); // id -> 'upsert' | 'delete'
   let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
   let metaReady = false;
@@ -555,14 +556,14 @@
 
   async function deleteAllEvents() {
     if (events.length === 0) return;
-    if (!confirm(`Delete all ${events.length} events? This cannot be undone.`)) return;
-    undoStack = [...undoStack.slice(-9), [...events]];
     const allIds = events.map(e => e.id);
     events = [];
-    if (editingId) {
-      editingId = null;
-      clearPoints();
-    }
+    editingId = null;
+    undoStack = [];
+    pendingSync = new Map();
+    savePendingSync();
+    clearPoints();
+    confirmDeleteAll = false;
     persistLocal();
     for (const id of allIds) {
       deleteFromSupabase(id);
@@ -988,9 +989,9 @@
       {:else if syncStatus === 'error'}
         <span class="chip error">!</span>
       {/if}
-      <button class="flip-pill" on:click={() => ourGoalAtTop = !ourGoalAtTop} title="Swap which goal end is ours on the pitch (use at half-time if not auto-detected)">End ⇄</button>
+      <button class="flip-pill" on:click={() => ourGoalAtTop = !ourGoalAtTop} title="Swap which goal end is ours on the pitch (use at half-time if not auto-detected)">Swap ends</button>
       <button class="icon-btn" title="{wakeLock ? 'Screen locked on' : 'Keep screen on'}"
-        on:click={toggleWakeLock}>{wakeLock ? 'Screen on' : 'Screen off'}</button>
+        on:click={toggleWakeLock}>{wakeLock ? 'Awake' : 'Keep awake'}</button>
       {#if supabaseConfigured && user}
         <span class="user-email">{user.email}</span>
         <button class="hdr-sm" on:click={signOut}>Sign out</button>
@@ -1070,6 +1071,10 @@
         {CONTESTS}
         {BREAK_OUTS}
         {editingId}
+        team={team}
+        opponent={opponent}
+        landingSet={!Number.isNaN(landing.x)}
+        pickupSet={!Number.isNaN(pickup.x)}
         {undoStack}
         {savedFlash}
         onSave={saveEvent}
@@ -1180,9 +1185,15 @@
   {:else}
   <div class="full-panel">
     <div class="events-toolbar-danger">
-      <button class="btn-delete-all" on:click={deleteAllEvents} disabled={events.length === 0}>
-        Delete all ({events.length})
-      </button>
+      {#if confirmDeleteAll}
+        <span class="delete-confirm-prompt">Delete all {events.length} events?</span>
+        <button class="btn-delete-all btn-delete-confirm" on:click={deleteAllEvents}>Yes, delete</button>
+        <button class="btn-delete-cancel" on:click={() => confirmDeleteAll = false}>Cancel</button>
+      {:else}
+        <button class="btn-delete-all" on:click={() => confirmDeleteAll = true} disabled={events.length === 0}>
+          Delete all ({events.length})
+        </button>
+      {/if}
     </div>
     <EventsTable
       {events}
@@ -1264,9 +1275,9 @@
   .period-pill:hover:not(.active) { color: rgba(255,255,255,0.65); }
 
   .header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-  .user-email { font-size: 11px; color: rgba(255,255,255,0.38); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .user-email { font-size: 10px; color: rgba(255,255,255,0.28); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .icon-btn {
-    background: none; border: none; cursor: pointer; font-size: 17px;
+    background: none; border: none; cursor: pointer; font-size: 14px;
     padding: 5px 6px; border-radius: 6px; color: rgba(255,255,255,0.55); transition: all 0.15s;
   }
   .icon-btn:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.9); }
@@ -1283,20 +1294,22 @@
 
   /* Flip button — dark header */
   .flip-pill {
-    padding: 5px 9px; border-radius: 7px; font-size: 12px; font-weight: 700;
+    padding: 5px 9px; border-radius: 7px; font-size: 11px; font-weight: 700;
     border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.08);
     cursor: pointer; color: rgba(255,255,255,0.75); font-family: inherit; transition: all 0.15s; line-height: 1;
-    letter-spacing: 0.01em;
+    letter-spacing: 0.01em; opacity: 0.75;
   }
   .flip-pill:hover { background: rgba(255,255,255,0.15); color: #fff; }
 
   /* Sign-out — dark header */
   .hdr-sm {
-    padding: 5px 11px; border-radius: 7px; font-size: 12px; font-weight: 600;
+    padding: 3px 8px; border-radius: 7px; font-size: 11px; font-weight: 600;
     border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.08);
     cursor: pointer; color: rgba(255,255,255,0.72); font-family: inherit; transition: all 0.15s;
+    opacity: 0.65;
   }
-  .hdr-sm:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .hdr-sm:hover { background: rgba(255,255,255,0.15); color: #fff; opacity: 1; }
+  @media (max-width: 640px) { .hdr-sm { display: none; } }
 
   /* ── Tab bar ── */
   .tab-bar {
@@ -1319,15 +1332,15 @@
 
   /* ── Match context bar (Capture tab, always visible) ── */
   .match-ctx-bar {
-    font-size: 12px; font-weight: 600; color: #374151;
-    padding: 5px 14px; background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb; border: none; border-bottom: 1px solid #e5e7eb;
+    font-size: 13px; font-weight: 600; color: #374151;
+    padding: 7px 14px; background: rgba(196, 18, 48, 0.06);
+    border-bottom: 1px solid rgba(196, 18, 48, 0.12); border: none; border-bottom: 1px solid rgba(196, 18, 48, 0.12);
     flex-shrink: 0; cursor: pointer; text-align: left; width: 100%;
     font-family: inherit; display: flex; align-items: center; gap: 6px;
     transition: background 0.12s;
   }
-  .match-ctx-bar:hover { background: #f3f4f6; }
-  .ctx-edit { font-size: 11px; color: #9ca3af; margin-left: auto; }
+  .match-ctx-bar:hover { background: rgba(196, 18, 48, 0.10); }
+  .ctx-edit { font-size: 13px; color: #c41230; opacity: 0.7; margin-left: auto; }
 
   /* ── Match setup modal ── */
   .modal-backdrop {
@@ -1401,6 +1414,18 @@
   }
   .btn-delete-all:hover:not(:disabled) { background: #fef2f2; border-color: #dc2626; }
   .btn-delete-all:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-delete-confirm { background: #dc2626; color: #fff; border-color: #dc2626; }
+  .btn-delete-confirm:hover { background: #b91c1c; border-color: #b91c1c; }
+  .btn-delete-cancel {
+    padding: 5px 12px; font-size: 12px; font-weight: 600;
+    background: #fff; color: #6b7280; border: 1.5px solid #e5e7eb; border-radius: 8px;
+    cursor: pointer; font-family: inherit; transition: background 0.12s;
+  }
+  .btn-delete-cancel:hover { background: #f3f4f6; }
+  .delete-confirm-prompt {
+    font-size: 12px; font-weight: 600; color: #dc2626; white-space: nowrap;
+  }
+  .events-toolbar-danger { gap: 6px; align-items: center; }
 
   /* ── Capture layout ── */
   .capture-layout { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
