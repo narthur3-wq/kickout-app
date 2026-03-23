@@ -139,13 +139,13 @@
           const net = (w - l) / Math.max(w + l, 0.0001);
           // intensity = total activity, sqrt-lifted
           const intensity = Math.sqrt((w + l) / 2);
-          const alpha = Math.min(0.85, 0.08 + intensity * 0.77);
+          const alpha = Math.min(0.92, 0.12 + intensity * 0.80);
           if (net >= 0) {
-            // green — stronger as net approaches +1
-            ctx.fillStyle = `hsla(105, 100%, 62%, ${alpha * net + alpha * 0.15})`;
+            // teal/cyan green — high contrast against dark green turf
+            ctx.fillStyle = `hsla(160, 100%, 65%, ${alpha * net + alpha * 0.15})`;
           } else {
-            // red — stronger as net approaches -1
-            ctx.fillStyle = `hsla(0, 90%, 62%, ${alpha * (-net) + alpha * 0.15})`;
+            // bright red
+            ctx.fillStyle = `hsla(0, 90%, 65%, ${alpha * (-net) + alpha * 0.15})`;
           }
           ctx.fillRect(x*cellW, y*cellH, cellW+1, cellH+1);
         }
@@ -171,12 +171,12 @@
   }
 
   function heatColor(t) {
-    const a = Math.min(0.85, 0.08 + t * 0.77);
-    if (colorScheme === 'positive') return `hsla(105, 100%, 62%, ${a})`;
-    if (colorScheme === 'negative') return `hsla(0, 90%, 62%, ${a})`;
-    // density: blue→cyan→lime→yellow→red
-    const hue = (1 - t) * 220;
-    return `hsla(${hue}, 85%, 50%, ${a})`;
+    const a = Math.min(0.92, 0.12 + t * 0.80);
+    if (colorScheme === 'positive') return `hsla(160, 100%, 65%, ${a})`;
+    if (colorScheme === 'negative') return `hsla(0, 90%, 65%, ${a})`;
+    // density: yellow→orange→red (contrasts against green turf)
+    const hue = 60 - t * 60; // 60 (yellow) → 0 (red)
+    return `hsla(${hue}, 95%, 58%, ${a})`;
   }
 
   // Redraw whenever points or colorScheme changes
@@ -205,25 +205,24 @@
   .legend-bar {
     flex: 1; height: 8px; border-radius: 4px;
     background: linear-gradient(to right,
-      hsla(220,85%,50%,0.15),
-      hsla(160,85%,50%,0.45),
-      hsla(80,85%,50%,0.65),
-      hsla(40,85%,50%,0.78),
-      hsla(0,85%,50%,0.85)
+      hsla(60,95%,58%,0.15),
+      hsla(40,95%,58%,0.50),
+      hsla(20,95%,58%,0.72),
+      hsla(0,95%,58%,0.92)
     );
   }
   .legend-bar.positive {
-    background: linear-gradient(to right, hsla(105,100%,62%,0.05), hsla(105,100%,62%,0.85));
+    background: linear-gradient(to right, hsla(160,100%,65%,0.05), hsla(160,100%,65%,0.92));
   }
   .legend-bar.negative {
-    background: linear-gradient(to right, hsla(0,90%,62%,0.05), hsla(0,90%,62%,0.85));
+    background: linear-gradient(to right, hsla(0,90%,65%,0.05), hsla(0,90%,65%,0.92));
   }
   .legend-bar.outcome {
     background: linear-gradient(to right,
-      hsla(0,90%,62%,0.85),
-      hsla(0,90%,62%,0.15),
-      hsla(105,100%,62%,0.15),
-      hsla(105,100%,62%,0.85)
+      hsla(0,90%,65%,0.92),
+      hsla(0,90%,65%,0.15),
+      hsla(160,100%,65%,0.15),
+      hsla(160,100%,65%,0.92)
     );
   }
 </style>
