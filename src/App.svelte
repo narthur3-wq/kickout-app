@@ -6,6 +6,7 @@
   import EventsTable from './lib/EventsTable.svelte';
   import AnalyticsPanel from './lib/AnalyticsPanel.svelte';
   import DigestPanel from './lib/DigestPanel.svelte';
+  import LivePanel from './lib/LivePanel.svelte';
   import CaptureForm from './lib/CaptureForm.svelte';
   import AdminPanel from './lib/AdminPanel.svelte';
   import { supabase, supabaseConfigured, userHasAccess, getUserTeamDetails, isConfiguredAdmin } from './lib/supabase.js';
@@ -982,6 +983,8 @@
   // ── Current match events (for Digest tab) ────────────────────────────────
   $: currentKey = `${matchDate}|${norm(team)}|${norm(opponent)}`;
   $: currentMatchEvents = events.filter(e => matchKey(e) === currentKey);
+  $: currentPhaseEvents = currentMatchEvents.filter((e) => periodFilter === 'ALL' || e.period === periodFilter);
+  $: currentPhaseLabel = periodFilter === 'ALL' ? 'Match' : periodFilter;
   $: scoreSnapshots = buildScoreSnapshots(events);
 
   // ── Timeline ──────────────────────────────────────────────────────────────
@@ -1191,6 +1194,9 @@
     <button class="tab-btn {activeTab === 'capture' ? 'active' : ''}" on:click={() => activeTab = 'capture'}>
       Capture{#if editingId}&nbsp;<span class="edit-dot">●</span>{/if}
     </button>
+    <button class="tab-btn {activeTab === 'live' ? 'active' : ''}" on:click={() => activeTab = 'live'}>
+      Live
+    </button>
     <button class="tab-btn {activeTab === 'digest' ? 'active' : ''}" on:click={() => activeTab = 'digest'}>
       Digest
     </button>
@@ -1334,10 +1340,27 @@
 
   </div><!-- /capture-layout -->
 
+  <!-- ══ LIVE TAB ══ -->
+  {:else if activeTab === 'live'}
+  <div class="full-panel">
+    <LivePanel
+      events={currentPhaseEvents}
+      teamName={team}
+      opponentName={opponent}
+      phaseLabel={currentPhaseLabel}
+      on:showTab={(e) => activeTab = e.detail}
+    />
+  </div>
+
   <!-- ══ DIGEST TAB ══ -->
   {:else if activeTab === 'digest'}
   <div class="full-panel">
-    <DigestPanel events={currentMatchEvents} {periodFilter} />
+    <DigestPanel
+      events={currentPhaseEvents}
+      teamName={team}
+      opponentName={opponent}
+      phaseLabel={currentPhaseLabel}
+    />
   </div>
 
   <!-- ══ ANALYTICS TABS (Kickouts / Shots / Turnovers) ══ -->
