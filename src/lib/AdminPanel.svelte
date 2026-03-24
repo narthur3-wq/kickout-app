@@ -6,7 +6,9 @@
 
   let email = '';
   let teamMode = 'current'; // 'current' | 'named'
+  let authMode = 'password'; // 'password' | 'invite'
   let newTeamName = '';
+  let password = '';
   let loading = false;
   let result = null;
   let error = '';
@@ -28,12 +30,19 @@
       return;
     }
 
+    if (authMode === 'password' && password.length < 8) {
+      error = 'Password must be at least 8 characters.';
+      return;
+    }
+
     loading = true;
     try {
       const payload = {
         email: cleanedEmail,
         teamName: teamMode === 'named' ? cleanedTeamName : null,
-        redirectTo: window.location.origin,
+        delivery: authMode,
+        password: authMode === 'password' ? password : null,
+        redirectTo: authMode === 'invite' ? window.location.origin : null,
       };
 
       const { data, error: fnError } = await supabase.functions.invoke('onboard-user', {
@@ -45,6 +54,7 @@
 
       result = data;
       email = '';
+      password = '';
       if (teamMode === 'named') newTeamName = '';
     } catch (err) {
       error = err?.message || 'Onboarding failed.';
@@ -58,7 +68,7 @@
   <div class="panel-header">
     <div>
       <h2>Admin Onboarding</h2>
-      <p class="sub">Create or reuse a club, then send an invite email without touching SQL or passwords.</p>
+      <p class="sub">Create or reuse a club, then make the sign-in account and team assignment in one place.</p>
     </div>
   </div>
 
@@ -83,6 +93,38 @@
         autocomplete="email"
       />
     </label>
+
+    <div class="full">
+      <span class="field-title">Sign-in setup</span>
+      <div class="mode-row">
+        <button
+          class:active={authMode === 'password'}
+          on:click={() => authMode = 'password'}
+          type="button"
+        >
+          Set password now
+        </button>
+        <button
+          class:active={authMode === 'invite'}
+          on:click={() => authMode = 'invite'}
+          type="button"
+        >
+          Send invite email
+        </button>
+      </div>
+    </div>
+
+    {#if authMode === 'password'}
+      <label class="full">
+        <span>Temporary password</span>
+        <input
+          type="text"
+          bind:value={password}
+          placeholder="Minimum 8 characters"
+          autocomplete="new-password"
+        />
+      </label>
+    {/if}
 
     <div class="full">
       <span class="field-title">Assign to</span>
@@ -130,6 +172,8 @@
       {/if}
       {#if result.auth?.invited}
         <div class="credential-note">Invite email sent. They can open it and go straight into the app.</div>
+      {:else if result.auth?.delivery === 'password' && !result.auth?.existing}
+        <div class="credential-note">Account created. Give them this email and the password you entered above.</div>
       {:else if result.auth?.existing}
         <div class="credential-note">Sign-in account already existed, so only the club assignment was updated.</div>
       {/if}
@@ -138,16 +182,16 @@
 
   <div class="actions">
     <button class="primary" on:click={onboardUser} disabled={loading}>
-      {loading ? 'Sending invite...' : 'Onboard user'}
+      {loading ? 'Saving user...' : 'Onboard user'}
     </button>
   </div>
 
   <div class="help">
     <p><strong>Same club:</strong> leave it on "Your current team" and just enter the email.</p>
     <p><strong>New club:</strong> choose "Create / find another team" and enter the club name.</p>
-    <p><strong>Invite flow:</strong> the app creates the sign-in account and sends the email invite in one step.</p>
-    <p><strong>If invite sending fails:</strong> check Supabase redirect URLs and email setup, then retry.</p>
-    <p><strong>Note:</strong> if the auth account already exists, the app will just update the allowlist/team assignment.</p>
+    <p><strong>Password flow:</strong> set a temporary password here, then send the analyst the email and password directly.</p>
+    <p><strong>Invite flow:</strong> keep this only if you later configure email properly in Supabase.</p>
+    <p><strong>Note:</strong> if the auth account already exists, the app will just update the allowlist and team assignment.</p>
   </div>
 </section>
 

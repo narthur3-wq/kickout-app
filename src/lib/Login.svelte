@@ -146,7 +146,7 @@
         <button class="secondary" on:click={sendResetLink} disabled={loading || !email}>
           Send password reset email
         </button>
-        <p class="invite-note">Access is invite-only. Ask your administrator to send you an invite email.</p>
+        <p class="invite-note">Access is admin-managed. Ask your administrator for your email and password, or for a reset link.</p>
       {/if}
     </div>
   </div>

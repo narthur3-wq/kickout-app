@@ -55,6 +55,10 @@ function normalizeTeamName(value: string) {
   return String(value || '').trim().replace(/\s+/g, ' ')
 }
 
+function normalizeDelivery(value: string) {
+  return value === 'invite' ? 'invite' : 'password'
+}
+
 Deno.serve(async (req) => {
   const origin = normalizeOrigin(req.headers.get('Origin') || '')
   const allowedOrigin = normalizeOrigin(Deno.env.get('ALLOWED_ORIGIN') || '')
@@ -104,6 +108,8 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}))
     const targetEmail = normalizeEmail(body?.email)
     const requestedTeamName = normalizeTeamName(body?.teamName)
+    const delivery = normalizeDelivery(body?.delivery)
+    const password = String(body?.password || '')
     const redirectTo = String(body?.redirectTo || '').trim()
     const redirectUrl = parseRedirect(redirectTo)
 
@@ -111,11 +117,15 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: 'Email is required.' }, 400, origin, allowedOrigin)
     }
 
-    if (redirectTo && !redirectUrl) {
+    if (delivery === 'password' && password.length < 8) {
+      return json({ ok: false, error: 'Password must be at least 8 characters.' }, 400, origin, allowedOrigin)
+    }
+
+    if (delivery === 'invite' && redirectTo && !redirectUrl) {
       return json({ ok: false, error: 'Invite redirect URL is invalid.' }, 400, origin, allowedOrigin)
     }
 
-    if (allowedOrigin && redirectUrl && normalizeOrigin(redirectUrl.origin) !== allowedOrigin) {
+    if (delivery === 'invite' && allowedOrigin && redirectUrl && normalizeOrigin(redirectUrl.origin) !== allowedOrigin) {
       return json({ ok: false, error: 'Invite redirect URL must match the allowed app origin.' }, 400, origin, allowedOrigin)
     }
 
@@ -190,23 +200,39 @@ Deno.serve(async (req) => {
 
     const existingAuthUser = await findAuthUserByEmail(supabaseAdmin, targetEmail)
     let invited = false
+    let createdAuthUser = false
 
     if (!existingAuthUser) {
-      const inviteOptions = redirectTo ? { redirectTo } : undefined
-      const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-        targetEmail,
-        inviteOptions,
-      )
+      if (delivery === 'invite') {
+        const inviteOptions = redirectTo ? { redirectTo } : undefined
+        const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+          targetEmail,
+          inviteOptions,
+        )
 
-      if (inviteError) {
-        return json({
-          ok: false,
-          provisioned: true,
-          error: `Team assignment saved, but the invite email could not be sent: ${inviteError.message}`,
-        }, 500, origin, allowedOrigin)
+        if (inviteError) {
+          return json({
+            ok: false,
+            provisioned: true,
+            error: `Team assignment saved, but the invite email could not be sent: ${inviteError.message}`,
+          }, 500, origin, allowedOrigin)
+        }
+
+        invited = true
+        createdAuthUser = true
+      } else {
+        const { error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+          email: targetEmail,
+          password,
+          email_confirm: true,
+        })
+
+        if (createUserError) {
+          return json({ ok: false, error: `Could not create sign-in user: ${createUserError.message}` }, 500, origin, allowedOrigin)
+        }
+
+        createdAuthUser = true
       }
-
-      invited = true
     }
 
     const { error: upsertError } = await supabaseAdmin
@@ -214,7 +240,7 @@ Deno.serve(async (req) => {
       .upsert({ email: targetEmail, team_id: targetTeamId }, { onConflict: 'email' })
 
     if (upsertError) {
-      if (!existingAuthUser && invited) {
+      if (!existingAuthUser && createdAuthUser) {
         try {
           const invitedUser = await findAuthUserByEmail(supabaseAdmin, targetEmail)
           if (invitedUser?.id) {
@@ -237,6 +263,7 @@ Deno.serve(async (req) => {
         created,
       },
       auth: {
+        delivery,
         invited,
         existing: !!existingAuthUser,
         redirectTo: redirectTo || null,
