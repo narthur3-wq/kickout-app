@@ -111,7 +111,7 @@
     </section>
 
     <section class="card">
-      <div class="eyebrow">Flow Of The {phaseLabel === 'Match' ? 'Match' : phaseLabel}</div>
+      <div class="eyebrow">Flow Of The {phaseLabel.startsWith('Match') ? 'Match' : phaseLabel}</div>
       <div class="flow-block">
         <div class="mini-title">Score flow</div>
         <div class="flow-row">
@@ -150,9 +150,16 @@
     <section class="card two-column">
       <div class="eyebrow">Their Kickout Pattern</div>
       <p class="headline-copy">{insights.kickoutPattern.line}</p>
+      {#if insights.kickoutPattern.primaryWinner}
+        <div class="stat-chip">
+          <span class="stat-chip-label">Primary winner</span>
+          <span class="stat-chip-value">{insights.kickoutPattern.primaryWinner.label}</span>
+          <span class="stat-chip-sub">{insights.kickoutPattern.primaryWinner.total} of {insights.kickoutPattern.wonTotal} successful kickouts</span>
+        </div>
+      {/if}
       {#if insights.kickoutPattern.primaryTarget}
         <div class="stat-chip">
-          <span class="stat-chip-label">Primary target</span>
+          <span class="stat-chip-label">Most targeted</span>
           <span class="stat-chip-value">{insights.kickoutPattern.primaryTarget.label}</span>
           <span class="stat-chip-sub">{insights.kickoutPattern.primaryTarget.total} of {insights.kickoutPattern.total}</span>
         </div>

@@ -11,6 +11,7 @@
   import AdminPanel from './lib/AdminPanel.svelte';
   import { supabase, supabaseConfigured, userHasAccess, getUserTeamDetails, isConfiguredAdmin } from './lib/supabase.js';
   import { buildScoreSnapshots } from './lib/score.js';
+  import { buildKickoutClockTrend } from './lib/analyticsHelpers.js';
   import { onMount } from 'svelte';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
@@ -69,6 +70,8 @@
   let realtimeRefreshTimer = null;
   let accountOpen = false;
   let isAdminUser = false;
+  let storageScope = supabaseConfigured ? null : 'local';
+  let editReturnContext = null;
 
   // ── Viz filters ───────────────────────────────────────────────────────────
   let fContest = new SvelteSet(CONTESTS);
@@ -118,6 +121,12 @@
 
   const today = new Date();
   const currentYear = today.getFullYear();
+  const LOCAL_STORAGE_SCOPE = 'local';
+  const STORAGE_KEYS = {
+    events: 'ko_events',
+    meta: 'ko_meta',
+    sync: 'ko_sync_queue',
+  };
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const norm = s => (s ?? '').trim().toLowerCase();
@@ -128,6 +137,7 @@
   const depthBandFromMeters = d => d < 20 ? 'Short' : (d < 45 ? 'Medium' : (d < 65 ? 'Long' : 'Very Long'));
   const zoneCode = (nx, ny) => `${sideBand(nx)[0]}-${depthBandFromMeters(depthMetersFromOwnGoal(ny))[0]}`;
   const breakDispM = (x1,y1,x2,y2) => Math.hypot((x2-x1)*WIDTH_M, (y2-y1)*LENGTH_M);
+  const defaultMatchDate = () => new Date().toISOString().slice(0,10);
 
   // YTD: compare year strings to avoid UTC-vs-local timezone edge cases
   const eventYear = e => (e.match_date || (e.created_at||'').slice(0,10)).slice(0,4);
@@ -138,29 +148,174 @@
     return `${md}|${norm(e.team)}|${norm(e.opponent)}`;
   };
 
-  // ── localStorage helpers ─────────────────────────────────────────────────
-  function loadFromLocalStorage() {
+  function storageScopeForUser(nextUser) {
+    if (nextUser?.id) return `user:${nextUser.id}`;
+    return supabaseConfigured ? null : LOCAL_STORAGE_SCOPE;
+  }
+
+  function storageKey(baseKey, scope = storageScope) {
+    if (!scope) return null;
+    return scope === LOCAL_STORAGE_SCOPE ? baseKey : `${baseKey}:${scope}`;
+  }
+
+  function readStoredJson(baseKey, fallback, scope = storageScope, corruptMessage = '') {
+    const key = storageKey(baseKey, scope);
+    if (!key) return fallback;
     try {
-      events = JSON.parse(localStorage.getItem('ko_events') || '[]');
+      return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
     } catch {
-      console.warn('ko_events corrupt in localStorage, starting fresh');
-      events = [];
-    }
-    try {
-      const meta = JSON.parse(localStorage.getItem('ko_meta') || '{}');
-      team          = meta.team          || '';
-      opponent      = meta.opponent      || '';
-      ourGoalAtTop  = meta.our_goal_at_top !== undefined ? !!meta.our_goal_at_top : true;
-    } catch {
-      console.warn('ko_meta corrupt in localStorage');
+      if (corruptMessage) console.warn(corruptMessage);
+      return fallback;
     }
   }
 
+  function resetMatchContext() {
+    team = '';
+    opponent = '';
+    matchDate = defaultMatchDate();
+    period = 'H1';
+    ourGoalAtTop = true;
+  }
+
+  function resetCaptureDraft() {
+    contest = 'clean';
+    outcome = 'Retained';
+    breakOutcome = '';
+    clock = '';
+    targetPlayer = '';
+    landing = { x: NaN, y: NaN };
+    pickup = { x: NaN, y: NaN };
+    eventType = 'kickout';
+    direction = 'ours';
+    shotType = 'point';
+    flagEvent = false;
+    restartReason = '';
+    editingId = null;
+    pitchError = false;
+    editReturnContext = null;
+  }
+
+  function resetRuntimeState() {
+    events = [];
+    undoStack = [];
+    pendingSync = new SvelteMap();
+    syncStatus = '';
+    syncMessage = '';
+    backupReminder = false;
+    confirmDeleteAll = false;
+    showSummary = false;
+    accountOpen = false;
+    resetMatchContext();
+    resetCaptureDraft();
+  }
+
+  function snapshotCaptureContext() {
+    return {
+      team,
+      opponent,
+      matchDate,
+      period,
+      ourGoalAtTop,
+      clock,
+      contest,
+      outcome,
+      breakOutcome,
+      targetPlayer,
+      landing: { ...landing },
+      pickup: { ...pickup },
+      eventType,
+      direction,
+      shotType,
+      flagEvent,
+      restartReason,
+    };
+  }
+
+  function restoreCaptureContext(snapshot) {
+    if (!snapshot) {
+      resetCaptureDraft();
+      return;
+    }
+    team = snapshot.team;
+    opponent = snapshot.opponent;
+    matchDate = snapshot.matchDate;
+    period = snapshot.period;
+    ourGoalAtTop = snapshot.ourGoalAtTop;
+    clock = snapshot.clock;
+    contest = snapshot.contest;
+    outcome = snapshot.outcome;
+    breakOutcome = snapshot.breakOutcome;
+    targetPlayer = snapshot.targetPlayer;
+    landing = { ...snapshot.landing };
+    pickup = { ...snapshot.pickup };
+    eventType = snapshot.eventType;
+    direction = snapshot.direction;
+    shotType = snapshot.shotType;
+    flagEvent = snapshot.flagEvent;
+    restartReason = snapshot.restartReason;
+    editingId = null;
+  }
+
+  function cancelEditMode() {
+    if (editReturnContext) {
+      restoreCaptureContext(editReturnContext);
+      editReturnContext = null;
+      activeTab = 'capture';
+      return;
+    }
+    editingId = null;
+    clearPoints();
+    targetPlayer = '';
+  }
+
+  function applyDerivedScoreDisplays(nextEvents) {
+    const snapshots = buildScoreSnapshots(nextEvents);
+    return nextEvents.map((event) => {
+      const snapshot = snapshots.get(event.id);
+      if (!snapshot) return event;
+      if (event.score_us === snapshot.usDisplay && event.score_them === snapshot.themDisplay) return event;
+      return {
+        ...event,
+        score_us: snapshot.usDisplay,
+        score_them: snapshot.themDisplay,
+      };
+    });
+  }
+
+  function activateStorageScope(scope) {
+    metaReady = false;
+    storageScope = scope;
+    resetRuntimeState();
+    if (scope) {
+      loadFromLocalStorage(scope);
+      loadPendingSync(scope);
+    }
+    metaReady = true;
+  }
+
+  // ── localStorage helpers ─────────────────────────────────────────────────
+  function loadFromLocalStorage(scope = storageScope) {
+    events = applyDerivedScoreDisplays(readStoredJson(STORAGE_KEYS.events, [], scope, 'ko_events corrupt in localStorage, starting fresh'));
+    const meta = readStoredJson(STORAGE_KEYS.meta, {}, scope, 'ko_meta corrupt in localStorage');
+    team = meta.team || '';
+    opponent = meta.opponent || '';
+    matchDate = /^\d{4}-\d{2}-\d{2}$/.test(meta.match_date || '') ? meta.match_date : defaultMatchDate();
+    period = ['H1', 'H2', 'ET'].includes(meta.period) ? meta.period : 'H1';
+    ourGoalAtTop = meta.our_goal_at_top !== undefined ? !!meta.our_goal_at_top : true;
+  }
+
   function persistLocal() {
+    const eventsKey = storageKey(STORAGE_KEYS.events);
+    const metaKey = storageKey(STORAGE_KEYS.meta);
+    if (!eventsKey || !metaKey) return;
     try {
-      localStorage.setItem('ko_events', JSON.stringify(events));
-      localStorage.setItem('ko_meta', JSON.stringify({
-        team, opponent, our_goal_at_top: ourGoalAtTop
+      localStorage.setItem(eventsKey, JSON.stringify(events));
+      localStorage.setItem(metaKey, JSON.stringify({
+        team,
+        opponent,
+        match_date: matchDate,
+        period,
+        our_goal_at_top: ourGoalAtTop,
       }));
     } catch (e) {
       if (e instanceof DOMException && e.name === 'QuotaExceededError') {
@@ -174,9 +329,15 @@
 
   // Persist only match metadata after the initial local load has completed.
   function persistMeta() {
+    const metaKey = storageKey(STORAGE_KEYS.meta);
+    if (!metaKey) return;
     try {
-      localStorage.setItem('ko_meta', JSON.stringify({
-        team, opponent, our_goal_at_top: ourGoalAtTop
+      localStorage.setItem(metaKey, JSON.stringify({
+        team,
+        opponent,
+        match_date: matchDate,
+        period,
+        our_goal_at_top: ourGoalAtTop,
       }));
     } catch (e) {
       console.error('localStorage meta write failed', e);
@@ -186,6 +347,8 @@
   $: if (metaReady) {
     team;
     opponent;
+    matchDate;
+    period;
     ourGoalAtTop;
     persistMeta();
   }
@@ -210,9 +373,14 @@
   // 4. QUEUE PERSISTENCE: loadPendingSync() restores from localStorage on
   //    mount; syncFromSupabase() (called after auth) calls flushSyncQueue()
   //    to replay any queued ops from a previous offline session.
-  function loadPendingSync() {
+  function loadPendingSync(scope = storageScope) {
+    const key = storageKey(STORAGE_KEYS.sync, scope);
+    if (!key) {
+      pendingSync = new SvelteMap();
+      return;
+    }
     try {
-      const raw = JSON.parse(localStorage.getItem('ko_sync_queue') || '[]');
+      const raw = JSON.parse(localStorage.getItem(key) || '[]');
       if (!Array.isArray(raw)) {
         pendingSync = new SvelteMap();
         return;
@@ -234,9 +402,11 @@
     }
   }
   function savePendingSync() {
+    const key = storageKey(STORAGE_KEYS.sync);
+    if (!key) return;
     try {
       localStorage.setItem(
-        'ko_sync_queue',
+        key,
         JSON.stringify([...pendingSync].map(([id, op]) => ({ id, op })))
       );
     } catch {}
@@ -324,7 +494,7 @@
       const localOnly = events.filter(e => !remoteIds.has(e.id) && !pendingSync.has(e.id));
       const remoteFiltered = remoteEvents.filter(e => !pendingSync.has(e.id));
       const pendingLocal = events.filter(e => pendingSync.get(e.id) === 'upsert');
-      events = [...remoteFiltered, ...localOnly, ...pendingLocal];
+      events = applyDerivedScoreDisplays([...remoteFiltered, ...localOnly, ...pendingLocal]);
       // Push local-only events up to Supabase. If this fails, keep those
       // records queued locally so the UI does not imply they are safely synced.
       if (localOnly.length > 0) {
@@ -420,9 +590,9 @@
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   onMount(() => {
-    loadFromLocalStorage();
-    metaReady = true;
-    loadPendingSync();
+    if (!supabaseConfigured) {
+      activateStorageScope(LOCAL_STORAGE_SCOPE);
+    }
     authRecoveryMode =
       window.location.hash.includes('type=recovery') ||
       window.location.search.includes('type=recovery') ||
@@ -453,6 +623,7 @@
             user = session.user;
             isAdminUser = isConfiguredAdmin(session.user.email);
             ({ id: teamId, name: teamName } = await getUserTeamDetails());
+            activateStorageScope(storageScopeForUser(session.user));
             await syncFromSupabase();
             if (!disposed) startRealtimeSync();
           } else {
@@ -468,6 +639,7 @@
             teamId = null;
             teamName = null;
             isAdminUser = false;
+            activateStorageScope(null);
             return;
           }
           if (!session?.user) {
@@ -477,20 +649,24 @@
             isAdminUser = false;
             authRecoveryMode = false;
             stopRealtimeSync();
+            activateStorageScope(null);
             return;
           }
           if (!(await userHasAccess())) {
             await supabase.auth.signOut();
             user = null;
             teamId = null;
+            teamName = null;
             isAdminUser = false;
             stopRealtimeSync();
+            activateStorageScope(null);
             return;
           }
           user = session.user;
           authRecoveryMode = false;
           isAdminUser = isConfiguredAdmin(session.user.email);
           ({ id: teamId, name: teamName } = await getUserTeamDetails());
+          activateStorageScope(storageScopeForUser(session.user));
           await syncFromSupabase();
           if (!disposed) startRealtimeSync();
         });
@@ -515,6 +691,7 @@
     authRecoveryMode = false;
     isAdminUser = isConfiguredAdmin(e.detail.user?.email);
     ({ id: teamId, name: teamName } = await getUserTeamDetails());
+    activateStorageScope(storageScopeForUser(e.detail.user));
     await syncFromSupabase();
     startRealtimeSync();
   }
@@ -526,6 +703,8 @@
     teamName = null;
     authRecoveryMode = false;
     isAdminUser = false;
+    stopRealtimeSync();
+    activateStorageScope(null);
   }
 
   // ── Wake lock ─────────────────────────────────────────────────────────────
@@ -547,6 +726,18 @@
   function onLanding(e) { landing = e.detail; }
   function onPickup(e)  { pickup  = e.detail; }
   function clearPoints()  { landing = {x:NaN, y:NaN}; pickup = {x:NaN, y:NaN}; }
+
+  $: if (eventType !== 'kickout') {
+    contest = 'clean';
+    breakOutcome = '';
+    restartReason = '';
+    pickup = { x: NaN, y: NaN };
+  }
+
+  $: if (contest !== 'break') {
+    breakOutcome = '';
+    pickup = { x: NaN, y: NaN };
+  }
 
   function validate() {
     if (!team.trim() || !opponent.trim()) {
@@ -606,8 +797,8 @@
       clock,
       target_player: targetPlayer.trim(),
       outcome,
-      contest_type:  contest,
-      break_outcome: contest === 'break' ? breakOutcome : '',
+      contest_type:  eventType === 'kickout' ? contest : null,
+      break_outcome: eventType === 'kickout' && contest === 'break' ? breakOutcome : null,
       x:   landing.x, y:   normY,
       x_m: toMetersX(landing.x), y_m: toMetersY(normY),
       depth_from_own_goal_m: +depth_m.toFixed(2),
@@ -617,11 +808,11 @@
       our_goal_at_top: ourGoalAtTop,
       event_type:      eventType,
       direction,
-      pickup_x:   contest === 'break' ? pickup.x    : null,
-      pickup_y:   contest === 'break' ? normPickY   : null,
-      pickup_x_m: contest === 'break' ? toMetersX(pickup.x)    : null,
-      pickup_y_m: contest === 'break' ? toMetersY(normPickY)   : null,
-      break_displacement_m: contest === 'break'
+      pickup_x:   eventType === 'kickout' && contest === 'break' ? pickup.x    : null,
+      pickup_y:   eventType === 'kickout' && contest === 'break' ? normPickY   : null,
+      pickup_x_m: eventType === 'kickout' && contest === 'break' ? toMetersX(pickup.x)    : null,
+      pickup_y_m: eventType === 'kickout' && contest === 'break' ? toMetersY(normPickY)   : null,
+      break_displacement_m: eventType === 'kickout' && contest === 'break'
         ? +breakDispM(landing.x, landing.y, pickup.x, pickup.y).toFixed(2)
         : null,
       score_us:    editingId ? (events.find(r => r.id === editingId)?.score_us ?? currentMatchScore.us.str) : currentMatchScore.us.str,
@@ -639,20 +830,28 @@
     if (err) { showNotice('error', err); return; }
     const ev = buildEvent();
     const isNew = !editingId;
+    const restoreAfterEdit = !isNew ? editReturnContext : null;
 
     // Push undo snapshot before mutating
     undoStack = [...undoStack.slice(-9), [...events]];
 
     const idx = events.findIndex(r => r.id === ev.id);
     if (idx >= 0) events[idx] = ev; else events = [ev, ...events];
+    events = applyDerivedScoreDisplays(events);
 
     persistLocal();
-    clearPoints();
-    editingId = null;
-    targetPlayer = '';
-    flagEvent = false;
-    restartReason = '';
-    shotType = 'point';
+    if (restoreAfterEdit) {
+      restoreCaptureContext(restoreAfterEdit);
+      editReturnContext = null;
+      activeTab = 'capture';
+    } else {
+      clearPoints();
+      editingId = null;
+      targetPlayer = '';
+      flagEvent = false;
+      restartReason = '';
+      shotType = 'point';
+    }
 
     // Haptic + visual feedback
     navigator.vibrate?.(50);
@@ -674,7 +873,7 @@
     askConfirm('Remove the last saved event?', () => {
       const nextEvents = undoStack[undoStack.length - 1];
       const prevEvents = events;
-      events = nextEvents;
+      events = applyDerivedScoreDisplays(nextEvents);
       undoStack = undoStack.slice(0, -1);
       persistLocal();
 
@@ -689,9 +888,9 @@
   function delEvent(id) {
     askConfirm('Delete this event?', () => {
       undoStack = [...undoStack.slice(-9), [...events]];
-      events = events.filter(e => e.id !== id);
+      events = applyDerivedScoreDisplays(events.filter(e => e.id !== id));
       persistLocal();
-      if (editingId === id) { editingId = null; clearPoints(); }
+      if (editingId === id) cancelEditMode();
       deleteFromSupabase(id);
     }, 'Delete event');
   }
@@ -713,6 +912,9 @@
   }
 
   function loadToForm(e) {
+    if (!editingId && !editReturnContext) {
+      editReturnContext = snapshotCaptureContext();
+    }
     editingId    = e.id;
     // Restore capture fields from the event
     team         = e.team        || '';
@@ -780,11 +982,11 @@
 
   function completeImport(imported, skipSchemaCheck = false) {
     if (!Array.isArray(imported)) throw new Error('Expected a JSON array');
-    const REQUIRED = ['id', 'outcome', 'contest_type', 'x', 'y'];
+    const REQUIRED = ['id', 'outcome', 'x', 'y'];
     const invalid = imported.filter(e =>
       typeof e !== 'object' || e === null || REQUIRED.some(f => e[f] == null)
     );
-    if (invalid.length > 0) throw new Error(`${invalid.length} record(s) are missing required fields (id, outcome, contest_type, x, y). Import aborted.`);
+    if (invalid.length > 0) throw new Error(`${invalid.length} record(s) are missing required fields (id, outcome, x, y). Import aborted.`);
 
     const unknownVer = imported.filter(e => e.schema_version != null && e.schema_version > 1);
     if (!skipSchemaCheck && unknownVer.length > 0) {
@@ -802,18 +1004,46 @@
       return;
     }
 
-    const existingIds = new Set(events.map(e => e.id));
-    const newEvents = imported
-      .filter(e => !existingIds.has(e.id))
-      .map(e => (supabaseConfigured && user
-        ? { ...e, team_id: teamId }
-        : e));
-    events = [...events, ...newEvents];
+    const normalizeImportedEvent = (event) => {
+      const type = event.event_type || 'kickout';
+      const nextContest = type === 'kickout' ? (event.contest_type || 'clean') : null;
+      const isBreak = type === 'kickout' && nextContest === 'break';
+      return {
+        ...event,
+        team_id: supabaseConfigured && user ? teamId : (event.team_id ?? null),
+        contest_type: nextContest,
+        break_outcome: isBreak ? (event.break_outcome || '') : null,
+        pickup_x: isBreak ? (event.pickup_x ?? null) : null,
+        pickup_y: isBreak ? (event.pickup_y ?? null) : null,
+        pickup_x_m: isBreak ? (event.pickup_x_m ?? null) : null,
+        pickup_y_m: isBreak ? (event.pickup_y_m ?? null) : null,
+        break_displacement_m: isBreak ? (event.break_displacement_m ?? null) : null,
+        restart_reason: type === 'kickout' ? (event.restart_reason || null) : null,
+        shot_type: type === 'shot' ? (event.shot_type || 'point') : null,
+      };
+    };
+    const existingById = new Map(events.map((event) => [event.id, JSON.stringify(event)]));
+    let conflictingDuplicates = 0;
+    const newEvents = imported.reduce((acc, event) => {
+      const normalizedImport = normalizeImportedEvent(event);
+      const existing = existingById.get(normalizedImport.id);
+      if (existing) {
+        if (existing !== JSON.stringify(normalizedImport)) conflictingDuplicates += 1;
+        return acc;
+      }
+      acc.push(normalizedImport);
+      return acc;
+    }, []);
+    events = applyDerivedScoreDisplays([...events, ...newEvents]);
     persistLocal();
     if (newEvents.length > 0) {
       for (const ev of newEvents) upsertToSupabase(ev);
     }
-    showNotice('success', `Imported ${newEvents.length} new event(s). ${imported.length - newEvents.length} duplicate(s) skipped.`, 7000);
+    const duplicateCount = imported.length - newEvents.length;
+    const duplicateNote = conflictingDuplicates > 0
+      ? ` ${conflictingDuplicates} duplicate(s) with different data were skipped.`
+      : '';
+    showNotice('success', `Imported ${newEvents.length} new event(s). ${duplicateCount} duplicate(s) skipped.${duplicateNote}`, 7000);
   }
 
   function importJSON() {
@@ -888,7 +1118,7 @@
       const points = s.filter(e => e.outcome === 'Point').length;
       return { goals, points, str: `${goals}-${points}` };
     };
-    return { us: calc('ours'), them: calc('theirs'), hasShots: shots.length > 0 };
+    return { us: calc('ours'), them: calc('theirs'), hasShots: true };
   })();
 
   // ── Filtered events for viz & KPIs ───────────────────────────────────────
@@ -984,7 +1214,7 @@
   $: currentKey = `${matchDate}|${norm(team)}|${norm(opponent)}`;
   $: currentMatchEvents = events.filter(e => matchKey(e) === currentKey);
   $: currentPhaseEvents = currentMatchEvents.filter((e) => periodFilter === 'ALL' || e.period === periodFilter);
-  $: currentPhaseLabel = periodFilter === 'ALL' ? 'Match' : periodFilter;
+  $: currentPhaseLabel = periodFilter === 'ALL' ? 'Match (all periods)' : periodFilter;
   $: scoreSnapshots = buildScoreSnapshots(events);
 
   // ── Timeline ──────────────────────────────────────────────────────────────
@@ -1052,21 +1282,7 @@
     .sort((a, b) => b.total - a.total);
 
   // ── Clock trend (retention by 10-min window) ─────────────────────────────
-  $: clockTrend = (() => {
-    const WINDOWS = [[0,10,'0-10'],[10,20,'10-20'],[20,30,'20-30'],[30,40,'30-40'],[40,60,'40+']];
-    const buckets = WINDOWS.map(([lo, hi, label]) => ({ label, lo, hi, tot: 0, ret: 0 }));
-    for (const e of vizEvents) {
-      if (!e.clock) continue;
-      const m = e.clock.match(/^(\d{1,2}):(\d{2})$/);
-      if (!m) continue;
-      const mins = parseInt(m[1]) + parseInt(m[2]) / 60;
-      const b = buckets.find(bk => mins >= bk.lo && mins < bk.hi);
-      if (b) { b.tot++; if (RETAINED.has(e.outcome)) b.ret++; }
-    }
-    return buckets
-      .filter(b => b.tot >= 2)
-      .map(b => ({ label: b.label, tot: b.tot, pct: Math.round(100 * b.ret / b.tot) }));
-  })();
+  $: clockTrend = buildKickoutClockTrend(vizEvents, analyticsEventType);
 
   // ── Restart-context stats ─────────────────────────────────────────────────
   $: restartStats = (() => {
@@ -1108,6 +1324,15 @@
       topPlayer,
     };
   })();
+  $: summaryIsFullView =
+    periodFilter === 'ALL' &&
+    matchFilter === 'ALL' &&
+    oppFilter === 'ALL' &&
+    plyFilter === 'ALL' &&
+    !flaggedOnly &&
+    !ytdOnly &&
+    directionFilter === 'ALL' &&
+    (!useFilters || (fContest.size === CONTESTS.length && fOutcome.size === OUTCOMES.length));
 </script>
 
 <svelte:window on:beforeunload={handleBeforeUnload} />
@@ -1132,7 +1357,7 @@
         {#if currentMatchScore?.hasShots}<span class="match-score">{currentMatchScore.us.str} – {currentMatchScore.them.str}</span>{/if}
       </div>
       <div class="period-pills">
-        <span class="pills-label" title="Filter analytics by period">View:</span>
+        <span class="pills-label" title="This phase filter affects Live, Digest, and analytics">Phase:</span>
         {#each ['H1','H2','ET'] as p (p)}
           <button class="period-pill {periodFilter === p ? 'active' : ''}" on:click={() => periodFilter = p} title="Show {p} events only">{p}</button>
         {/each}
@@ -1286,7 +1511,7 @@
           if (goingH2 && !wasH2) ourGoalAtTop = !ourGoalAtTop;
           else if (wasH2 && !goingH2) ourGoalAtTop = !ourGoalAtTop;
         }}
-        on:cancelEdit={() => { editingId = null; clearPoints(); targetPlayer = ''; }}
+        on:cancelEdit={cancelEditMode}
       />
     </div><!-- /form-panel -->
 
@@ -1443,7 +1668,14 @@
 
   <!-- Summary modal -->
   {#if showSummary}
-    <SummaryModal summaryStats={summaryStats} on:close={() => showSummary = false} />
+    <SummaryModal
+      summaryStats={summaryStats}
+      title={summaryIsFullView ? 'Match Summary' : 'Filtered Summary'}
+      subtitle={summaryIsFullView
+        ? `${summaryStats?.total ?? 0} events recorded`
+        : `${summaryStats?.total ?? 0} events in the current filtered view`}
+      on:close={() => showSummary = false}
+    />
   {/if}
 
   {#if confirmState}

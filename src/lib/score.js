@@ -40,17 +40,34 @@ export function buildScoreSnapshots(events = []) {
     const ordered = [...matchEvents].sort(compareEventOrder);
     let us = 0;
     let them = 0;
+    let usGoals = 0;
+    let usPoints = 0;
+    let themGoals = 0;
+    let themPoints = 0;
 
     for (const event of ordered) {
-      snapshots.set(event.id, { us, them, margin: us - them });
+      snapshots.set(event.id, {
+        us,
+        them,
+        margin: us - them,
+        usDisplay: `${usGoals}-${usPoints}`,
+        themDisplay: `${themGoals}-${themPoints}`,
+      });
 
       if ((event.event_type || 'kickout') !== 'shot') continue;
 
       const points = shotPoints(event);
       if (!points) continue;
 
-      if ((event.direction || 'ours') === 'theirs') them += points;
-      else us += points;
+      if ((event.direction || 'ours') === 'theirs') {
+        them += points;
+        if (points === 3) themGoals += 1;
+        else themPoints += 1;
+      } else {
+        us += points;
+        if (points === 3) usGoals += 1;
+        else usPoints += 1;
+      }
     }
   }
 

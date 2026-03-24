@@ -63,11 +63,11 @@ describe('buildScoreSnapshots', () => {
 
     const snapshots = buildScoreSnapshots(events)
 
-    expect(snapshots.get('ko-1')).toEqual({ us: 0, them: 0, margin: 0 })
-    expect(snapshots.get('shot-1')).toEqual({ us: 0, them: 0, margin: 0 })
-    expect(snapshots.get('ko-2')).toEqual({ us: 3, them: 0, margin: 3 })
-    expect(snapshots.get('shot-2')).toEqual({ us: 3, them: 0, margin: 3 })
-    expect(snapshots.get('ko-3')).toEqual({ us: 3, them: 1, margin: 2 })
+    expect(snapshots.get('ko-1')).toMatchObject({ us: 0, them: 0, margin: 0, usDisplay: '0-0', themDisplay: '0-0' })
+    expect(snapshots.get('shot-1')).toMatchObject({ us: 0, them: 0, margin: 0, usDisplay: '0-0', themDisplay: '0-0' })
+    expect(snapshots.get('ko-2')).toMatchObject({ us: 3, them: 0, margin: 3, usDisplay: '1-0', themDisplay: '0-0' })
+    expect(snapshots.get('shot-2')).toMatchObject({ us: 3, them: 0, margin: 3, usDisplay: '1-0', themDisplay: '0-0' })
+    expect(snapshots.get('ko-3')).toMatchObject({ us: 3, them: 1, margin: 2, usDisplay: '1-0', themDisplay: '0-1' })
   })
 
   it('keeps separate matches isolated', () => {
@@ -96,7 +96,7 @@ describe('buildScoreSnapshots', () => {
       },
     ])
 
-    expect(snapshots.get('match-a-score')).toEqual({ us: 0, them: 0, margin: 0 })
-    expect(snapshots.get('match-b-ko')).toEqual({ us: 0, them: 0, margin: 0 })
+    expect(snapshots.get('match-a-score')).toMatchObject({ us: 0, them: 0, margin: 0, usDisplay: '0-0', themDisplay: '0-0' })
+    expect(snapshots.get('match-b-ko')).toMatchObject({ us: 0, them: 0, margin: 0, usDisplay: '0-0', themDisplay: '0-0' })
   })
 })

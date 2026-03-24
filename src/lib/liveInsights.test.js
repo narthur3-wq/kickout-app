@@ -63,6 +63,7 @@ describe('buildLiveInsights', () => {
     const insights = buildLiveInsights(events);
 
     expect(insights.kickoutPattern.primaryTarget?.label).toBe('#8');
+    expect(insights.kickoutPattern.primaryWinner?.label).toBe('#8');
     expect(insights.kickoutPerformance.worstLane?.label).toBe('left-short');
     expect(insights.kickoutPerformance.bestLane?.label).toBe('right-medium');
     expect(insights.threat.mainThreat?.label).toBe('#11');
@@ -70,5 +71,23 @@ describe('buildLiveInsights', () => {
     expect(insights.recommendations.map((item) => item.type)).toContain('tight_mark_player');
     expect(insights.recommendations.map((item) => item.type)).toContain('press_kickout_target');
     expect(insights.recommendations.map((item) => item.type)).toContain('avoid_restart_lane');
+  });
+
+  it('uses event time, not event density, to describe the flow and prioritises kickout lines for coaches', () => {
+    const events = [
+      baseEvent({ id: 's1', ko_sequence: 1, created_at: '2026-03-24T10:00:00.000Z', event_type: 'shot', direction: 'ours', outcome: 'Point', clock: '02:00' }),
+      baseEvent({ id: 's2', ko_sequence: 2, created_at: '2026-03-24T10:01:00.000Z', event_type: 'shot', direction: 'ours', outcome: 'Goal', clock: '04:00' }),
+      baseEvent({ id: 'k1', ko_sequence: 3, created_at: '2026-03-24T10:18:00.000Z', direction: 'theirs', outcome: 'Won', target_player: '8', side_band: 'Right', depth_band: 'Medium', clock: '18:00' }),
+      baseEvent({ id: 'k2', ko_sequence: 4, created_at: '2026-03-24T10:22:00.000Z', direction: 'theirs', outcome: 'Won', target_player: '8', side_band: 'Right', depth_band: 'Medium', clock: '22:00' }),
+      baseEvent({ id: 'k3', ko_sequence: 5, created_at: '2026-03-24T10:27:00.000Z', direction: 'theirs', outcome: 'Won', target_player: '8', side_band: 'Right', depth_band: 'Medium', clock: '27:00' }),
+      baseEvent({ id: 'k4', ko_sequence: 6, created_at: '2026-03-24T10:31:00.000Z', direction: 'theirs', outcome: 'Won', target_player: '8', side_band: 'Right', depth_band: 'Medium', clock: '31:00' }),
+      baseEvent({ id: 'k5', ko_sequence: 7, created_at: '2026-03-24T10:33:00.000Z', direction: 'theirs', outcome: 'Won', target_player: '8', side_band: 'Right', depth_band: 'Medium', clock: '33:00' }),
+      baseEvent({ id: 'k6', ko_sequence: 8, created_at: '2026-03-24T10:35:00.000Z', direction: 'theirs', outcome: 'Won', target_player: '8', side_band: 'Right', depth_band: 'Medium', clock: '35:00' }),
+    ];
+
+    const insights = buildLiveInsights(events);
+
+    expect(insights.flow.lines[0]).toContain('late');
+    expect(insights.flow.coachLines[0]).toContain('kickout');
   });
 });

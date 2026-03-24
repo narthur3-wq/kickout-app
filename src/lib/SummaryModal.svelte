@@ -1,6 +1,8 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   export let summaryStats = null;
+  export let title = 'Match Summary';
+  export let subtitle = '';
   const dispatch = createEventDispatcher();
 
   function retColor(pct) {
@@ -19,8 +21,8 @@
       <!-- Dark header matching app chrome -->
       <div class="modal-header">
         <div class="header-left">
-          <div class="header-title">Match Summary</div>
-          <div class="header-sub">{summaryStats.total} events recorded</div>
+          <div class="header-title">{title}</div>
+          <div class="header-sub">{subtitle || `${summaryStats.total} events recorded`}</div>
         </div>
         <button class="close-btn" on:click={() => dispatch('close')} aria-label="Close">✕</button>
       </div>

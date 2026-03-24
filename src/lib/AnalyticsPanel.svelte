@@ -3,6 +3,7 @@
   import Heatmap from './Heatmap.svelte';
   import { createEventDispatcher } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
+  import { buildShotSummary, buildTurnoverSummary } from './analyticsHelpers.js';
 
   // ── Read-only data props ─────────────────────────────────────────────────
   export let vizEvents    = [];
@@ -119,39 +120,8 @@
   $: panelTitle = TYPE_LABELS[analyticsEventType] || 'Analytics';
 
   // Headline summary stats for shots and turnovers
-  $: shotSummary = (() => {
-    if (analyticsEventType !== 'shot') return null;
-    const total = vizEvents.length;
-    if (total < 3) return { tooFew: true };
-    const goals   = vizEvents.filter(e => (e.outcome||'').toLowerCase() === 'goal').length;
-    const points  = vizEvents.filter(e => (e.outcome||'').toLowerCase() === 'point').length;
-    const scored  = goals + points;
-    const wide    = vizEvents.filter(e => (e.outcome||'').toLowerCase() === 'wide').length;
-    const blocked = vizEvents.filter(e => (e.outcome||'').toLowerCase() === 'blocked').length;
-    const saved   = vizEvents.filter(e => (e.outcome||'').toLowerCase() === 'saved').length;
-    const goalAttempts  = goals + wide + blocked + saved;
-    const pointAttempts = points + wide;
-    return {
-      total, scored,
-      scoredPct: Math.round(100 * scored / total),
-      goalAttempts, goals,
-      pointAttempts, points,
-      small: total < 5
-    };
-  })();
-
-  $: turnoverSummary = (() => {
-    if (analyticsEventType !== 'turnover') return null;
-    const total = vizEvents.length;
-    if (total < 3) return { tooFew: true };
-    const won  = vizEvents.filter(e => {
-      const o = (e.outcome||'').toLowerCase();
-      return o === 'retained' || o === 'won';
-    }).length;
-    const lost = vizEvents.filter(e => (e.outcome||'').toLowerCase() === 'lost').length;
-    const net  = won - lost;
-    return { total, won, lost, net, small: total < 5 };
-  })();
+  $: shotSummary = buildShotSummary(vizEvents, analyticsEventType);
+  $: turnoverSummary = buildTurnoverSummary(vizEvents, analyticsEventType);
 
   // Active filter tags for summary bar
   $: filterTags = (() => {
@@ -419,7 +389,7 @@
     {/if}
 
     <!-- ── Clock trend ── -->
-    {#if clockTrend.length >= 2}
+    {#if analyticsEventType === 'kickout' && clockTrend.length >= 2}
       <div class="section-card">
         <div class="section-hd">Retention by Clock <span class="section-ct">{clockTrend.reduce((s,b)=>s+b.tot,0)} with clock</span></div>
         <div class="clock-bars">

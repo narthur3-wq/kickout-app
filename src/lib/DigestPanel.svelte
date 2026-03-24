@@ -113,10 +113,10 @@
     <div class="digest-grid">
       <section class="card">
         <div class="eyebrow">Flow Read</div>
-        {#if insights.flow.lines.length === 0}
+        {#if insights.flow.coachLines.length === 0}
           <p class="copy">Not enough data yet to describe the flow with confidence.</p>
         {:else}
-          {#each insights.flow.lines.slice(0, 2) as line (line)}
+          {#each insights.flow.coachLines as line (line)}
             <p class="copy">{line}</p>
           {/each}
         {/if}

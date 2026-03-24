@@ -51,6 +51,7 @@
     search = ''; fPeriod = 'ALL'; fType = 'ALL'; fFlagged = false;
   }
 
+
   $: isFiltered = search || fPeriod !== 'ALL' || fType !== 'ALL' || fFlagged;
 </script>
 

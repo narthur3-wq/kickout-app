@@ -9,6 +9,7 @@
   let authMode = 'password'; // 'password' | 'invite'
   let newTeamName = '';
   let password = '';
+  let showPassword = false;
   let loading = false;
   let result = null;
   let error = '';
@@ -109,7 +110,7 @@
           on:click={() => authMode = 'invite'}
           type="button"
         >
-          Send invite email
+          Email invite (advanced)
         </button>
       </div>
     </div>
@@ -117,12 +118,17 @@
     {#if authMode === 'password'}
       <label class="full">
         <span>Temporary password</span>
-        <input
-          type="text"
-          bind:value={password}
-          placeholder="Minimum 8 characters"
-          autocomplete="new-password"
-        />
+        <div class="password-row">
+          <input
+            type={showPassword ? 'text' : 'password'}
+            bind:value={password}
+            placeholder="Minimum 8 characters"
+            autocomplete="new-password"
+          />
+          <button class="toggle-password" type="button" on:click={() => showPassword = !showPassword}>
+            {showPassword ? 'Hide' : 'Show'}
+          </button>
+        </div>
       </label>
     {/if}
 
@@ -175,7 +181,7 @@
       {:else if result.auth?.delivery === 'password' && !result.auth?.existing}
         <div class="credential-note">Account created. Give them this email and the password you entered above.</div>
       {:else if result.auth?.existing}
-        <div class="credential-note">Sign-in account already existed, so only the club assignment was updated.</div>
+        <div class="credential-note">Sign-in account already existed, so only the club assignment was updated. Any temporary password entered here was not changed.</div>
       {/if}
     </div>
   {/if}
@@ -190,7 +196,7 @@
     <p><strong>Same club:</strong> leave it on "Your current team" and just enter the email.</p>
     <p><strong>New club:</strong> choose "Create / find another team" and enter the club name.</p>
     <p><strong>Password flow:</strong> set a temporary password here, then send the analyst the email and password directly.</p>
-    <p><strong>Invite flow:</strong> keep this only if you later configure email properly in Supabase.</p>
+    <p><strong>Invite flow:</strong> treat this as an advanced option only if you later configure email properly in Supabase.</p>
     <p><strong>Note:</strong> if the auth account already exists, the app will just update the allowlist and team assignment.</p>
   </div>
 </section>
@@ -279,6 +285,24 @@
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+  }
+  .password-row {
+    display: flex;
+    gap: 8px;
+  }
+  .password-row input {
+    flex: 1;
+  }
+  .toggle-password {
+    padding: 0 12px;
+    border-radius: 9px;
+    border: 1.5px solid #d1d5db;
+    background: #fff;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    color: #4b5563;
   }
   .mode-row button {
     padding: 10px 12px;
