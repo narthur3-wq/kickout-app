@@ -2,6 +2,7 @@
   import Pitch from './Pitch.svelte';
   import Heatmap from './Heatmap.svelte';
   import { createEventDispatcher } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
 
   // ── Read-only data props ─────────────────────────────────────────────────
   export let vizEvents    = [];
@@ -29,8 +30,8 @@
   export let periodFilter = 'ALL';
   export let ytdOnly      = false;
   export let useFilters   = true;
-  export let fContest     = new Set();
-  export let fOutcome     = new Set();
+  export let fContest     = new SvelteSet();
+  export let fOutcome     = new SvelteSet();
   export let overlayMode  = 'landing';
   export let flaggedOnly         = false;
   export let analyticsEventType  = 'ALL';
@@ -95,10 +96,10 @@
   }
 
   function toggleContest(val) {
-    const s = new Set(fContest); s.has(val) ? s.delete(val) : s.add(val); fContest = s;
+    const s = new SvelteSet(fContest); s.has(val) ? s.delete(val) : s.add(val); fContest = s;
   }
   function toggleOutcome(val) {
-    const s = new Set(fOutcome); s.has(val) ? s.delete(val) : s.add(val); fOutcome = s;
+    const s = new SvelteSet(fOutcome); s.has(val) ? s.delete(val) : s.add(val); fOutcome = s;
   }
 
   $: outcomeBreakdown = (() => {
@@ -174,7 +175,7 @@
     matchFilter = 'ALL'; oppFilter = 'ALL'; plyFilter = 'ALL'; periodFilter = 'ALL';
     ytdOnly = false; useFilters = true; flaggedOnly = false;
     directionFilter = 'ALL';
-    fContest = new Set(CONTESTS); fOutcome = new Set(OUTCOMES);
+    fContest = new SvelteSet(CONTESTS); fOutcome = new SvelteSet(OUTCOMES);
   }
 </script>
 
@@ -193,7 +194,7 @@
   {#if filterTags.length > 0}
     <div class="filter-summary">
       <span class="filter-summary-label">Filtered:</span>
-      {#each filterTags as tag}
+      {#each filterTags as tag (tag)}
         <span class="filter-tag">{tag}</span>
       {/each}
       <button class="filter-clear" on:click={resetFilters}>Clear</button>
@@ -206,7 +207,7 @@
     <div class="filter-primary-row">
       <div class="fpill-group">
         <span class="fpill-label">Direction</span>
-        {#each [['ALL','Both'],['ours','Ours'],['theirs','Theirs']] as [val, lbl]}
+        {#each [['ALL','Both'],['ours','Ours'],['theirs','Theirs']] as [val, lbl] (val)}
           <button class="fpill {directionFilter === val ? 'fpill-on' : ''}" on:click={() => directionFilter = val}>{lbl}</button>
         {/each}
       </div>
@@ -232,7 +233,7 @@
             <span class="fselect-label">Match</span>
             <select bind:value={matchFilter}>
               <option value="ALL">All matches</option>
-              {#each uniqueMatches as m}
+              {#each uniqueMatches as m (m.key)}
                 <option value={m.key}>{m.match_date} · {m.opponent || 'Unknown'} ({m.count})</option>
               {/each}
             </select>
@@ -241,14 +242,14 @@
             <span class="fselect-label">Opponent</span>
             <select bind:value={oppFilter}>
               <option value="ALL">All</option>
-              {#each opponentChoices as [key,lbl]}<option value={key}>{lbl}</option>{/each}
+              {#each opponentChoices as [key,lbl] (key)}<option value={key}>{lbl}</option>{/each}
             </select>
           </div>
           <div class="fselect-wrap">
             <span class="fselect-label">Player</span>
             <select bind:value={plyFilter}>
               <option value="ALL">All</option>
-              {#each playerChoices as [key,lbl]}<option value={key}>{lbl}</option>{/each}
+              {#each playerChoices as [key,lbl] (key)}<option value={key}>{lbl}</option>{/each}
             </select>
           </div>
         </div>
@@ -258,7 +259,7 @@
           <div class="filter-pills-row">
             <div class="fpill-group">
               <span class="fpill-label">Contest</span>
-              {#each CONTESTS as c}
+              {#each CONTESTS as c (c)}
                 <button class="fpill {fContest.has(c) ? 'fpill-on' : ''}" on:click={() => toggleContest(c)}>{c}</button>
               {/each}
             </div>
@@ -266,7 +267,7 @@
           <div class="filter-pills-row">
             <div class="fpill-group">
               <span class="fpill-label">Outcome</span>
-              {#each OUTCOMES as o}
+              {#each OUTCOMES as o (o)}
                 <button class="fpill {fOutcome.has(o) ? 'fpill-on' : ''}" on:click={() => toggleOutcome(o)}>{o}</button>
               {/each}
             </div>
@@ -392,7 +393,7 @@
       <div class="section-card">
         <div class="section-hd">Outcomes</div>
         <div class="outcome-chips">
-          {#each outcomeBreakdown as o}
+          {#each outcomeBreakdown as o (o.outcome)}
             <div class="outcome-chip" style="border-color:{outcomeColor(o.outcome)};color:{outcomeColor(o.outcome)}">
               {o.outcome}: {o.count} ({o.pct}%)
             </div>
@@ -406,7 +407,7 @@
       <div class="section-card">
         <div class="section-hd">Timeline <span class="section-ct">{timelineEvents.length}</span></div>
         <div class="timeline-wrap">
-          {#each timelineEvents as e, i}
+          {#each timelineEvents as e (e.id)}
             <div
               class="tl-dot {e.flag ? 'tl-flagged' : ''}"
               style="background:{outcomeColor(e.outcome)}"
@@ -422,7 +423,7 @@
       <div class="section-card">
         <div class="section-hd">Retention by Clock <span class="section-ct">{clockTrend.reduce((s,b)=>s+b.tot,0)} with clock</span></div>
         <div class="clock-bars">
-          {#each clockTrend as b}
+          {#each clockTrend as b (b.label)}
             {@const color = b.pct >= 60 ? '#16a34a' : b.pct >= 45 ? '#d97706' : '#dc2626'}
             <div class="clock-row">
               <span class="clock-lbl">{b.label}'</span>
@@ -442,7 +443,7 @@
       <div class="section-card">
         <div class="section-hd">Retention by Restart</div>
         <div class="restart-bars">
-          {#each restartStats as r}
+          {#each restartStats as r (r.reason)}
             {@const color = r.pct >= 60 ? '#16a34a' : r.pct >= 45 ? '#d97706' : '#dc2626'}
             <div class="clock-row">
               <span class="clock-lbl" style="width:46px">{r.reason}</span>
@@ -471,10 +472,10 @@
               <table class="kpi-table">
                 <thead><tr><th></th><th>L</th><th>C</th><th>R</th></tr></thead>
                 <tbody>
-                  {#each zoneTableRet as row}
+                  {#each zoneTableRet as row (row.D)}
                     <tr>
                       <th>{row.D}</th>
-                      {#each row.cells as c}
+                      {#each row.cells as c (c.zk)}
                         {@const trend = retTrend(c.pct, c.zk)}
                         <td
                           style="background:{c.tot >= 8 ? cellColor(c.pct) : c.tot > 0 && c.tot < 3 ? '#f3f4f6' : 'transparent'}"
@@ -508,10 +509,10 @@
               <table class="kpi-table">
                 <thead><tr><th></th><th>L</th><th>C</th><th>R</th></tr></thead>
                 <tbody>
-                  {#each zoneTableBreak as row}
+                  {#each zoneTableBreak as row (row.D)}
                     <tr>
                       <th>{row.D}</th>
-                      {#each row.cells as c}
+                      {#each row.cells as c (c.zk)}
                         <td
                           style="background:{c.tot >= 3 ? cellColor(c.pct) : '#f3f4f6'}"
                           class="{c.tot > 0 && c.tot < 3 ? 'low-n' : ''}"
@@ -544,7 +545,7 @@
           Target Players
           <div class="player-sort">
             Sort:
-            {#each [['total','Volume'],['ret','Retention'],['break','Break win%']] as [k,l]}
+            {#each [['total','Volume'],['ret','Retention'],['break','Break win%']] as [k,l] (k)}
               <button class="psort {playerSort === k ? 'psort-on' : ''}" on:click={() => playerSort = k}>{l}</button>
             {/each}
           </div>
@@ -552,8 +553,15 @@
         <table class="kpi-table player-table">
           <thead><tr><th>Player</th><th>Targeted</th><th>Retention</th><th>Breaks</th><th>Break win%</th></tr></thead>
           <tbody>
-            {#each sortedPlayers as p}
-              <tr class="player-row {plyFilter === p.key ? 'player-row-active' : ''}" on:click={() => dispatch('filterPlayer', plyFilter === p.key ? 'ALL' : p.key)} title="Tap to filter">
+            {#each sortedPlayers as p (p.key)}
+              <tr
+                class="player-row {plyFilter === p.key ? 'player-row-active' : ''}"
+                tabindex="0"
+                role="button"
+                on:click={() => dispatch('filterPlayer', plyFilter === p.key ? 'ALL' : p.key)}
+                on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && dispatch('filterPlayer', plyFilter === p.key ? 'ALL' : p.key)}
+                title="Tap to filter"
+              >
                 <td style="text-align:left">{p.label}</td>
                 <td>{p.total}</td>
                 <td style="background:{cellColor(p.retPct)}">{p.retPct}%</td>
@@ -571,7 +579,7 @@
       <div class="section-card">
         <div class="section-hd">By Score State</div>
         <div class="ss-bars">
-          {#each scoreStateStats as s}
+          {#each scoreStateStats as s (s.bucket)}
             {@const barColor = s.pct == null ? null : s.pct >= 60 ? '#16a34a' : s.pct >= 40 ? '#d97706' : '#dc2626'}
             <div class="ss-row">
               <span class="ss-lbl">{s.bucket}</span>

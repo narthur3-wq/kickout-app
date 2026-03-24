@@ -8,8 +8,10 @@
   import DigestPanel from './lib/DigestPanel.svelte';
   import CaptureForm from './lib/CaptureForm.svelte';
   import AdminPanel from './lib/AdminPanel.svelte';
-  import { supabase, supabaseConfigured, userHasAccess, getUserTeamId, isConfiguredAdmin } from './lib/supabase.js';
+  import { supabase, supabaseConfigured, userHasAccess, getUserTeamDetails, isConfiguredAdmin } from './lib/supabase.js';
+  import { buildScoreSnapshots } from './lib/score.js';
   import { onMount } from 'svelte';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
   // ── Constants ────────────────────────────────────────────────────────────
   const WIDTH_M = 90, LENGTH_M = 145;
@@ -20,7 +22,9 @@
   // ── Auth state ───────────────────────────────────────────────────────────
   let user = null;
   let teamId = null;
+  let teamName = null;
   let authChecked = false; // prevents login flash on load
+  let authRecoveryMode = false;
 
   // ── Match setup (set once per match, persisted to localStorage) ──────────
   let team = '', opponent = '', matchDate = new Date().toISOString().slice(0,10);
@@ -49,11 +53,15 @@
   let backupReminder = false;
   let showSummary = false;
   let pitchError = false;
+  let notice = null;
+  let noticeTimer = null;
+  let confirmState = null;
   let activeTab = 'capture';
   let savedFlash = false;
   let confirmDeleteAll = false;
-  let pendingSync = new Map(); // id -> 'upsert' | 'delete'
+  let pendingSync = new SvelteMap(); // id -> 'upsert' | 'delete'
   let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+  let syncMessage = '';
   let metaReady = false;
   let authSubscription = null;
   let realtimeChannel = null;
@@ -62,8 +70,8 @@
   let isAdminUser = false;
 
   // ── Viz filters ───────────────────────────────────────────────────────────
-  let fContest = new Set(CONTESTS);
-  let fOutcome = new Set(OUTCOMES);
+  let fContest = new SvelteSet(CONTESTS);
+  let fOutcome = new SvelteSet(OUTCOMES);
   /** @type {'landing'|'pickup'} */ let overlayMode = 'landing';
   let useFilters = true;
   let oppFilter = 'ALL';
@@ -155,7 +163,8 @@
       }));
     } catch (e) {
       if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-        alert('Storage full — please export your data as JSON and clear old events.');
+        showNotice('error', 'Storage full. Export your JSON backup and clear old events before continuing.', 8000);
+        backupReminder = true;
       } else {
         console.error('localStorage write failed', e);
       }
@@ -204,23 +213,23 @@
     try {
       const raw = JSON.parse(localStorage.getItem('ko_sync_queue') || '[]');
       if (!Array.isArray(raw)) {
-        pendingSync = new Map();
+        pendingSync = new SvelteMap();
         return;
       }
 
       // Backwards compatibility: older builds stored a plain array of IDs.
       if (raw.every(item => typeof item === 'string')) {
-        pendingSync = new Map(raw.map(id => [id, 'upsert']));
+        pendingSync = new SvelteMap(raw.map(id => [id, 'upsert']));
         return;
       }
 
-      pendingSync = new Map(
+      pendingSync = new SvelteMap(
         raw
           .filter(item => item && typeof item.id === 'string')
           .map(item => [item.id, item.op === 'delete' ? 'delete' : 'upsert'])
       );
     } catch {
-      pendingSync = new Map();
+      pendingSync = new SvelteMap();
     }
   }
   function savePendingSync() {
@@ -239,12 +248,44 @@
     pendingSync.delete(id);
     savePendingSync();
   }
+  function setSyncError(message) {
+    syncStatus = 'error';
+    syncMessage = message;
+  }
+  function clearSyncMessage() {
+    syncMessage = '';
+  }
+  function showNotice(type, message, timeout = 5000) {
+    notice = { type, message };
+    if (noticeTimer) clearTimeout(noticeTimer);
+    if (timeout > 0) {
+      noticeTimer = setTimeout(() => {
+        notice = null;
+        noticeTimer = null;
+      }, timeout);
+    }
+  }
+  function askConfirm(message, action, confirmLabel = 'Confirm') {
+    confirmState = { message, action, confirmLabel };
+  }
+  function dismissConfirm() {
+    confirmState = null;
+  }
+  function runConfirm() {
+    const action = confirmState?.action;
+    confirmState = null;
+    action?.();
+  }
   async function flushSyncQueue() {
     if (!supabase || !user || pendingSync.size === 0 || !isOnline) return;
     for (const [id, op] of [...pendingSync]) {
       if (op === 'delete') {
         const { error } = await supabase.from('events').delete().eq('id', id);
-        if (!error) clearPendingSync(id);
+        if (!error) {
+          clearPendingSync(id);
+        } else {
+          setSyncError(`Some deletions are blocked from syncing: ${error.message}`);
+        }
         continue;
       }
 
@@ -254,15 +295,23 @@
         continue;
       }
       const { error } = await supabase.from('events').upsert(ev);
-      if (!error) clearPendingSync(id);
+      if (!error) {
+        clearPendingSync(id);
+      } else {
+        setSyncError(`Some saves are blocked from syncing: ${error.message}`);
+      }
     }
-    if (pendingSync.size === 0) syncStatus = 'synced';
+    if (pendingSync.size === 0) {
+      syncStatus = 'synced';
+      clearSyncMessage();
+    }
   }
 
   // ── Supabase helpers ──────────────────────────────────────────────────────
   async function syncFromSupabase() {
     if (!supabase || !user) return;
     syncStatus = 'syncing';
+    clearSyncMessage();
     try {
       const { data, error } = await supabase.from('events').select('*').order('created_at', { ascending: false });
       if (error) throw error;
@@ -285,11 +334,16 @@
         }
       }
       persistLocal();
-      syncStatus = 'synced';
-      flushSyncQueue();
+      await flushSyncQueue();
+      if (pendingSync.size === 0) {
+        syncStatus = 'synced';
+        clearSyncMessage();
+      } else if (syncStatus !== 'error') {
+        syncStatus = 'syncing';
+      }
     } catch (e) {
       console.error('Sync failed', e);
-      syncStatus = 'error';
+      setSyncError(e?.message || 'Sync failed.');
     }
   }
 
@@ -302,8 +356,13 @@
     if (error) {
       console.error('Supabase upsert failed', ev.id, error.message);
       queuePendingSync(ev.id, 'upsert');
+      setSyncError(`Save queued but cloud sync failed: ${error.message}`);
     } else {
       clearPendingSync(ev.id);
+      if (pendingSync.size === 0) {
+        syncStatus = 'synced';
+        clearSyncMessage();
+      }
     }
   }
 
@@ -316,8 +375,13 @@
     if (error) {
       console.error('Supabase delete failed', id, error.message);
       queuePendingSync(id, 'delete');
+      setSyncError(`Delete queued but cloud sync failed: ${error.message}`);
     } else {
       clearPendingSync(id);
+      if (pendingSync.size === 0) {
+        syncStatus = 'synced';
+        clearSyncMessage();
+      }
     }
   }
 
@@ -358,6 +422,11 @@
     loadFromLocalStorage();
     metaReady = true;
     loadPendingSync();
+    authRecoveryMode =
+      window.location.hash.includes('type=recovery') ||
+      window.location.search.includes('type=recovery') ||
+      window.location.hash.includes('type=invite') ||
+      window.location.search.includes('type=invite');
 
     const handleOnline = () => {
       isOnline = true;
@@ -376,10 +445,13 @@
         const { data: { session } } = await supabase.auth.getSession();
         if (disposed) return;
         if (session) {
+          if (authRecoveryMode) {
+            authChecked = true;
+          } else
           if (await userHasAccess()) {
             user = session.user;
             isAdminUser = isConfiguredAdmin(session.user.email);
-            teamId = await getUserTeamId();
+            ({ id: teamId, name: teamName } = await getUserTeamDetails());
             await syncFromSupabase();
             if (!disposed) startRealtimeSync();
           } else {
@@ -387,10 +459,22 @@
           }
         }
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+          if (_event === 'PASSWORD_RECOVERY') {
+            authRecoveryMode = true;
+            authChecked = true;
+            stopRealtimeSync();
+            user = null;
+            teamId = null;
+            teamName = null;
+            isAdminUser = false;
+            return;
+          }
           if (!session?.user) {
             user = null;
             teamId = null;
+            teamName = null;
             isAdminUser = false;
+            authRecoveryMode = false;
             stopRealtimeSync();
             return;
           }
@@ -403,8 +487,9 @@
             return;
           }
           user = session.user;
+          authRecoveryMode = false;
           isAdminUser = isConfiguredAdmin(session.user.email);
-          teamId = await getUserTeamId();
+          ({ id: teamId, name: teamName } = await getUserTeamDetails());
           await syncFromSupabase();
           if (!disposed) startRealtimeSync();
         });
@@ -416,6 +501,7 @@
     return () => {
       disposed = true;
       if (timerInterval) clearInterval(timerInterval);
+      if (noticeTimer) clearTimeout(noticeTimer);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       authSubscription?.unsubscribe();
@@ -425,14 +511,19 @@
 
   async function handleLogin(e) {
     user = e.detail.user;
+    authRecoveryMode = false;
     isAdminUser = isConfiguredAdmin(e.detail.user?.email);
-    teamId = await getUserTeamId();
+    ({ id: teamId, name: teamName } = await getUserTeamDetails());
+    await syncFromSupabase();
+    startRealtimeSync();
   }
 
   async function signOut() {
     if (supabase) await supabase.auth.signOut();
     user = null;
     teamId = null;
+    teamName = null;
+    authRecoveryMode = false;
     isAdminUser = false;
   }
 
@@ -460,6 +551,9 @@
     if (!team.trim() || !opponent.trim()) {
       setupModalOpen = true;
       return 'Set up the match (team and opponent) before logging events.';
+    }
+    if (supabaseConfigured && user && !teamId) {
+      return 'Your account has no team assigned. Ask your admin to finish onboarding before recording events.';
     }
     if (clock.trim() !== '' && !/^(\d{1,2}):\d{2}$/.test(clock))
       return 'Clock must be mm:ss or blank.';
@@ -541,7 +635,7 @@
 
   async function saveEvent() {
     const err = validate();
-    if (err) { alert(err); return; }
+    if (err) { showNotice('error', err); return; }
     const ev = buildEvent();
     const isNew = !editingId;
 
@@ -576,27 +670,29 @@
 
   function undoLast() {
     if (undoStack.length === 0) return;
-    if (!confirm('Remove the last saved event?')) return;
-    const nextEvents = undoStack[undoStack.length - 1];
-    const prevEvents = events;
-    events = nextEvents;
-    undoStack = undoStack.slice(0, -1);
-    persistLocal();
+    askConfirm('Remove the last saved event?', () => {
+      const nextEvents = undoStack[undoStack.length - 1];
+      const prevEvents = events;
+      events = nextEvents;
+      undoStack = undoStack.slice(0, -1);
+      persistLocal();
 
-    const nextIds = new Set(nextEvents.map((e) => e.id));
-    for (const ev of nextEvents) upsertToSupabase(ev);
-    for (const ev of prevEvents) {
-      if (!nextIds.has(ev.id)) deleteFromSupabase(ev.id);
-    }
+      const nextIds = new Set(nextEvents.map((e) => e.id));
+      for (const ev of nextEvents) upsertToSupabase(ev);
+      for (const ev of prevEvents) {
+        if (!nextIds.has(ev.id)) deleteFromSupabase(ev.id);
+      }
+    }, 'Remove event');
   }
 
   function delEvent(id) {
-    if (!confirm('Delete this event?')) return;
-    undoStack = [...undoStack.slice(-9), [...events]];
-    events = events.filter(e => e.id !== id);
-    persistLocal();
-    if (editingId === id) { editingId = null; clearPoints(); }
-    deleteFromSupabase(id);
+    askConfirm('Delete this event?', () => {
+      undoStack = [...undoStack.slice(-9), [...events]];
+      events = events.filter(e => e.id !== id);
+      persistLocal();
+      if (editingId === id) { editingId = null; clearPoints(); }
+      deleteFromSupabase(id);
+    }, 'Delete event');
   }
 
   async function deleteAllEvents() {
@@ -605,7 +701,7 @@
     events = [];
     editingId = null;
     undoStack = [];
-    pendingSync = new Map();
+    pendingSync = new SvelteMap();
     savePendingSync();
     clearPoints();
     confirmDeleteAll = false;
@@ -681,38 +777,58 @@
     URL.revokeObjectURL(url);
   }
 
+  function completeImport(imported, skipSchemaCheck = false) {
+    if (!Array.isArray(imported)) throw new Error('Expected a JSON array');
+    const REQUIRED = ['id', 'outcome', 'contest_type', 'x', 'y'];
+    const invalid = imported.filter(e =>
+      typeof e !== 'object' || e === null || REQUIRED.some(f => e[f] == null)
+    );
+    if (invalid.length > 0) throw new Error(`${invalid.length} record(s) are missing required fields (id, outcome, contest_type, x, y). Import aborted.`);
+
+    const unknownVer = imported.filter(e => e.schema_version != null && e.schema_version > 1);
+    if (!skipSchemaCheck && unknownVer.length > 0) {
+      askConfirm(
+        `${unknownVer.length} record(s) use a newer schema version. Import them anyway?`,
+        () => {
+          try {
+            completeImport(imported, true);
+          } catch (e) {
+            showNotice('error', `Import failed: ${e.message}`, 7000);
+          }
+        },
+        'Import anyway'
+      );
+      return;
+    }
+
+    const existingIds = new Set(events.map(e => e.id));
+    const newEvents = imported
+      .filter(e => !existingIds.has(e.id))
+      .map(e => (supabaseConfigured && user
+        ? { ...e, team_id: teamId }
+        : e));
+    events = [...events, ...newEvents];
+    persistLocal();
+    if (newEvents.length > 0) {
+      for (const ev of newEvents) upsertToSupabase(ev);
+    }
+    showNotice('success', `Imported ${newEvents.length} new event(s). ${imported.length - newEvents.length} duplicate(s) skipped.`, 7000);
+  }
+
   function importJSON() {
+    if (supabaseConfigured && user && !teamId) {
+      showNotice('error', 'Your account has no team assigned, so imports cannot be synced yet.');
+      return;
+    }
     const input = document.createElement('input');
     input.type = 'file'; input.accept = '.json,application/json';
     input.onchange = async () => {
       const file = input.files?.[0]; if (!file) return;
       try {
         const text  = await file.text();
-        const imported = JSON.parse(text);
-        if (!Array.isArray(imported)) throw new Error('Expected a JSON array');
-        // Validate shape — each item must have the minimum required fields
-        const REQUIRED = ['id', 'outcome', 'contest_type', 'x', 'y'];
-        const invalid = imported.filter(e =>
-          typeof e !== 'object' || e === null || REQUIRED.some(f => e[f] == null)
-        );
-        if (invalid.length > 0) throw new Error(`${invalid.length} record(s) are missing required fields (id, outcome, contest_type, x, y). Import aborted.`);
-        // Warn about unknown schema versions
-        const unknownVer = imported.filter(e => e.schema_version != null && e.schema_version > 1);
-        if (unknownVer.length > 0) {
-          const ok = confirm(`${unknownVer.length} record(s) have a newer schema_version than this app supports. They may contain fields this version doesn't understand. Continue anyway?`);
-          if (!ok) return;
-        }
-        const existingIds = new Set(events.map(e => e.id));
-        const newEvents = imported.filter(e => !existingIds.has(e.id));
-        events = [...events, ...newEvents];
-        persistLocal();
-        // Sync new events to Supabase
-        if (newEvents.length > 0) {
-          for (const ev of newEvents) upsertToSupabase(ev);
-        }
-        alert(`Imported ${newEvents.length} new event(s). ${imported.length - newEvents.length} duplicate(s) skipped.`);
+        completeImport(JSON.parse(text));
       } catch (e) {
-        alert(`Import failed: ${e.message}`);
+        showNotice('error', `Import failed: ${e.message}`, 7000);
       }
     };
     input.click();
@@ -852,7 +968,8 @@
     cells: ZSIDES.map(S => {
       const st  = zoneStats[zoneKey(S,D)] || {brTot:0, brWon:0};
       const pct = st.brTot ? (100 * st.brWon / st.brTot) : 0;
-      return { tot: st.brTot, won: st.brWon, pct };
+      const zk  = zoneKey(S, D);
+      return { tot: st.brTot, won: st.brWon, pct, zk };
     })
   }));
 
@@ -865,6 +982,7 @@
   // ── Current match events (for Digest tab) ────────────────────────────────
   $: currentKey = `${matchDate}|${norm(team)}|${norm(opponent)}`;
   $: currentMatchEvents = events.filter(e => matchKey(e) === currentKey);
+  $: scoreSnapshots = buildScoreSnapshots(events);
 
   // ── Timeline ──────────────────────────────────────────────────────────────
   $: timelineEvents = [...vizEvents].sort((a, b) => {
@@ -883,15 +1001,6 @@
     }
   }
 
-  // Score parsing — supports "G-P" (GAA) or raw total
-  function parseScore(s) {
-    if (!s) return null;
-    const m = String(s).trim().match(/^(\d+)-(\d+)$/);
-    if (m) return parseInt(m[1]) * 3 + parseInt(m[2]);
-    const n = parseInt(s);
-    return isNaN(n) ? null : n;
-  }
-
   const SCORE_BUCKETS = ['Win 8+','Win 4–7','Win 1–3','Level','Lose 1–3','Lose 4–7','Lose 8+'];
   function scoreBucket(margin) {
     if (margin >= 8)  return 'Win 8+';
@@ -908,10 +1017,9 @@
     const buckets = {};
     for (const b of SCORE_BUCKETS) buckets[b] = { tot: 0, ret: 0 };
     for (const e of vizEvents) {
-      const us   = parseScore(e.score_us);
-      const them = parseScore(e.score_them);
-      if (us === null || them === null) continue;
-      const b = scoreBucket(us - them);
+      const snap = scoreSnapshots.get(e.id);
+      if (!snap) continue;
+      const b = scoreBucket(snap.margin);
       buckets[b].tot++;
       if (RETAINED.has(e.outcome)) buckets[b].ret++;
     }
@@ -1004,7 +1112,7 @@
 {#if !authChecked}
   <div class="loading">Loading…</div>
 {:else if supabaseConfigured && !user}
-  <Login on:login={handleLogin} />
+  <Login recoveryMode={authRecoveryMode} on:login={handleLogin} />
 {:else}
 <div class="app-shell">
 
@@ -1022,7 +1130,7 @@
       </div>
       <div class="period-pills">
         <span class="pills-label" title="Filter analytics by period">View:</span>
-        {#each ['H1','H2','ET'] as p}
+        {#each ['H1','H2','ET'] as p (p)}
           <button class="period-pill {periodFilter === p ? 'active' : ''}" on:click={() => periodFilter = p} title="Show {p} events only">{p}</button>
         {/each}
         <button class="period-pill {periodFilter === 'ALL' ? 'active' : ''}" on:click={() => periodFilter = 'ALL'} title="Show all periods">All</button>
@@ -1050,7 +1158,7 @@
             {user.email[0].toUpperCase()}
           </button>
           {#if accountOpen}
-            <div class="account-overlay" on:click={() => accountOpen = false}></div>
+            <button class="account-overlay" aria-label="Close account menu" on:click={() => accountOpen = false}></button>
             <div class="account-dropdown">
               <p class="account-email">{user.email}</p>
               <button class="account-signout" on:click={() => { accountOpen = false; signOut(); }}>Sign out</button>
@@ -1060,6 +1168,23 @@
       {/if}
     </div>
   </header>
+
+  {#if syncMessage && isOnline}
+    <div class="sync-banner">
+      <span>{syncMessage}</span>
+      {#if pendingSync.size > 0}
+        <button class="sync-banner-btn" on:click={flushSyncQueue}>Retry now</button>
+      {/if}
+      <button class="sync-banner-btn" on:click={clearSyncMessage}>Dismiss</button>
+    </div>
+  {/if}
+
+  {#if notice}
+    <div class="notice-banner notice-{notice.type}">
+      <span>{notice.message}</span>
+      <button class="notice-dismiss" on:click={() => notice = null}>Dismiss</button>
+    </div>
+  {/if}
 
   <!-- Tab bar -->
   <nav class="tab-bar">
@@ -1101,7 +1226,7 @@
   <!-- Match setup modal -->
   {#if setupModalOpen}
     <div class="modal-backdrop" role="button" tabindex="-1" on:click={() => setupModalOpen = false} on:keydown={(e) => e.key === 'Escape' && (setupModalOpen = false)}>
-      <div class="modal-card" role="dialog" aria-label="Match setup" on:click|stopPropagation on:keydown|stopPropagation>
+      <div class="modal-card" role="dialog" aria-modal="true" tabindex="0" aria-label="Match setup" on:click|stopPropagation on:keydown|stopPropagation>
         <div class="modal-header">
           <span class="modal-title">Match Setup</span>
           <button class="modal-close" on:click={() => setupModalOpen = false}>✕</button>
@@ -1111,7 +1236,7 @@
           <label>Opponent
             <input bind:value={opponent} placeholder="Crokes" on:change={persistLocal} list="opps-modal"/>
             <datalist id="opps-modal">
-              {#each opponentChoices as [,lbl]}<option value={lbl}></option>{/each}
+              {#each opponentChoices as [key, lbl] (key)}<option value={lbl}></option>{/each}
             </datalist>
           </label>
           <label class="full-row">Date<input type="date" bind:value={matchDate} /></label>
@@ -1280,7 +1405,7 @@
   </div>
   {:else}
   <div class="full-panel">
-    <AdminPanel {user} {teamId} />
+    <AdminPanel {user} {teamName} />
   </div>
   {/if}
 
@@ -1296,6 +1421,19 @@
   <!-- Summary modal -->
   {#if showSummary}
     <SummaryModal summaryStats={summaryStats} on:close={() => showSummary = false} />
+  {/if}
+
+  {#if confirmState}
+    <div class="confirm-backdrop" role="button" tabindex="-1" on:click={dismissConfirm} on:keydown={(e) => e.key === 'Escape' && dismissConfirm()}>
+      <div class="confirm-card" role="alertdialog" aria-modal="true" tabindex="0" aria-label="Confirm action" on:click|stopPropagation on:keydown|stopPropagation>
+        <div class="confirm-title">Please confirm</div>
+        <div class="confirm-text">{confirmState.message}</div>
+        <div class="confirm-actions">
+          <button class="confirm-cancel" on:click={dismissConfirm}>Cancel</button>
+          <button class="confirm-accept" on:click={runConfirm}>{confirmState.confirmLabel}</button>
+        </div>
+      </div>
+    </div>
   {/if}
 
 </div>
@@ -1359,7 +1497,7 @@
   }
   .avatar-btn:hover { background: #2450aa; }
   .account-overlay {
-    position: fixed; inset: 0; z-index: 199;
+    position: fixed; inset: 0; z-index: 199; border: none; background: transparent; padding: 0;
   }
   .account-dropdown {
     position: absolute; right: 0; top: calc(100% + 6px);
@@ -1425,6 +1563,45 @@
   .tab-count { background: #f3f4f6; color: #b0b8c4; font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 99px; }
   .tab-btn.active .tab-count { background: #dbeafe; color: #1e40af; }
   .edit-dot { color: #f59e0b; font-size: 10px; }
+
+  .sync-banner {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 8px 14px; background: #fff7ed; color: #9a3412;
+    border-bottom: 1px solid #fdba74; font-size: 12px; font-weight: 600;
+  }
+  .sync-banner-btn {
+    padding: 4px 10px; border-radius: 7px; font-size: 12px;
+    border: 1px solid #fdba74; background: #fff; color: #9a3412;
+  }
+  .sync-banner-btn:hover { background: #ffedd5; }
+
+  .notice-banner {
+    display: flex; align-items: center; gap: 10px; justify-content: space-between;
+    padding: 10px 14px; font-size: 13px; font-weight: 600; border-bottom: 1px solid transparent;
+  }
+  .notice-success { background: #f0fdf4; color: #166534; border-bottom-color: #bbf7d0; }
+  .notice-error { background: #fef2f2; color: #991b1b; border-bottom-color: #fecaca; }
+  .notice-dismiss {
+    padding: 4px 10px; border-radius: 7px; font-size: 12px;
+    background: rgba(255,255,255,0.75); border: 1px solid rgba(0,0,0,0.08);
+  }
+
+  .confirm-backdrop {
+    position: fixed; inset: 0; z-index: 260; background: rgba(15, 23, 42, 0.45);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .confirm-card {
+    width: 100%; max-width: 360px; background: #fff; border-radius: 14px;
+    box-shadow: 0 18px 48px rgba(0,0,0,0.22); padding: 18px;
+  }
+  .confirm-title { font-size: 16px; font-weight: 800; color: #111827; }
+  .confirm-text { margin-top: 8px; font-size: 14px; color: #4b5563; line-height: 1.5; }
+  .confirm-actions { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
+  .confirm-cancel, .confirm-accept {
+    padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 700;
+  }
+  .confirm-cancel { background: #fff; color: #4b5563; border: 1px solid #d1d5db; }
+  .confirm-accept { background: #1c3f8a; color: #fff; border: 1px solid #1c3f8a; }
 
   /* ── Match context bar (Capture tab, always visible) ── */
   .match-ctx-bar {

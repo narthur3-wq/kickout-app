@@ -54,7 +54,7 @@
     // Wide or Blocked: use shot_type if available, default to point attempt
     return e.shot_type === 'goal';
   }
-  $: shotBreakdown = (evs) => {
+  function shotBreakdown(evs) {
     const goalCh = evs.filter(isGoalChance);
     const pointCh = evs.filter(e => !isGoalChance(e));
     const gcScored = goalCh.filter(e => (e.outcome||'').toLowerCase() === 'goal').length;
@@ -67,7 +67,7 @@
       total, scored,
       pct: total ? Math.round(100 * scored / total) : null
     };
-  };
+  }
   $: shotUs2   = shotBreakdown(ourShots);
   $: shotThem2 = shotBreakdown(theirShots);
 
@@ -175,20 +175,24 @@
     try {
       const html2canvas = (await import('html2canvas')).default;
       const canvas = await html2canvas(digestEl, { backgroundColor: '#f0f4f0', scale: 2, useCORS: true });
-      canvas.toBlob(async (blob) => {
-        const file = new File([blob], 'pairc-digest.png', { type: 'image/png' });
-        if (navigator.canShare?.({ files: [file] })) {
-          await navigator.share({ files: [file], title: 'Páirc Digest' });
-        } else {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url; a.download = 'kickout-digest.png'; a.click();
-          URL.revokeObjectURL(url);
-        }
-        sharing = false;
-      }, 'image/png');
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((nextBlob) => {
+          if (nextBlob) resolve(nextBlob);
+          else reject(new Error('Could not generate digest image.'));
+        }, 'image/png');
+      });
+      const file = new File([blob], 'pairc-digest.png', { type: 'image/png' });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Páirc Digest' });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'pairc-digest.png'; a.click();
+        URL.revokeObjectURL(url);
+      }
     } catch (e) {
       console.error('Share failed', e);
+    } finally {
       sharing = false;
     }
   }
@@ -244,7 +248,7 @@
     {#if koUs.n > 0 || koThem.n > 0}
       <div class="section-card">
         <div class="section-hd">Kickout Battle</div>
-        {#each [{ label: 'Our kickouts', s: koUs }, { label: 'Their kickouts', s: koThem }] as row}
+        {#each [{ label: 'Our kickouts', s: koUs }, { label: 'Their kickouts', s: koThem }] as row (row.label)}
           <div class="ko-row">
             <span class="ko-label">{row.label}</span>
             <span class="ko-stat">{row.s.won}/{row.s.n}</span>
@@ -325,7 +329,7 @@
     {#if hasDangerPlayerData && dangerPlayers.length > 0}
       <div class="section-card danger-card">
         <div class="section-hd">Their danger players</div>
-        {#each dangerPlayers as p}
+        {#each dangerPlayers as p (p.player)}
           <div class="dp-row">
             <span class="dp-num">#{p.player}</span>
             <span class="dp-scores">{p.scores} score{p.scores !== 1 ? 's' : ''}</span>
@@ -339,7 +343,7 @@
     {#if hasKoTargetData && theirKoTargets.length > 0}
       <div class="section-card">
         <div class="section-hd">Their kickout targets</div>
-        {#each theirKoTargets as t}
+        {#each theirKoTargets as t (t.player)}
           <div class="kot-row">
             <span class="kot-num">#{t.player}</span>
             <span class="kot-times">{t.times} time{t.times !== 1 ? 's' : ''}</span>
@@ -354,7 +358,7 @@
       <div class="section-card">
         <div class="section-hd">Watch</div>
         <ul class="watch-list">
-          {#each watchBullets as b}
+          {#each watchBullets as b (b)}
             <li>{b}</li>
           {/each}
         </ul>

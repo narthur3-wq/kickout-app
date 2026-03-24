@@ -83,7 +83,7 @@
   <!-- ── Metric type selector ── -->
   <div class="field-label">Type</div>
   <div class="metric-row">
-    {#each EVENT_TYPES as et}
+    {#each EVENT_TYPES as et (et)}
       <button
         class="seg-top {eventType === et ? 'active' : ''}"
         on:click={() => eventType = et}
@@ -107,7 +107,7 @@
   <!-- ── Period ── -->
   <div class="field-label">Period</div>
   <div class="dir-row">
-    {#each ['H1','H2','ET'] as p}
+    {#each ['H1','H2','ET'] as p (p)}
       <button
         class="seg-dir {period === p ? 'active' : ''}"
         on:click={() => dispatch('periodChange', p)}
@@ -119,7 +119,7 @@
   {#if eventType === 'kickout'}
     <div class="field-label">Contest</div>
     <div class="btn-group">
-      {#each CONTESTS as c}
+      {#each CONTESTS as c (c)}
         <button
           class="seg-btn {contest === c ? 'active' : ''}"
           on:click={() => { contest = c; if (c !== 'break') breakOutcome = ''; }}
@@ -142,7 +142,7 @@
   <!-- ── Outcome ── -->
   <div class="field-label">Outcome</div>
   <div class="btn-group outcome-grid">
-    {#each activeOutcomes as o}
+    {#each activeOutcomes as o (o)}
       <button
         class="seg-btn {outcome === o ? 'active ' + outcomeClass(o) : ''}"
         on:click={() => outcome = o}
@@ -166,7 +166,7 @@
   {#if eventType === 'kickout' && contest === 'break'}
     <div class="field-label">Who won the break?</div>
     <div class="btn-group">
-      {#each BREAK_OUTS as b}
+      {#each BREAK_OUTS as b (b)}
         <button
           class="seg-btn {breakOutcome === b ? 'active' : ''}"
           on:click={() => breakOutcome = b}
@@ -179,7 +179,7 @@
   {#if eventType === 'kickout'}
     <div class="field-label">Restart after</div>
     <div class="btn-group">
-      {#each RESTART_REASONS as r}
+      {#each RESTART_REASONS as r (r)}
         <button
           class="seg-btn {restartReason === r ? 'active' : ''}"
           on:click={() => restartReason = restartReason === r ? '' : r}
@@ -191,7 +191,7 @@
   <!-- ── Jersey number grid ── -->
   <div class="field-label">Target player {targetPlayer ? '· #' + targetPlayer : ''}</div>
   <div class="jersey-grid">
-    {#each JERSEY_NUMS as num}
+    {#each JERSEY_NUMS as num (num)}
       <button
         class="jersey-btn {targetPlayer === String(num) ? 'active' : ''}"
         on:click={() => toggleJersey(num)}

@@ -12,10 +12,9 @@
 </script>
 
 {#if summaryStats}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_interactive_supports_focus -->
-  <div class="backdrop" role="dialog" aria-modal="true" tabindex="-1" on:click={() => dispatch('close')}>
-    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-    <div class="modal" on:click|stopPropagation>
+  <div class="backdrop" role="presentation">
+    <button class="backdrop-dismiss" aria-label="Close summary" on:click={() => dispatch('close')}></button>
+    <div class="modal" role="dialog" aria-modal="true" tabindex="0" on:click|stopPropagation on:keydown|stopPropagation>
 
       <!-- Dark header matching app chrome -->
       <div class="modal-header">
@@ -109,7 +108,11 @@
     z-index: 100; display: flex; align-items: center; justify-content: center; padding: 16px;
     backdrop-filter: blur(2px);
   }
+  .backdrop-dismiss {
+    position: absolute; inset: 0; border: none; background: transparent; padding: 0; cursor: default;
+  }
   .modal {
+    position: relative;
     background: #fff; border-radius: 16px; width: 100%; max-width: 420px;
     box-shadow: 0 24px 64px rgba(0,0,0,0.35), 0 4px 16px rgba(0,0,0,0.15);
     overflow: hidden;

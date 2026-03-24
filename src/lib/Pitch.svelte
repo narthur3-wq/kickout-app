@@ -97,25 +97,6 @@
   }
 
   const SZ = 2.0;
-
-  function markerShape(o: any): string {
-    const sx = svgX(o), sy = svgY(o);
-    const col = outcomeColor(o.outcome);
-    const t = String(o.contest_type || 'clean');
-    const ws = 'rgba(255,255,255,0.75)'; // white stroke
-    const ring = o.at_target
-      ? `<circle cx="${sx}" cy="${sy}" r="${SZ * 1.55}" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="0.7" vector-effect="non-scaling-stroke"/>`
-      : '';
-    if (t === 'break')
-      return `<polygon points="${sx},${sy-SZ} ${sx-SZ*.9},${sy+SZ*.7} ${sx+SZ*.9},${sy+SZ*.7}" fill="${col}" stroke="${ws}" stroke-width="0.55" vector-effect="non-scaling-stroke"/>${ring}`;
-    if (t === 'foul')
-      return `<polygon points="${sx},${sy-SZ} ${sx-SZ},${sy} ${sx},${sy+SZ} ${sx+SZ},${sy}" fill="${col}" stroke="${ws}" stroke-width="0.55" vector-effect="non-scaling-stroke"/>${ring}`;
-    if (t === 'out') {
-      const r = SZ * .88;
-      return `<rect x="${sx-r}" y="${sy-r}" width="${2*r}" height="${2*r}" fill="${col}" stroke="${ws}" stroke-width="0.55" vector-effect="non-scaling-stroke"/>${ring}`;
-    }
-    return `<circle cx="${sx}" cy="${sy}" r="${SZ*.92}" fill="${col}" stroke="${ws}" stroke-width="0.55" vector-effect="non-scaling-stroke"/>${ring}`;
-  }
 </script>
 
 <style>
@@ -159,7 +140,7 @@
     vector-effect="non-scaling-stroke" />
 
   <!-- distance lines from each end — weight hierarchy -->
-  {#each [L13, L20, L45, L65] as d}
+  {#each [L13, L20, L45, L65] as d (d)}
     <line x1={d}   y1="0" x2={d}   y2={H}
       stroke={d === L65 ? 'rgba(255,255,255,0.62)' : d === L13 ? 'rgba(255,255,255,0.52)' : 'rgba(255,255,255,0.72)'}
       stroke-width="0.9"
@@ -201,7 +182,61 @@
 
   <!-- overlays -->
   <g style="pointer-events:none">
-    {@html overlays.map(o => markerShape(o)).join('')}
+    {#each overlays as o, index (`${o.id ?? 'overlay'}-${index}`)}
+      {@const sx = svgX(o)}
+      {@const sy = svgY(o)}
+      {@const col = outcomeColor(o.outcome)}
+      {@const t = String(o.contest_type || 'clean')}
+      {#if t === 'break'}
+        <polygon
+          points={`${sx},${sy-SZ} ${sx-SZ*.9},${sy+SZ*.7} ${sx+SZ*.9},${sy+SZ*.7}`}
+          fill={col}
+          stroke="rgba(255,255,255,0.75)"
+          stroke-width="0.55"
+          vector-effect="non-scaling-stroke"
+        />
+      {:else if t === 'foul'}
+        <polygon
+          points={`${sx},${sy-SZ} ${sx-SZ},${sy} ${sx},${sy+SZ} ${sx+SZ},${sy}`}
+          fill={col}
+          stroke="rgba(255,255,255,0.75)"
+          stroke-width="0.55"
+          vector-effect="non-scaling-stroke"
+        />
+      {:else if t === 'out'}
+        <rect
+          x={sx - SZ * 0.88}
+          y={sy - SZ * 0.88}
+          width={SZ * 1.76}
+          height={SZ * 1.76}
+          fill={col}
+          stroke="rgba(255,255,255,0.75)"
+          stroke-width="0.55"
+          vector-effect="non-scaling-stroke"
+        />
+      {:else}
+        <circle
+          cx={sx}
+          cy={sy}
+          r={SZ * 0.92}
+          fill={col}
+          stroke="rgba(255,255,255,0.75)"
+          stroke-width="0.55"
+          vector-effect="non-scaling-stroke"
+        />
+      {/if}
+      {#if o.at_target}
+        <circle
+          cx={sx}
+          cy={sy}
+          r={SZ * 1.55}
+          fill="none"
+          stroke="rgba(255,255,255,0.9)"
+          stroke-width="0.7"
+          vector-effect="non-scaling-stroke"
+        />
+      {/if}
+    {/each}
   </g>
 
   <!-- landing marker — white, high-contrast -->

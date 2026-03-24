@@ -16,6 +16,9 @@ create table if not exists teams (
   created_at timestamptz not null default now()
 );
 
+create unique index if not exists teams_name_lower_unique
+  on teams ((lower(name)));
+
 -- ── Invite allowlist ─────────────────────────────────────────
 -- Only emails in this table can access the app.
 -- Each user must be assigned to a team before they can read/write events.

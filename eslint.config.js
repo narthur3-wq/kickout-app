@@ -1,5 +1,6 @@
 import svelte from "eslint-plugin-svelte";
 import prettier from "eslint-config-prettier";
+import tsParser from "@typescript-eslint/parser";
 
 export default [
   {
@@ -10,6 +11,9 @@ export default [
     files: ["**/*.js", "**/*.svelte"],
     languageOptions: {
       globals: { window: "readonly", document: "readonly" },
+      parserOptions: {
+        parser: tsParser,
+      },
     },
   },
   prettier,

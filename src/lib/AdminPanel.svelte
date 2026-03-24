@@ -2,11 +2,11 @@
   import { supabase } from './supabase.js';
 
   export let user = null;
-  export let teamId = null;
+  export let teamName = null;
 
   let email = '';
   let teamMode = 'current'; // 'current' | 'named'
-  let teamName = '';
+  let newTeamName = '';
   let loading = false;
   let result = null;
   let error = '';
@@ -16,7 +16,7 @@
     result = null;
 
     const cleanedEmail = email.trim().toLowerCase();
-    const cleanedTeamName = teamName.trim();
+    const cleanedTeamName = newTeamName.trim();
 
     if (!cleanedEmail) {
       error = 'Enter an email address.';
@@ -45,7 +45,7 @@
 
       result = data;
       email = '';
-      if (teamMode === 'named') teamName = '';
+      if (teamMode === 'named') newTeamName = '';
     } catch (err) {
       error = err?.message || 'Onboarding failed.';
     } finally {
@@ -69,7 +69,7 @@
     </div>
     <div class="status-item">
       <span class="label">Current team</span>
-      <span class="value mono">{teamId || 'No team assigned'}</span>
+      <span class="value">{teamName || 'No team assigned'}</span>
     </div>
   </div>
 
@@ -109,7 +109,7 @@
         <span>Team name</span>
         <input
           type="text"
-          bind:value={teamName}
+          bind:value={newTeamName}
           placeholder="Na Fianna GAA"
         />
       </label>
@@ -146,6 +146,7 @@
     <p><strong>Same club:</strong> leave it on "Your current team" and just enter the email.</p>
     <p><strong>New club:</strong> choose "Create / find another team" and enter the club name.</p>
     <p><strong>Invite flow:</strong> the app creates the sign-in account and sends the email invite in one step.</p>
+    <p><strong>If invite sending fails:</strong> check Supabase redirect URLs and email setup, then retry.</p>
     <p><strong>Note:</strong> if the auth account already exists, the app will just update the allowlist/team assignment.</p>
   </div>
 </section>

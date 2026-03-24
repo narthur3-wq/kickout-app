@@ -37,6 +37,25 @@ export async function getUserTeamId() {
   }
 }
 
+export async function getUserTeamDetails() {
+  if (!supabase) return { id: null, name: null };
+  try {
+    const { data, error } = await supabase
+      .from('allowed_users')
+      .select('team_id, teams(name)')
+      .limit(1)
+      .single();
+    if (error || !data) return { id: null, name: null };
+    const team = Array.isArray(data.teams) ? data.teams[0] : data.teams;
+    return {
+      id: data.team_id ?? null,
+      name: team?.name ?? null,
+    };
+  } catch {
+    return { id: null, name: null };
+  }
+}
+
 /**
  * Returns true if the currently signed-in user's email is in the
  * allowed_users allowlist table.  Returns true unconditionally when
@@ -49,12 +68,7 @@ export async function userHasAccess() {
       .from('allowed_users')
       .select('email')
       .limit(1);
-    if (error) {
-      // If the table doesn't exist yet (pre-migration env) fail open
-      // so existing single-user installs keep working.
-      if (error.code === '42P01') return true;
-      return false;
-    }
+    if (error) return false;
     return Array.isArray(data) && data.length > 0;
   } catch {
     return false;

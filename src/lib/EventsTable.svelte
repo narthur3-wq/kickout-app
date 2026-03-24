@@ -83,13 +83,13 @@
     />
 
     <div class="filter-group">
-      {#each PERIODS as p}
+      {#each PERIODS as p (p)}
         <button class="fpill {fPeriod === p ? 'active' : ''}" on:click={() => fPeriod = p}>{p}</button>
       {/each}
     </div>
 
     <div class="filter-group">
-      {#each TYPES as t}
+      {#each TYPES as t (t)}
         <button class="fpill {fType === t ? 'active' : ''}" on:click={() => fType = t}>
           {t === 'ALL' ? 'All' : t.charAt(0).toUpperCase() + t.slice(1)}
         </button>
