@@ -176,10 +176,10 @@
 
   function heatColor(t) {
     const a = Math.min(0.92, 0.12 + t * 0.80);
-    if (colorScheme === 'positive') return `hsla(160, 100%, 65%, ${a})`;
+    if (colorScheme === 'positive') return `hsla(46, 100%, 62%, ${a})`;
     if (colorScheme === 'negative') return `hsla(0, 90%, 65%, ${a})`;
     // density: yellow→orange→red (contrasts against green turf)
-    const hue = 60 - t * 60; // 60 (yellow) → 0 (red)
+    const hue = 28 - t * 28;
     return `hsla(${hue}, 95%, 58%, ${a})`;
   }
 
@@ -209,14 +209,14 @@
   .legend-bar {
     flex: 1; height: 8px; border-radius: 4px;
     background: linear-gradient(to right,
-      hsla(60,95%,58%,0.15),
-      hsla(40,95%,58%,0.50),
-      hsla(20,95%,58%,0.72),
+      hsla(28,95%,58%,0.15),
+      hsla(20,95%,58%,0.50),
+      hsla(10,95%,58%,0.72),
       hsla(0,95%,58%,0.92)
     );
   }
   .legend-bar.positive {
-    background: linear-gradient(to right, hsla(160,100%,65%,0.05), hsla(160,100%,65%,0.92));
+    background: linear-gradient(to right, hsla(46,100%,62%,0.05), hsla(46,100%,62%,0.92));
   }
   .legend-bar.negative {
     background: linear-gradient(to right, hsla(0,90%,65%,0.05), hsla(0,90%,65%,0.92));

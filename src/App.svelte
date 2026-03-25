@@ -10,6 +10,7 @@
   import CaptureForm from './lib/CaptureForm.svelte';
   import AdminPanel from './lib/AdminPanel.svelte';
   import { buildDraftSignature, isSetupDraftDirty } from './lib/captureDraft.js';
+  import { normalizeEventRecord } from './lib/eventRecord.js';
   import { mergeImportedEvents, planImportMerge } from './lib/importMerge.js';
   import {
     LOCAL_STORAGE_SCOPE,
@@ -308,6 +309,10 @@
     });
   }
 
+  function normalizeEventForStorage(event) {
+    return normalizeEventRecord(event, { teamIdFallback: teamId });
+  }
+
   function activateStorageScope(scope) {
     metaReady = false;
     storageScope = scope;
@@ -337,9 +342,10 @@
 
   // ── localStorage helpers ─────────────────────────────────────────────────
   function loadFromLocalStorage(scope = storageScope) {
-    events = applyDerivedScoreDisplays(readStoredJson(STORAGE_KEYS.events, [], scope, {
+    const storedEvents = readStoredJson(STORAGE_KEYS.events, [], scope, {
       onCorrupt: () => console.warn('ko_events corrupt in localStorage, starting fresh'),
-    }));
+    }).map(normalizeEventForStorage);
+    events = applyDerivedScoreDisplays(storedEvents);
     const meta = readStoredJson(STORAGE_KEYS.meta, {}, scope, {
       onCorrupt: () => console.warn('ko_meta corrupt in localStorage'),
     });
@@ -353,7 +359,7 @@
     const metaKey = storageKey(STORAGE_KEYS.meta, storageScope);
     if (!eventsKey || !metaKey) return;
     try {
-      localStorage.setItem(eventsKey, JSON.stringify(events));
+      localStorage.setItem(eventsKey, JSON.stringify(events.map(normalizeEventForStorage)));
       localStorage.setItem(metaKey, JSON.stringify(serializeMatchMeta({
         team,
         opponent,
@@ -504,7 +510,7 @@
         clearPendingSync(id);
         continue;
       }
-      const { error } = await supabase.from('events').upsert(ev);
+      const { error } = await supabase.from('events').upsert(normalizeEventForStorage(ev));
       if (!error) {
         clearPendingSync(id);
       } else {
@@ -533,14 +539,14 @@
         .eq('team_id', teamId)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      const remoteEvents = data || [];
+      const remoteEvents = (data || []).map(normalizeEventForStorage);
       // Merge: Supabase is source of truth for events not in the pending queue.
       // Any event currently queued (pending upsert or delete) is authoritative locally —
       // do not overwrite it with the remote version, and do not re-add locally deleted events.
       const remoteIds = new Set(remoteEvents.map(e => e.id));
-      const localOnly = events.filter(e => !remoteIds.has(e.id) && !pendingSync.has(e.id));
+      const localOnly = events.filter(e => !remoteIds.has(e.id) && !pendingSync.has(e.id)).map(normalizeEventForStorage);
       const remoteFiltered = remoteEvents.filter(e => !pendingSync.has(e.id));
-      const pendingLocal = events.filter(e => pendingSync.get(e.id) === 'upsert');
+      const pendingLocal = events.filter(e => pendingSync.get(e.id) === 'upsert').map(normalizeEventForStorage);
       events = applyDerivedScoreDisplays([...remoteFiltered, ...localOnly, ...pendingLocal]);
       // Push local-only events up to Supabase. If this fails, keep those
       // records queued locally so the UI does not imply they are safely synced.
@@ -570,7 +576,7 @@
       if (user) queuePendingSync(ev.id, 'upsert');
       return;
     }
-    const { error } = await supabase.from('events').upsert(ev);
+    const { error } = await supabase.from('events').upsert(normalizeEventForStorage(ev));
     if (error) {
       console.error('Supabase upsert failed', ev.id, error.message);
       queuePendingSync(ev.id, 'upsert');
@@ -903,7 +909,7 @@
       koSequence = matchEvents.length + 1;
     }
 
-    return {
+    return normalizeEventForStorage({
       id:           editingId ?? crypto.randomUUID(),
       created_at:   originalCreatedAt,
       team_id:      teamId,
@@ -939,7 +945,7 @@
       shot_type: eventType === 'shot' ? shotType : null,
       ko_sequence: koSequence,
       schema_version: 1,
-    };
+    });
   }
 
   async function saveEvent() {
@@ -1160,25 +1166,11 @@
       return;
     }
 
-    const normalizeImportedEvent = (event) => {
-      const type = event.event_type || 'kickout';
-      const nextContest = type === 'kickout' ? (event.contest_type || 'clean') : null;
-      const isBreak = type === 'kickout' && nextContest === 'break';
-      return {
-        ...event,
-        team_id: supabaseConfigured && user ? teamId : (event.team_id ?? null),
-        contest_type: nextContest,
-        break_outcome: isBreak ? (event.break_outcome || '') : null,
-        pickup_x: isBreak ? (event.pickup_x ?? null) : null,
-        pickup_y: isBreak ? (event.pickup_y ?? null) : null,
-        pickup_x_m: isBreak ? (event.pickup_x_m ?? null) : null,
-        pickup_y_m: isBreak ? (event.pickup_y_m ?? null) : null,
-        break_displacement_m: isBreak ? (event.break_displacement_m ?? null) : null,
-        restart_reason: type === 'kickout' ? (event.restart_reason || null) : null,
-        shot_type: type === 'shot' ? (event.shot_type || 'point') : null,
-      };
-    };
-    const normalizedImported = imported.map(normalizeImportedEvent);
+    const normalizedImported = imported.map((event) =>
+      normalizeEventRecord(event, {
+        teamIdFallback: supabaseConfigured && user ? teamId : (event.team_id ?? null),
+      })
+    );
     const importPlan = planImportMerge(events, normalizedImported);
 
     if (!conflictStrategy && importPlan.conflictingCount > 0) {
