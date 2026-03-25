@@ -11,6 +11,16 @@
   import AdminPanel from './lib/AdminPanel.svelte';
   import { buildDraftSignature, isSetupDraftDirty } from './lib/captureDraft.js';
   import { mergeImportedEvents, planImportMerge } from './lib/importMerge.js';
+  import {
+    LOCAL_STORAGE_SCOPE,
+    STORAGE_KEYS,
+    parsePendingSyncEntries,
+    parseStoredMeta,
+    readStoredJson,
+    serializeMatchMeta,
+    storageKey,
+    storageScopeForUser,
+  } from './lib/storageScope.js';
   import { supabase, supabaseConfigured, userHasAccess, getUserTeamDetails, isConfiguredAdmin } from './lib/supabase.js';
   import { buildScoreSnapshots } from './lib/score.js';
   import { buildKickoutClockTrend } from './lib/analyticsHelpers.js';
@@ -74,7 +84,7 @@
   let realtimeRefreshTimer = null;
   let accountOpen = false;
   let isAdminUser = false;
-  let storageScope = supabaseConfigured ? null : 'local';
+  let storageScope = supabaseConfigured ? null : LOCAL_STORAGE_SCOPE;
   let editReturnContext = null;
 
   // ── Viz filters ───────────────────────────────────────────────────────────
@@ -125,12 +135,6 @@
 
   const today = new Date();
   const currentYear = today.getFullYear();
-  const LOCAL_STORAGE_SCOPE = 'local';
-  const STORAGE_KEYS = {
-    events: 'ko_events',
-    meta: 'ko_meta',
-    sync: 'ko_sync_queue',
-  };
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const norm = s => (s ?? '').trim().toLowerCase();
@@ -176,27 +180,6 @@
     setupDraftTeam = team;
     setupDraftOpponent = opponent;
     setupDraftDate = matchDate;
-  }
-
-  function storageScopeForUser(nextUser) {
-    if (nextUser?.id) return `user:${nextUser.id}`;
-    return supabaseConfigured ? null : LOCAL_STORAGE_SCOPE;
-  }
-
-  function storageKey(baseKey, scope = storageScope) {
-    if (!scope) return null;
-    return scope === LOCAL_STORAGE_SCOPE ? baseKey : `${baseKey}:${scope}`;
-  }
-
-  function readStoredJson(baseKey, fallback, scope = storageScope, corruptMessage = '') {
-    const key = storageKey(baseKey, scope);
-    if (!key) return fallback;
-    try {
-      return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
-    } catch {
-      if (corruptMessage) console.warn(corruptMessage);
-      return fallback;
-    }
   }
 
   function resetMatchContext() {
@@ -331,30 +314,30 @@
 
   // ── localStorage helpers ─────────────────────────────────────────────────
   function loadFromLocalStorage(scope = storageScope) {
-    events = applyDerivedScoreDisplays(readStoredJson(STORAGE_KEYS.events, [], scope, 'ko_events corrupt in localStorage, starting fresh'));
-    const meta = readStoredJson(STORAGE_KEYS.meta, {}, scope, 'ko_meta corrupt in localStorage');
-    team = meta.team || '';
-    opponent = meta.opponent || '';
-    matchDate = /^\d{4}-\d{2}-\d{2}$/.test(meta.match_date || '') ? meta.match_date : defaultMatchDate();
-    period = ['H1', 'H2', 'ET'].includes(meta.period) ? meta.period : 'H1';
-    ourGoalAtTop = meta.our_goal_at_top !== undefined ? !!meta.our_goal_at_top : true;
+    events = applyDerivedScoreDisplays(readStoredJson(STORAGE_KEYS.events, [], scope, {
+      onCorrupt: () => console.warn('ko_events corrupt in localStorage, starting fresh'),
+    }));
+    const meta = readStoredJson(STORAGE_KEYS.meta, {}, scope, {
+      onCorrupt: () => console.warn('ko_meta corrupt in localStorage'),
+    });
+    ({ team, opponent, matchDate, period, ourGoalAtTop } = parseStoredMeta(meta, defaultMatchDate()));
     syncSetupDraftFromMatch();
     markDraftPristine();
   }
 
   function persistLocal() {
-    const eventsKey = storageKey(STORAGE_KEYS.events);
-    const metaKey = storageKey(STORAGE_KEYS.meta);
+    const eventsKey = storageKey(STORAGE_KEYS.events, storageScope);
+    const metaKey = storageKey(STORAGE_KEYS.meta, storageScope);
     if (!eventsKey || !metaKey) return;
     try {
       localStorage.setItem(eventsKey, JSON.stringify(events));
-      localStorage.setItem(metaKey, JSON.stringify({
+      localStorage.setItem(metaKey, JSON.stringify(serializeMatchMeta({
         team,
         opponent,
-        match_date: matchDate,
+        matchDate,
         period,
-        our_goal_at_top: ourGoalAtTop,
-      }));
+        ourGoalAtTop,
+      })));
     } catch (e) {
       if (e instanceof DOMException && e.name === 'QuotaExceededError') {
         showNotice('error', 'Storage full. Export your JSON backup and clear old events before continuing.', 8000);
@@ -367,16 +350,16 @@
 
   // Persist only match metadata after the initial local load has completed.
   function persistMeta() {
-    const metaKey = storageKey(STORAGE_KEYS.meta);
+    const metaKey = storageKey(STORAGE_KEYS.meta, storageScope);
     if (!metaKey) return;
     try {
-      localStorage.setItem(metaKey, JSON.stringify({
+      localStorage.setItem(metaKey, JSON.stringify(serializeMatchMeta({
         team,
         opponent,
-        match_date: matchDate,
+        matchDate,
         period,
-        our_goal_at_top: ourGoalAtTop,
-      }));
+        ourGoalAtTop,
+      })));
     } catch (e) {
       console.error('localStorage meta write failed', e);
     }
@@ -418,29 +401,13 @@
       return;
     }
     try {
-      const raw = JSON.parse(localStorage.getItem(key) || '[]');
-      if (!Array.isArray(raw)) {
-        pendingSync = new SvelteMap();
-        return;
-      }
-
-      // Backwards compatibility: older builds stored a plain array of IDs.
-      if (raw.every(item => typeof item === 'string')) {
-        pendingSync = new SvelteMap(raw.map(id => [id, 'upsert']));
-        return;
-      }
-
-      pendingSync = new SvelteMap(
-        raw
-          .filter(item => item && typeof item.id === 'string')
-          .map(item => [item.id, item.op === 'delete' ? 'delete' : 'upsert'])
-      );
+      pendingSync = new SvelteMap(parsePendingSyncEntries(JSON.parse(localStorage.getItem(key) || '[]')));
     } catch {
       pendingSync = new SvelteMap();
     }
   }
   function savePendingSync() {
-    const key = storageKey(STORAGE_KEYS.sync);
+    const key = storageKey(STORAGE_KEYS.sync, storageScope);
     if (!key) return;
     try {
       localStorage.setItem(
@@ -672,7 +639,7 @@
             user = session.user;
             isAdminUser = isConfiguredAdmin(session.user.email);
             ({ id: teamId, name: teamName } = await getUserTeamDetails());
-            activateStorageScope(storageScopeForUser(session.user));
+            activateStorageScope(storageScopeForUser(session.user, supabaseConfigured));
             await syncFromSupabase();
             if (!disposed) startRealtimeSync();
           } else {
@@ -715,7 +682,7 @@
           authRecoveryMode = false;
           isAdminUser = isConfiguredAdmin(session.user.email);
           ({ id: teamId, name: teamName } = await getUserTeamDetails());
-          activateStorageScope(storageScopeForUser(session.user));
+          activateStorageScope(storageScopeForUser(session.user, supabaseConfigured));
           await syncFromSupabase();
           if (!disposed) startRealtimeSync();
         });
@@ -740,7 +707,7 @@
     authRecoveryMode = false;
     isAdminUser = isConfiguredAdmin(e.detail.user?.email);
     ({ id: teamId, name: teamName } = await getUserTeamDetails());
-    activateStorageScope(storageScopeForUser(e.detail.user));
+    activateStorageScope(storageScopeForUser(e.detail.user, supabaseConfigured));
     await syncFromSupabase();
     startRealtimeSync();
   }
