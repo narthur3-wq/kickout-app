@@ -12,6 +12,9 @@ dist
 dist-ssr
 docs
 *.local
+artifacts/
+playwright-report/
+test-results/
 
 # Environment variables (contains secrets — use .env.example as template)
 .env
