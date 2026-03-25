@@ -206,7 +206,7 @@
       type="number" min="1" max="99" placeholder="16+"
       inputmode="numeric"
       value={targetPlayer && parseInt(targetPlayer) > 15 ? targetPlayer : ''}
-      on:change={(e) => { targetPlayer = e.target.value || ''; }}
+      on:input={(e) => { targetPlayer = e.currentTarget.value || ''; }}
     />
     {#if targetPlayer}
       <button class="jersey-clear" on:click={() => targetPlayer = ''}>✕</button>

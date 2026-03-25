@@ -86,6 +86,7 @@
   let isAdminUser = false;
   let storageScope = supabaseConfigured ? null : LOCAL_STORAGE_SCOPE;
   let editReturnContext = null;
+  let pitchResetToken = 0;
 
   // ── Viz filters ───────────────────────────────────────────────────────────
   let fContest = new SvelteSet(CONTESTS);
@@ -114,11 +115,17 @@
   let timerInterval = null;
   let timerSeconds = 0;
 
-  function toggleTimer() {
-    if (timerRunning) {
+  function stopTimer() {
+    if (timerInterval) {
       clearInterval(timerInterval);
       timerInterval = null;
-      timerRunning = false;
+    }
+    timerRunning = false;
+  }
+
+  function toggleTimer() {
+    if (timerRunning) {
+      stopTimer();
     } else {
       // Parse current clock value as starting seconds (mm:ss)
       const parts = clock.match(/^(\d{1,2}):(\d{2})$/);
@@ -146,6 +153,7 @@
   const zoneCode = (nx, ny) => `${sideBand(nx)[0]}-${depthBandFromMeters(depthMetersFromOwnGoal(ny))[0]}`;
   const breakDispM = (x1,y1,x2,y2) => Math.hypot((x2-x1)*WIDTH_M, (y2-y1)*LENGTH_M);
   const defaultMatchDate = () => new Date().toISOString().slice(0,10);
+  const scoreOutcomeOf = (event) => String(event?.outcome || '').trim().toLowerCase();
   let draftPristineSignature = '';
 
   // YTD: compare year strings to avoid UTC-vs-local timezone edge cases
@@ -693,7 +701,7 @@
 
     return () => {
       disposed = true;
-      if (timerInterval) clearInterval(timerInterval);
+      stopTimer();
       if (noticeTimer) clearTimeout(noticeTimer);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
@@ -741,7 +749,11 @@
   // ── Capture helpers ───────────────────────────────────────────────────────
   function onLanding(e) { landing = e.detail; }
   function onPickup(e)  { pickup  = e.detail; }
-  function clearPoints()  { landing = {x:NaN, y:NaN}; pickup = {x:NaN, y:NaN}; }
+  function clearPoints()  {
+    landing = {x:NaN, y:NaN};
+    pickup = {x:NaN, y:NaN};
+    pitchResetToken += 1;
+  }
 
   function openSetupModal() {
     syncSetupDraftFromMatch();
@@ -1270,11 +1282,11 @@
     const shots = events.filter(e => matchKey(e) === currentKey && e.event_type === 'shot');
     const calc = (dir) => {
       const s = shots.filter(e => (e.direction || 'ours') === dir);
-      const goals  = s.filter(e => e.outcome === 'Goal').length;
-      const points = s.filter(e => e.outcome === 'Point').length;
+      const goals  = s.filter(e => scoreOutcomeOf(e) === 'goal').length;
+      const points = s.filter(e => scoreOutcomeOf(e) === 'point').length;
       return { goals, points, str: `${goals}-${points}` };
     };
-    return { us: calc('ours'), them: calc('theirs'), hasShots: true };
+    return { us: calc('ours'), them: calc('theirs'), hasShots: shots.length > 0 };
   })();
 
   // ── Filtered events for viz & KPIs ───────────────────────────────────────
@@ -1662,8 +1674,20 @@
           const p = e.detail;
           const previousPeriod = period;
           period = p;
-          if (previousPeriod !== p && ((previousPeriod === 'H1' && p === 'H2') || (previousPeriod === 'H2' && p === 'H1'))) {
-            showNotice('success', `Period set to ${p}. Ends stay as they are - use "Swap ends" beside the pitch if teams have changed direction.`, 5000);
+          if (previousPeriod !== p) {
+            const timerWasRunning = timerRunning;
+            if (timerWasRunning) stopTimer();
+            if ((previousPeriod === 'H1' && p === 'H2') || (previousPeriod === 'H2' && p === 'H1')) {
+              showNotice(
+                'success',
+                timerWasRunning
+                  ? `Period set to ${p}. Timer paused at ${clock || '0:00'}. Ends stay as they are - use "Swap ends" beside the pitch if teams have changed direction.`
+                  : `Period set to ${p}. Ends stay as they are - use "Swap ends" beside the pitch if teams have changed direction.`,
+                6000
+              );
+            } else if (timerWasRunning) {
+              showNotice('success', `Period set to ${p}. Timer paused at ${clock || '0:00'}.`, 5000);
+            }
           }
         }}
         on:cancelEdit={cancelEditMode}
@@ -1673,11 +1697,14 @@
     <!-- Right: pitch panel -->
     <div class="pitch-panel {pitchError ? 'pitch-error' : ''}">
       <!-- Timer strip -->
-      <div class="timer-strip">
-        <button class="timer-btn" on:click={toggleTimer}>
+      <div class="timer-strip {timerRunning ? 'running' : 'paused'}">
+        <button class="timer-btn {timerRunning ? 'running' : ''}" on:click={toggleTimer}>
           {timerRunning ? '⏹' : '▶'}
         </button>
         <span class="timer-clock">{clock || '0:00'}</span>
+        <span class="timer-status {timerRunning ? 'running' : 'paused'}" aria-live="polite">
+          {timerRunning ? 'Running' : 'Paused'}
+        </span>
         <span class="timer-period">{period}</span>
       </div>
       <div class="pitch-card">
@@ -1693,6 +1720,7 @@
           landing={landing}
           pickup={pickup}
           overlays={[]}
+          resetToken={pitchResetToken}
           flip={!ourGoalAtTop}
           on:landed={onLanding}
           on:picked={onPickup}
@@ -2162,6 +2190,11 @@
   .timer-strip {
     display: flex; align-items: center; gap: 12px;
     background: #2d5a33; padding: 8px 14px; flex-shrink: 0; border-radius: 10px;
+    transition: box-shadow 0.18s ease, background 0.18s ease;
+  }
+  .timer-strip.running {
+    background: linear-gradient(90deg, #1f5d30, #2d5a33);
+    box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.28);
   }
   .timer-btn {
     padding: 6px 16px; border-radius: 7px; font-size: 15px; font-weight: 800;
@@ -2169,13 +2202,47 @@
     color: #fff; cursor: pointer; font-family: inherit; transition: all 0.12s; line-height: 1;
   }
   .timer-btn:hover { background: rgba(255,255,255,0.25); }
+  .timer-btn.running {
+    background: rgba(74,222,128,0.2);
+    border-color: rgba(74,222,128,0.45);
+  }
   .timer-clock {
     font-size: 26px; font-weight: 900; color: #fff;
     font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 1;
   }
+  .timer-status {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-radius: 999px;
+    padding: 5px 10px;
+    line-height: 1;
+  }
+  .timer-status.running {
+    color: #dcfce7;
+    background: rgba(74,222,128,0.18);
+    box-shadow: inset 0 0 0 1px rgba(74,222,128,0.34);
+  }
+  .timer-status.running::before {
+    content: '●';
+    display: inline-block;
+    margin-right: 6px;
+    color: #4ade80;
+    animation: timerPulse 1.2s ease-in-out infinite;
+  }
+  .timer-status.paused {
+    color: rgba(255,255,255,0.72);
+    background: rgba(255,255,255,0.08);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14);
+  }
   .timer-period {
     font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.55);
     text-transform: uppercase; letter-spacing: 0.08em; margin-left: auto;
+  }
+  @keyframes timerPulse {
+    0%, 100% { opacity: 0.45; transform: scale(0.95); }
+    50% { opacity: 1; transform: scale(1.05); }
   }
 
   /* ── Pitch card ── */

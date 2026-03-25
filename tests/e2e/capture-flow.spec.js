@@ -71,6 +71,21 @@ test('captures a live event and restores the match after reload', async ({ page 
   await expect(page.getByRole('cell', { name: 'Retained' })).toBeVisible();
 });
 
+test('clear points fully resets the break capture flow on the pitch', async ({ page }) => {
+  await openFreshApp(page);
+  await setUpMatch(page, { opponent: 'Castleknock' });
+
+  await page.locator('.form-panel').getByRole('button', { name: 'break' }).click();
+  await placeLandingPoint(page);
+  await expect(page.getByText(/Step 2 — tap pitch for pickup point/i)).toBeVisible();
+
+  await page.getByRole('button', { name: /Clear points/i }).click();
+  await placeLandingPoint(page, { x: 260, y: 180 });
+
+  await expect(page.getByText(/Step 2 — tap pitch for pickup point/i)).toBeVisible();
+  await expect(page.getByText(/Step 1 — tap pitch for landing point/i)).toHaveCount(0);
+});
+
 test('returns to live capture cleanly after editing and cancelling an event', async ({ page }) => {
   await openFreshApp(page);
   await setUpMatch(page, { opponent: 'Vincents' });
@@ -124,17 +139,74 @@ test('delete all can be recovered with Undo from Capture', async ({ page }) => {
   await expect(page.getByRole('cell', { name: 'Na Fianna' })).toBeVisible();
 });
 
-test('changing period does not auto-swap ends and gives a halftime reminder', async ({ page }) => {
+test('changing period pauses the timer, keeps ends stable, and shows a halftime reminder', async ({ page }) => {
   await openFreshApp(page);
   await setUpMatch(page, { opponent: 'Boden' });
 
   await expect(page.getByText(/Our goal:/i)).toContainText('left end');
   await expect(page.getByText(/Attacking:/i)).toContainText('right');
+  await expect(page.getByText('Paused')).toBeVisible();
+  await page.locator('.timer-btn').click();
+  await expect(page.getByText('Running')).toBeVisible();
   await page.locator('.form-panel').getByRole('button', { name: 'H2' }).click();
 
-  await expect(page.getByText(/Ends stay as they are/i)).toBeVisible();
+  await expect(page.getByText(/Timer paused/i)).toBeVisible();
+  await expect(page.getByText('Paused', { exact: true })).toBeVisible();
   await expect(page.getByText(/Our goal:/i)).toContainText('left end');
   await expect(page.getByText(/Attacking:/i)).toContainText('right');
+});
+
+test('header score stays hidden when the current match has no shots', async ({ page }) => {
+  const kickoutOnly = storedEvent('kickout-only', { opponent: 'Kilmacud', outcome: 'Retained' });
+
+  await page.addInitScript(({ events, meta }) => {
+    window.localStorage.clear();
+    window.localStorage.setItem('ko_events', JSON.stringify(events));
+    window.localStorage.setItem('ko_meta', JSON.stringify(meta));
+    window.localStorage.setItem('ko_sync_queue', JSON.stringify([]));
+  }, {
+    events: [kickoutOnly],
+    meta: {
+      team: 'Clontarf',
+      opponent: 'Kilmacud',
+      match_date: '2026-03-25',
+      period: 'H1',
+      our_goal_at_top: true,
+    },
+  });
+
+  await page.goto('/');
+  await expect(page.locator('.match-score')).toHaveCount(0);
+});
+
+test('header score accepts lowercase imported shot outcomes', async ({ page }) => {
+  const lowercaseShot = storedEvent('shot-1', {
+    opponent: 'Kilmacud',
+    event_type: 'shot',
+    outcome: 'point',
+    shot_type: 'point',
+    contest_type: 'clean',
+    direction: 'ours',
+  });
+
+  await page.addInitScript(({ events, meta }) => {
+    window.localStorage.clear();
+    window.localStorage.setItem('ko_events', JSON.stringify(events));
+    window.localStorage.setItem('ko_meta', JSON.stringify(meta));
+    window.localStorage.setItem('ko_sync_queue', JSON.stringify([]));
+  }, {
+    events: [lowercaseShot],
+    meta: {
+      team: 'Clontarf',
+      opponent: 'Kilmacud',
+      match_date: '2026-03-25',
+      period: 'H1',
+      our_goal_at_top: true,
+    },
+  });
+
+  await page.goto('/');
+  await expect(page.locator('.match-score')).toContainText('0-1 – 0-0');
 });
 
 test('import can keep current conflicting data while still adding brand-new events', async ({ page }) => {

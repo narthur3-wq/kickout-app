@@ -69,4 +69,13 @@ describe('CaptureForm', () => {
     expect(screen.getByRole('button', { name: 'Clontarf' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Vincents' })).toBeInTheDocument();
   });
+
+  it('updates the custom jersey label as the analyst types', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByPlaceholderText('16+'), '23');
+
+    expect(screen.getByText(/Target player · #23/i)).toBeInTheDocument();
+  });
 });

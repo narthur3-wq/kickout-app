@@ -7,6 +7,7 @@
   export let pickup  = { x: NaN, y: NaN };
   export let overlays: Array<any> = [];
   export let showZoneLabels = false;
+  export let resetToken = 0;
 
   const dispatch = createEventDispatcher();
 
@@ -34,6 +35,21 @@
   }
 
   let awaitingPickup = false;
+  let lastResetToken = resetToken;
+
+  $: if (contestType !== 'break') {
+    awaitingPickup = false;
+  }
+
+  $: if (Number.isNaN(landing?.x) && Number.isNaN(pickup?.x)) {
+    awaitingPickup = false;
+  }
+
+  $: if (resetToken !== lastResetToken) {
+    lastResetToken = resetToken;
+    awaitingPickup = false;
+  }
+
   function handleClick(e: MouseEvent) {
     const pos = getPoint(e);
     if (contestType === 'break') {
