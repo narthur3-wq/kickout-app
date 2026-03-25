@@ -2,7 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   const dispatch = createEventDispatcher();
 
-  // ── Metric type + direction ───────────────────────────────────────────
+  // ── Metric type + team ownership ──────────────────────────────────────
   export let eventType = 'kickout';
   export let direction = 'ours';
 
@@ -91,17 +91,18 @@
     {/each}
   </div>
 
-  <!-- ── Direction toggle ── -->
-  <div class="field-label">Direction</div>
+  <!-- ── Team ownership toggle ── -->
+  <div class="field-label">Team</div>
+  <p class="field-helper">Choose the team for this event.</p>
   <div class="dir-row">
     <button
       class="seg-dir {direction === 'ours' ? 'active' : ''}"
       on:click={() => direction = 'ours'}
-    >◀ {team || 'Ours'}</button>
+    >{team || 'Ours'}</button>
     <button
       class="seg-dir {direction === 'theirs' ? 'active' : ''}"
       on:click={() => direction = 'theirs'}
-    >{opponent || 'Theirs'} ▶</button>
+    >{opponent || 'Theirs'}</button>
   </div>
 
   <!-- ── Period ── -->
@@ -241,6 +242,12 @@
     font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
     text-transform: uppercase; color: #6b7280; margin: 16px 0 7px;
   }
+  .field-helper {
+    margin: -2px 0 8px;
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.4;
+  }
 
   /* ── Event type — segmented control ── */
   .metric-row {
@@ -258,7 +265,7 @@
   }
   .seg-top:active { transform: scale(0.97); }
 
-  /* ── Direction — segmented control ── */
+  /* ── Team — segmented control ── */
   .dir-row {
     display: flex; gap: 2px; background: #f3f4f6; border-radius: 9px; padding: 3px;
   }

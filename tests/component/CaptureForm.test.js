@@ -60,4 +60,13 @@ describe('CaptureForm', () => {
     expect(screen.getByRole('button', { name: /Cancel/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Undo last change/i })).toBeDisabled();
   });
+
+  it('labels team ownership clearly without implying pitch direction', () => {
+    renderForm();
+
+    expect(screen.getByText('Team')).toBeInTheDocument();
+    expect(screen.getByText(/Choose the team for this event/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Clontarf' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Vincents' })).toBeInTheDocument();
+  });
 });

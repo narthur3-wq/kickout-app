@@ -1533,7 +1533,6 @@
       {:else if syncStatus === 'error'}
         <span class="chip error">!</span>
       {/if}
-      <button class="flip-pill" on:click={() => ourGoalAtTop = !ourGoalAtTop} title="Swap which goal end is ours on the pitch">Swap ends</button>
       <button class="icon-btn" title="{wakeLock ? 'Screen locked on' : 'Keep screen on'}"
         on:click={toggleWakeLock}>{wakeLock ? 'Awake' : 'Keep awake'}</button>
       {#if supabaseConfigured && user}
@@ -1664,7 +1663,7 @@
           const previousPeriod = period;
           period = p;
           if (previousPeriod !== p && ((previousPeriod === 'H1' && p === 'H2') || (previousPeriod === 'H2' && p === 'H1'))) {
-            showNotice('success', `Period set to ${p}. Ends stay as they are - use "Swap ends" if teams have changed direction.`, 5000);
+            showNotice('success', `Period set to ${p}. Ends stay as they are - use "Swap ends" beside the pitch if teams have changed direction.`, 5000);
           }
         }}
         on:cancelEdit={cancelEditMode}
@@ -1683,7 +1682,10 @@
       </div>
       <div class="pitch-card">
         <div class="goal-indicator">
-          <span>{ourGoalAtTop ? '◀ Your goal — left end' : 'Your goal — right end ▶'}</span>
+          <div class="goal-copy">
+            <span>{ourGoalAtTop ? 'Our goal: left end' : 'Our goal: right end'}</span>
+            <span>{ourGoalAtTop ? 'Attacking: right →' : 'Attacking: ← left'}</span>
+          </div>
           <button class="flip-btn" on:click={() => ourGoalAtTop = !ourGoalAtTop} title="Swap ends manually">⇄ Swap ends</button>
         </div>
         <Pitch
@@ -1954,15 +1956,6 @@
   .match-ctx-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0; }
   .match-score { font-size: 15px; font-weight: 700; color: rgba(255,255,255,0.95); letter-spacing: 0.04em; }
 
-  /* Flip button — dark header */
-  .flip-pill {
-    padding: 5px 9px; border-radius: 7px; font-size: 11px; font-weight: 700;
-    border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.08);
-    cursor: pointer; color: rgba(255,255,255,0.75); font-family: inherit; transition: all 0.15s; line-height: 1;
-    letter-spacing: 0.01em; opacity: 0.75;
-  }
-  .flip-pill:hover { background: rgba(255,255,255,0.15); color: #fff; }
-
   /* Sign-out — dark header */
   .hdr-sm {
     padding: 3px 8px; border-radius: 7px; font-size: 11px; font-weight: 600;
@@ -2109,6 +2102,10 @@
     padding: 5px 12px; letter-spacing: 0.05em;
     flex-shrink: 0; text-transform: uppercase; border-radius: 0;
     display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .goal-copy {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    flex-wrap: wrap;
   }
   .flip-btn {
     padding: 3px 9px; font-size: 10px; font-weight: 700;

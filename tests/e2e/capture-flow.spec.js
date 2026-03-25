@@ -128,11 +128,13 @@ test('changing period does not auto-swap ends and gives a halftime reminder', as
   await openFreshApp(page);
   await setUpMatch(page, { opponent: 'Boden' });
 
-  await expect(page.getByText(/Your goal/i)).toContainText('left end');
+  await expect(page.getByText(/Our goal:/i)).toContainText('left end');
+  await expect(page.getByText(/Attacking:/i)).toContainText('right');
   await page.locator('.form-panel').getByRole('button', { name: 'H2' }).click();
 
   await expect(page.getByText(/Ends stay as they are/i)).toBeVisible();
-  await expect(page.getByText(/Your goal/i)).toContainText('left end');
+  await expect(page.getByText(/Our goal:/i)).toContainText('left end');
+  await expect(page.getByText(/Attacking:/i)).toContainText('right');
 });
 
 test('import can keep current conflicting data while still adding brand-new events', async ({ page }) => {
