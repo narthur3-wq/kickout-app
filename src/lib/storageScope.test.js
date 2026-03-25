@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   LOCAL_STORAGE_SCOPE,
   STORAGE_KEYS,
+  migrateLocalScopeToUserScope,
   parsePendingSyncEntries,
   parseStoredMeta,
+  readScopeSnapshot,
   readStoredJson,
   serializeMatchMeta,
   storageKey,
@@ -64,5 +66,36 @@ describe('storageScope helpers', () => {
       ['one', 'delete'],
       ['two', 'upsert'],
     ]);
+  });
+
+  it('migrates legacy local data into the first user scope without dropping events', () => {
+    const storage = {
+      values: new Map([
+        ['ko_events', JSON.stringify([{ id: 'local-1', outcome: 'Retained' }])],
+        ['ko_meta', JSON.stringify({ team: 'Clontarf', opponent: 'Boden', match_date: '2026-03-25', period: 'H1', our_goal_at_top: true })],
+        ['ko_sync_queue', JSON.stringify([{ id: 'local-1', op: 'upsert' }])],
+      ]),
+      getItem(key) { return this.values.get(key) ?? null; },
+      setItem(key, value) { this.values.set(key, value); },
+      removeItem(key) { this.values.delete(key); },
+    };
+
+    const result = migrateLocalScopeToUserScope('user:abc', { storage });
+
+    expect(result).toEqual({ migrated: true, eventCount: 1, reason: 'migrated' });
+    expect(readScopeSnapshot('user:abc', { storage })).toEqual({
+      events: [{ id: 'local-1', outcome: 'Retained' }],
+      meta: {
+        team: 'Clontarf',
+        opponent: 'Boden',
+        match_date: '2026-03-25',
+        period: 'H1',
+        our_goal_at_top: true,
+      },
+      pendingSync: [['local-1', 'upsert']],
+    });
+    expect(storage.getItem('ko_events')).toBeNull();
+    expect(storage.getItem('ko_meta')).toBeNull();
+    expect(storage.getItem('ko_sync_queue')).toBeNull();
   });
 });

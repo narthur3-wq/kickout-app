@@ -36,19 +36,22 @@ describe('buildTurnoverSummary', () => {
 });
 
 describe('buildKickoutClockTrend', () => {
-  it('only returns kickout retention windows', () => {
+  it('only returns kickout retention windows and keeps H2 buckets separate from H1', () => {
     expect(buildKickoutClockTrend([{ outcome: 'Goal', clock: '02:00' }], 'shot')).toEqual([]);
 
     const trend = buildKickoutClockTrend([
-      { outcome: 'Retained', clock: '01:00' },
-      { outcome: 'Lost', clock: '04:00' },
-      { outcome: 'Won', clock: '12:00' },
-      { outcome: 'Lost', clock: '18:00' },
+      { outcome: 'Retained', clock: '01:00', period: 'H1' },
+      { outcome: 'Lost', clock: '04:00', period: 'H1' },
+      { outcome: 'Won', clock: '35:00', period: 'H1' },
+      { outcome: 'Lost', clock: '39:00', period: 'H1' },
+      { outcome: 'Won', clock: '05:00', period: 'H2' },
+      { outcome: 'Lost', clock: '08:00', period: 'H2' },
     ], 'kickout');
 
     expect(trend).toEqual([
       { label: '0-10', tot: 2, pct: 50 },
-      { label: '10-20', tot: 2, pct: 50 },
+      { label: '30-40', tot: 2, pct: 50 },
+      { label: '40-50', tot: 2, pct: 50 },
     ]);
   });
 });

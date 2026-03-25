@@ -8,6 +8,18 @@ function shotTypeOf(event) {
   return String(event?.shot_type || 'point').toLowerCase();
 }
 
+function parseClockMinutes(clock) {
+  const match = String(clock || '').match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  return Number.parseInt(match[1], 10) + Number.parseInt(match[2], 10) / 60;
+}
+
+function periodBase(period) {
+  if (period === 'H2') return 40;
+  if (period === 'ET') return 80;
+  return 0;
+}
+
 export function buildShotSummary(events = [], analyticsEventType = 'ALL') {
   if (analyticsEventType !== 'shot') return null;
   const total = events.length;
@@ -53,15 +65,26 @@ export function buildTurnoverSummary(events = [], analyticsEventType = 'ALL') {
 
 export function buildKickoutClockTrend(events = [], analyticsEventType = 'ALL') {
   if (analyticsEventType !== 'kickout') return [];
-  const windows = [[0, 10, '0-10'], [10, 20, '10-20'], [20, 30, '20-30'], [30, 40, '30-40'], [40, 60, '40+']];
+  const windows = [
+    [0, 10, '0-10'],
+    [10, 20, '10-20'],
+    [20, 30, '20-30'],
+    [30, 40, '30-40'],
+    [40, 50, '40-50'],
+    [50, 60, '50-60'],
+    [60, 70, '60-70'],
+    [70, 80, '70-80'],
+    [80, 90, '80-90'],
+    [90, Infinity, '90+'],
+  ];
   const buckets = windows.map(([lo, hi, label]) => ({ label, lo, hi, tot: 0, ret: 0 }));
 
   for (const event of events) {
     if (!event?.clock) continue;
-    const match = String(event.clock).match(/^(\d{1,2}):(\d{2})$/);
-    if (!match) continue;
-    const mins = Number.parseInt(match[1], 10) + Number.parseInt(match[2], 10) / 60;
-    const bucket = buckets.find((candidate) => mins >= candidate.lo && mins < candidate.hi);
+    const mins = parseClockMinutes(event.clock);
+    if (mins == null) continue;
+    const absoluteMinutes = periodBase(String(event?.period || 'H1')) + mins;
+    const bucket = buckets.find((candidate) => absoluteMinutes >= candidate.lo && absoluteMinutes < candidate.hi);
     if (!bucket) continue;
     bucket.tot += 1;
     if (RETAINED.has(outcomeOf(event))) bucket.ret += 1;

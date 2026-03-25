@@ -28,6 +28,16 @@ export function readStoredJson(baseKey, fallback, scope, options = {}) {
   }
 }
 
+function hasMeaningfulMeta(meta = {}) {
+  return Boolean(
+    meta.team ||
+    meta.opponent ||
+    meta.match_date ||
+    meta.period ||
+    meta.our_goal_at_top !== undefined
+  );
+}
+
 export function serializeMatchMeta({ team, opponent, matchDate, period, ourGoalAtTop }) {
   return {
     team,
@@ -57,4 +67,68 @@ export function parsePendingSyncEntries(rawValue) {
   return rawValue
     .filter((item) => item && typeof item.id === 'string')
     .map((item) => [item.id, item.op === 'delete' ? 'delete' : 'upsert']);
+}
+
+export function readScopeSnapshot(scope, options = {}) {
+  const { storage = globalThis.localStorage } = options;
+  return {
+    events: readStoredJson(STORAGE_KEYS.events, [], scope, { storage }),
+    meta: readStoredJson(STORAGE_KEYS.meta, {}, scope, { storage }),
+    pendingSync: parsePendingSyncEntries(readStoredJson(STORAGE_KEYS.sync, [], scope, { storage })),
+  };
+}
+
+export function migrateLocalScopeToUserScope(targetScope, options = {}) {
+  const { storage = globalThis.localStorage } = options;
+  if (!storage || !targetScope || targetScope === LOCAL_STORAGE_SCOPE) {
+    return { migrated: false, eventCount: 0, reason: 'invalid-target' };
+  }
+
+  const localSnapshot = readScopeSnapshot(LOCAL_STORAGE_SCOPE, { storage });
+  const localHasData =
+    localSnapshot.events.length > 0 ||
+    localSnapshot.pendingSync.length > 0 ||
+    hasMeaningfulMeta(localSnapshot.meta);
+
+  if (!localHasData) {
+    return { migrated: false, eventCount: 0, reason: 'no-local-data' };
+  }
+
+  const targetSnapshot = readScopeSnapshot(targetScope, { storage });
+
+  const mergedEventsById = new Map(targetSnapshot.events.map((event) => [event.id, event]));
+  for (const event of localSnapshot.events) {
+    mergedEventsById.set(event.id, event);
+  }
+
+  const mergedPendingById = new Map(targetSnapshot.pendingSync);
+  for (const [id, op] of localSnapshot.pendingSync) {
+    mergedPendingById.set(id, op);
+  }
+
+  const mergedMeta = hasMeaningfulMeta(localSnapshot.meta)
+    ? { ...targetSnapshot.meta, ...localSnapshot.meta }
+    : targetSnapshot.meta;
+
+  const eventsKey = storageKey(STORAGE_KEYS.events, targetScope);
+  const metaKey = storageKey(STORAGE_KEYS.meta, targetScope);
+  const syncKey = storageKey(STORAGE_KEYS.sync, targetScope);
+  if (!eventsKey || !metaKey || !syncKey) {
+    return { migrated: false, eventCount: 0, reason: 'invalid-target' };
+  }
+
+  storage.setItem(eventsKey, JSON.stringify([...mergedEventsById.values()]));
+  storage.setItem(metaKey, JSON.stringify(mergedMeta));
+  storage.setItem(syncKey, JSON.stringify([...mergedPendingById].map(([id, op]) => ({ id, op }))));
+
+  for (const baseKey of Object.values(STORAGE_KEYS)) {
+    const localKey = storageKey(baseKey, LOCAL_STORAGE_SCOPE);
+    if (localKey) storage.removeItem(localKey);
+  }
+
+  return {
+    migrated: true,
+    eventCount: localSnapshot.events.length,
+    reason: 'migrated',
+  };
 }

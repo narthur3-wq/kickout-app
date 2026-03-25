@@ -17,6 +17,7 @@
     parsePendingSyncEntries,
     parseStoredMeta,
     readStoredJson,
+    migrateLocalScopeToUserScope,
     serializeMatchMeta,
     storageKey,
     storageScopeForUser,
@@ -318,6 +319,20 @@
     syncSetupDraftFromMatch();
     markDraftPristine();
     metaReady = true;
+  }
+
+  function prepareUserStorageScope(nextScope) {
+    if (!nextScope || nextScope === LOCAL_STORAGE_SCOPE || typeof localStorage === 'undefined') {
+      return null;
+    }
+    try {
+      const result = migrateLocalScopeToUserScope(nextScope, { storage: localStorage });
+      return result.migrated ? result : null;
+    } catch (error) {
+      console.error('Local data migration failed', error);
+      showNotice('error', 'We could not move older local data into your signed-in storage automatically.');
+      return null;
+    }
   }
 
   // ── localStorage helpers ─────────────────────────────────────────────────
@@ -639,20 +654,25 @@
       if (supabaseConfigured) {
         const { data: { session } } = await supabase.auth.getSession();
         if (disposed) return;
-        if (session) {
-          if (authRecoveryMode) {
-            authChecked = true;
-          } else
-          if (await userHasAccess()) {
-            user = session.user;
-            isAdminUser = isConfiguredAdmin(session.user.email);
-            ({ id: teamId, name: teamName } = await getUserTeamDetails());
-            activateStorageScope(storageScopeForUser(session.user, supabaseConfigured));
-            await syncFromSupabase();
-            if (!disposed) startRealtimeSync();
-          } else {
-            await supabase.auth.signOut();
-          }
+          if (session) {
+            if (authRecoveryMode) {
+              authChecked = true;
+            } else
+            if (await userHasAccess()) {
+              user = session.user;
+              isAdminUser = isConfiguredAdmin(session.user.email);
+              ({ id: teamId, name: teamName } = await getUserTeamDetails());
+              const nextScope = storageScopeForUser(session.user, supabaseConfigured);
+              const migration = prepareUserStorageScope(nextScope);
+              activateStorageScope(nextScope);
+              if (migration) {
+                showNotice('success', `Moved ${migration.eventCount} local event(s) into your signed-in storage.`, 7000);
+              }
+              await syncFromSupabase();
+              if (!disposed) startRealtimeSync();
+            } else {
+              await supabase.auth.signOut();
+            }
         }
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
           if (_event === 'PASSWORD_RECOVERY') {
@@ -690,7 +710,12 @@
           authRecoveryMode = false;
           isAdminUser = isConfiguredAdmin(session.user.email);
           ({ id: teamId, name: teamName } = await getUserTeamDetails());
-          activateStorageScope(storageScopeForUser(session.user, supabaseConfigured));
+          const nextScope = storageScopeForUser(session.user, supabaseConfigured);
+          const migration = prepareUserStorageScope(nextScope);
+          activateStorageScope(nextScope);
+          if (migration) {
+            showNotice('success', `Moved ${migration.eventCount} local event(s) into your signed-in storage.`, 7000);
+          }
           await syncFromSupabase();
           if (!disposed) startRealtimeSync();
         });
@@ -715,7 +740,12 @@
     authRecoveryMode = false;
     isAdminUser = isConfiguredAdmin(e.detail.user?.email);
     ({ id: teamId, name: teamName } = await getUserTeamDetails());
-    activateStorageScope(storageScopeForUser(e.detail.user, supabaseConfigured));
+    const nextScope = storageScopeForUser(e.detail.user, supabaseConfigured);
+    const migration = prepareUserStorageScope(nextScope);
+    activateStorageScope(nextScope);
+    if (migration) {
+      showNotice('success', `Moved ${migration.eventCount} local event(s) into your signed-in storage.`, 7000);
+    }
     await syncFromSupabase();
     startRealtimeSync();
   }
