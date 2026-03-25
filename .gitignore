@@ -15,6 +15,7 @@ docs
 artifacts/
 playwright-report/
 test-results/
+coverage/
 
 # Environment variables (contains secrets — use .env.example as template)
 .env

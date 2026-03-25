@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildSimulatedMatchState } from './fixtures/simulatedMatch.js';
+import { buildSimulatedMatchState } from '../fixtures/simulatedMatch.js';
 
 test('simulates a match and exports the coach digest as a PNG', async ({ page }) => {
   const simulatedState = buildSimulatedMatchState();
