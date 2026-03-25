@@ -8,6 +8,9 @@
   export let overlays: Array<any> = [];
   export let showZoneLabels = false;
   export let resetToken = 0;
+  export let ownGoalFill = 'rgba(196,18,48,0.35)';
+  export let oppositionGoalFill = 'rgba(255,255,255,0.07)';
+  export let ownGoalBandStroke = '#c41230';
 
   const dispatch = createEventDispatcher();
 
@@ -170,21 +173,21 @@
   <!-- goal small rectangles — left and right ends -->
   <!-- our end goal: filled with team red tint; opposition goal: muted white -->
   <rect x="0" y={cy - SMALL_W/2} width={SMALL_D} height={SMALL_W}
-    fill={!flip ? 'rgba(196,18,48,0.35)' : 'rgba(255,255,255,0.07)'}
+    fill={!flip ? ownGoalFill : oppositionGoalFill}
     stroke="rgba(255,255,255,0.88)" stroke-width="1.0"
     vector-effect="non-scaling-stroke" />
   <rect x={W - SMALL_D} y={cy - SMALL_W/2} width={SMALL_D} height={SMALL_W}
-    fill={flip ? 'rgba(196,18,48,0.35)' : 'rgba(255,255,255,0.07)'}
+    fill={flip ? ownGoalFill : oppositionGoalFill}
     stroke="rgba(255,255,255,0.88)" stroke-width="1.0"
     vector-effect="non-scaling-stroke" />
   <!-- coloured band on our goal line for at-a-glance orientation -->
   {#if !flip}
     <line x1="0" y1={cy - SMALL_W/2} x2="0" y2={cy + SMALL_W/2}
-      stroke="#c41230" stroke-width="3" stroke-linecap="round"
+      stroke={ownGoalBandStroke} stroke-width="3" stroke-linecap="round"
       vector-effect="non-scaling-stroke" />
   {:else}
     <line x1={W} y1={cy - SMALL_W/2} x2={W} y2={cy + SMALL_W/2}
-      stroke="#c41230" stroke-width="3" stroke-linecap="round"
+      stroke={ownGoalBandStroke} stroke-width="3" stroke-linecap="round"
       vector-effect="non-scaling-stroke" />
   {/if}
 

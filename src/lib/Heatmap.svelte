@@ -238,6 +238,9 @@
       landing={{x: NaN, y: NaN}}
       pickup={{x: NaN, y: NaN}}
       overlays={[]}
+      ownGoalFill="rgba(255,255,255,0.16)"
+      oppositionGoalFill="rgba(255,255,255,0.05)"
+      ownGoalBandStroke="rgba(255,255,255,0.95)"
     />
   </div>
 
