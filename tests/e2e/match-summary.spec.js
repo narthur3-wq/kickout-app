@@ -18,6 +18,11 @@ test('simulates a match and exports the coach digest as a PNG', async ({ page })
   await expect(page.getByText('Clontarf v Vincents')).toBeVisible();
   await page.getByRole('button', { name: 'Live' }).click();
   await expect(page.getByText('Live Match State')).toBeVisible();
+  await expect(page.getByText('Showing all periods in this view.')).toBeVisible();
+  await page.getByRole('button', { name: 'H1' }).click();
+  await expect(page.getByText(/Phase filter active: showing H1 only/i)).toBeVisible();
+  await page.getByRole('button', { name: 'Show all' }).click();
+  await expect(page.getByText('Showing all periods in this view.')).toBeVisible();
   await expect(page.getByText('Primary winner')).toBeVisible();
   await expect(page.getByText('#8 is winning most of their kickouts')).toBeVisible();
 

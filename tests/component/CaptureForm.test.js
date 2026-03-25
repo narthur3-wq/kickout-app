@@ -56,6 +56,7 @@ describe('CaptureForm', () => {
     renderForm({ editingId: 'event-1', undoStack: [] });
 
     expect(screen.getByText(/Editing event/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Clear points/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Cancel/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Undo/i })).toBeDisabled();
   });

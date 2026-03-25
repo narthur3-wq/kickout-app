@@ -9,6 +9,7 @@
   import LivePanel from './lib/LivePanel.svelte';
   import CaptureForm from './lib/CaptureForm.svelte';
   import AdminPanel from './lib/AdminPanel.svelte';
+  import { buildDraftSignature, isSetupDraftDirty } from './lib/captureDraft.js';
   import { supabase, supabaseConfigured, userHasAccess, getUserTeamDetails, isConfiguredAdmin } from './lib/supabase.js';
   import { buildScoreSnapshots } from './lib/score.js';
   import { buildKickoutClockTrend } from './lib/analyticsHelpers.js';
@@ -31,6 +32,9 @@
   // ── Match setup (set once per match, persisted to localStorage) ──────────
   let team = '', opponent = '', matchDate = new Date().toISOString().slice(0,10);
   let period = 'H1', ourGoalAtTop = true;
+  let setupDraftTeam = '';
+  let setupDraftOpponent = '';
+  let setupDraftDate = '';
 
   // ── Per-kickout capture state ─────────────────────────────────────────────
   /** @type {'clean'|'break'|'foul'|'out'} */ let contest = 'clean';
@@ -60,7 +64,6 @@
   let confirmState = null;
   let activeTab = 'capture';
   let savedFlash = false;
-  let confirmDeleteAll = false;
   let pendingSync = new SvelteMap(); // id -> 'upsert' | 'delete'
   let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
   let syncMessage = '';
@@ -138,6 +141,7 @@
   const zoneCode = (nx, ny) => `${sideBand(nx)[0]}-${depthBandFromMeters(depthMetersFromOwnGoal(ny))[0]}`;
   const breakDispM = (x1,y1,x2,y2) => Math.hypot((x2-x1)*WIDTH_M, (y2-y1)*LENGTH_M);
   const defaultMatchDate = () => new Date().toISOString().slice(0,10);
+  let draftPristineSignature = '';
 
   // YTD: compare year strings to avoid UTC-vs-local timezone edge cases
   const eventYear = e => (e.match_date || (e.created_at||'').slice(0,10)).slice(0,4);
@@ -147,6 +151,31 @@
     const md = e.match_date || (e.created_at||'').slice(0,10);
     return `${md}|${norm(e.team)}|${norm(e.opponent)}`;
   };
+
+  function markDraftPristine(snapshot = null) {
+    draftPristineSignature = buildDraftSignature(snapshot ?? {
+      period,
+      clock,
+      contest,
+      outcome,
+      breakOutcome,
+      targetPlayer,
+      landing,
+      pickup,
+      eventType,
+      direction,
+      shotType,
+      flagEvent,
+      restartReason,
+      editingId,
+    });
+  }
+
+  function syncSetupDraftFromMatch() {
+    setupDraftTeam = team;
+    setupDraftOpponent = opponent;
+    setupDraftDate = matchDate;
+  }
 
   function storageScopeForUser(nextUser) {
     if (nextUser?.id) return `user:${nextUser.id}`;
@@ -175,6 +204,7 @@
     matchDate = defaultMatchDate();
     period = 'H1';
     ourGoalAtTop = true;
+    syncSetupDraftFromMatch();
   }
 
   function resetCaptureDraft() {
@@ -193,6 +223,7 @@
     editingId = null;
     pitchError = false;
     editReturnContext = null;
+    markDraftPristine();
   }
 
   function resetRuntimeState() {
@@ -202,7 +233,6 @@
     syncStatus = '';
     syncMessage = '';
     backupReminder = false;
-    confirmDeleteAll = false;
     showSummary = false;
     accountOpen = false;
     resetMatchContext();
@@ -228,6 +258,7 @@
       shotType,
       flagEvent,
       restartReason,
+      draftPristineSignature,
     };
   }
 
@@ -254,6 +285,7 @@
     flagEvent = snapshot.flagEvent;
     restartReason = snapshot.restartReason;
     editingId = null;
+    markDraftPristine(snapshot);
   }
 
   function cancelEditMode() {
@@ -266,6 +298,7 @@
     editingId = null;
     clearPoints();
     targetPlayer = '';
+    markDraftPristine();
   }
 
   function applyDerivedScoreDisplays(nextEvents) {
@@ -290,6 +323,8 @@
       loadFromLocalStorage(scope);
       loadPendingSync(scope);
     }
+    syncSetupDraftFromMatch();
+    markDraftPristine();
     metaReady = true;
   }
 
@@ -302,6 +337,8 @@
     matchDate = /^\d{4}-\d{2}-\d{2}$/.test(meta.match_date || '') ? meta.match_date : defaultMatchDate();
     period = ['H1', 'H2', 'ET'].includes(meta.period) ? meta.period : 'H1';
     ourGoalAtTop = meta.our_goal_at_top !== undefined ? !!meta.our_goal_at_top : true;
+    syncSetupDraftFromMatch();
+    markDraftPristine();
   }
 
   function persistLocal() {
@@ -727,6 +764,57 @@
   function onPickup(e)  { pickup  = e.detail; }
   function clearPoints()  { landing = {x:NaN, y:NaN}; pickup = {x:NaN, y:NaN}; }
 
+  function openSetupModal() {
+    syncSetupDraftFromMatch();
+    setupModalOpen = true;
+  }
+
+  function dismissSetupModal() {
+    setupModalOpen = false;
+    syncSetupDraftFromMatch();
+  }
+
+  function updateCurrentMatchSetup(nextTeam, nextOpponent, nextMatchDate) {
+    const previousKey = `${matchDate}|${norm(team)}|${norm(opponent)}`;
+    const nextKey = `${nextMatchDate}|${norm(nextTeam)}|${norm(nextOpponent)}`;
+    const currentMatchIds = new Set(events.filter((event) => matchKey(event) === previousKey).map((event) => event.id));
+
+    team = nextTeam;
+    opponent = nextOpponent;
+    matchDate = nextMatchDate;
+
+    if (previousKey !== nextKey && currentMatchIds.size > 0) {
+      undoStack = [...undoStack.slice(-9), [...events]];
+      events = applyDerivedScoreDisplays(events.map((event) => (
+        currentMatchIds.has(event.id)
+          ? { ...event, team: nextTeam, opponent: nextOpponent, match_date: nextMatchDate }
+          : event
+      )));
+      persistLocal();
+      for (const event of events) {
+        if (currentMatchIds.has(event.id)) upsertToSupabase(event);
+      }
+      showNotice('success', `Updated match setup for ${currentMatchIds.size} existing event(s).`, 5000);
+    }
+  }
+
+  function commitSetupModal() {
+    const nextTeam = setupDraftTeam.trim();
+    const nextOpponent = setupDraftOpponent.trim();
+    const nextMatchDate = setupDraftDate || defaultMatchDate();
+    if (!nextTeam || !nextOpponent) {
+      showNotice('error', 'Team and opponent are required to save match setup.');
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(nextMatchDate)) {
+      showNotice('error', 'Match date must be YYYY-MM-DD.');
+      return;
+    }
+    updateCurrentMatchSetup(nextTeam, nextOpponent, nextMatchDate);
+    syncSetupDraftFromMatch();
+    setupModalOpen = false;
+  }
+
   $: if (eventType !== 'kickout') {
     contest = 'clean';
     breakOutcome = '';
@@ -741,7 +829,7 @@
 
   function validate() {
     if (!team.trim() || !opponent.trim()) {
-      setupModalOpen = true;
+      openSetupModal();
       return 'Set up the match (team and opponent) before logging events.';
     }
     if (supabaseConfigured && user && !teamId) {
@@ -852,6 +940,7 @@
       restartReason = '';
       shotType = 'point';
     }
+    markDraftPristine();
 
     // Haptic + visual feedback
     navigator.vibrate?.(50);
@@ -876,6 +965,7 @@
       events = applyDerivedScoreDisplays(nextEvents);
       undoStack = undoStack.slice(0, -1);
       persistLocal();
+      markDraftPristine();
 
       const nextIds = new Set(nextEvents.map((e) => e.id));
       for (const ev of nextEvents) upsertToSupabase(ev);
@@ -890,22 +980,33 @@
       undoStack = [...undoStack.slice(-9), [...events]];
       events = applyDerivedScoreDisplays(events.filter(e => e.id !== id));
       persistLocal();
+      markDraftPristine();
       if (editingId === id) cancelEditMode();
       deleteFromSupabase(id);
     }, 'Delete event');
   }
 
+  function confirmDeleteAllEvents() {
+    if (events.length === 0) return;
+    askConfirm(
+      `Delete all ${events.length} events from this device? You can use Undo once from Capture to restore them if needed.`,
+      deleteAllEvents,
+      'Delete all data'
+    );
+  }
+
   async function deleteAllEvents() {
     if (events.length === 0) return;
     const allIds = events.map(e => e.id);
+    undoStack = [...undoStack.slice(-9), [...events]];
     events = [];
     editingId = null;
-    undoStack = [];
     pendingSync = new SvelteMap();
     savePendingSync();
-    clearPoints();
-    confirmDeleteAll = false;
+    resetCaptureDraft();
+    activeTab = 'capture';
     persistLocal();
+    showNotice('success', 'All events deleted. Use Undo from Capture to restore them if needed.', 7000);
     for (const id of allIds) {
       deleteFromSupabase(id);
     }
@@ -946,6 +1047,22 @@
     direction      = e.direction   || 'ours';
     shotType       = e.shot_type || 'point';
     activeTab = 'capture';
+    markDraftPristine({
+      period,
+      clock,
+      contest,
+      outcome,
+      breakOutcome,
+      targetPlayer,
+      landing,
+      pickup,
+      eventType,
+      direction,
+      shotType,
+      flagEvent,
+      restartReason,
+      editingId,
+    });
   }
 
   // ── CSV export ────────────────────────────────────────────────────────────
@@ -1066,7 +1183,27 @@
   }
 
   // ── Unsaved changes warning ───────────────────────────────────────────────
-  $: hasUnsaved = !Number.isNaN(landing.x) || !Number.isNaN(landing.y);
+  $: hasUnsaved =
+    buildDraftSignature({
+      period,
+      clock,
+      contest,
+      outcome,
+      breakOutcome,
+      targetPlayer,
+      landing,
+      pickup,
+      eventType,
+      direction,
+      shotType,
+      flagEvent,
+      restartReason,
+      editingId,
+    }) !== draftPristineSignature ||
+    (setupModalOpen && isSetupDraftDirty(
+      { team, opponent, matchDate },
+      { team: setupDraftTeam, opponent: setupDraftOpponent, matchDate: setupDraftDate },
+    ));
 
   function handleBeforeUnload(e) {
     if (hasUnsaved) {
@@ -1446,7 +1583,7 @@
 
   <!-- ══ CAPTURE TAB ══ -->
   {#if activeTab === 'capture'}
-  <button class="match-ctx-bar" on:click={() => setupModalOpen = true}>
+  <button class="match-ctx-bar" on:click={openSetupModal}>
     {#if team || opponent}
       {team || '—'} vs {opponent || '—'}{matchDate ? ' · ' + matchDate : ''} <span class="ctx-edit">✎</span>
     {:else}
@@ -1456,23 +1593,23 @@
 
   <!-- Match setup modal -->
   {#if setupModalOpen}
-    <div class="modal-backdrop" role="button" tabindex="-1" on:click={() => setupModalOpen = false} on:keydown={(e) => e.key === 'Escape' && (setupModalOpen = false)}>
+    <div class="modal-backdrop" role="button" tabindex="-1" on:click={dismissSetupModal} on:keydown={(e) => e.key === 'Escape' && dismissSetupModal()}>
       <div class="modal-card" role="dialog" aria-modal="true" tabindex="0" aria-label="Match setup" on:click|stopPropagation on:keydown|stopPropagation>
         <div class="modal-header">
           <span class="modal-title">Match Setup</span>
-          <button class="modal-close" on:click={() => setupModalOpen = false}>✕</button>
+          <button class="modal-close" on:click={dismissSetupModal}>✕</button>
         </div>
         <div class="setup-grid">
-          <label>Team<input bind:value={team} placeholder="Clontarf" /></label>
+          <label>Team<input bind:value={setupDraftTeam} placeholder="Clontarf" /></label>
           <label>Opponent
-            <input bind:value={opponent} placeholder="Crokes" on:change={persistLocal} list="opps-modal"/>
+            <input bind:value={setupDraftOpponent} placeholder="Crokes" list="opps-modal"/>
             <datalist id="opps-modal">
               {#each opponentChoices as [key, lbl] (key)}<option value={lbl}></option>{/each}
             </datalist>
           </label>
-          <label class="full-row">Date<input type="date" bind:value={matchDate} /></label>
+          <label class="full-row">Date<input type="date" bind:value={setupDraftDate} /></label>
         </div>
-        <button class="modal-done" on:click={() => setupModalOpen = false}>Done</button>
+        <button class="modal-done" on:click={commitSetupModal}>Done</button>
       </div>
     </div>
   {/if}
@@ -1565,8 +1702,24 @@
 
   </div><!-- /capture-layout -->
 
+  {:else}
+  {#if activeTab === 'live' || activeTab === 'digest' || activeTab === 'kickouts' || activeTab === 'shots' || activeTab === 'turnovers'}
+  <div class="phase-scope-banner">
+    <span>
+      {#if periodFilter === 'ALL'}
+        Showing all periods in this view.
+      {:else}
+        Phase filter active: showing {periodFilter} only in Live, Digest, and analytics.
+      {/if}
+    </span>
+    {#if periodFilter !== 'ALL'}
+      <button class="scope-reset-btn" on:click={() => periodFilter = 'ALL'}>Show all</button>
+    {/if}
+  </div>
+  {/if}
+
   <!-- ══ LIVE TAB ══ -->
-  {:else if activeTab === 'live'}
+  {#if activeTab === 'live'}
   <div class="full-panel">
     <LivePanel
       events={currentPhaseEvents}
@@ -1630,14 +1783,11 @@
   {:else if activeTab === 'events'}
   <div class="full-panel">
     <div class="events-toolbar-danger">
-      {#if confirmDeleteAll}
-        <span class="delete-confirm-prompt">Delete all {events.length} events?</span>
-        <button class="btn-delete-all btn-delete-confirm" on:click={deleteAllEvents}>Yes, delete</button>
-        <button class="btn-delete-cancel" on:click={() => confirmDeleteAll = false}>Cancel</button>
-      {:else}
-        <button class="btn-delete-all" on:click={() => confirmDeleteAll = true} disabled={events.length === 0}>
-          Delete all ({events.length})
-        </button>
+      <button class="btn-delete-all" on:click={confirmDeleteAllEvents} disabled={events.length === 0}>
+        Delete all ({events.length})
+      </button>
+      {#if events.length > 0}
+        <span class="delete-confirm-prompt">Use with care — Undo can restore only the most recent wipe.</span>
       {/if}
     </div>
     <EventsTable
@@ -1655,6 +1805,7 @@
   <div class="full-panel">
     <AdminPanel {user} {teamName} />
   </div>
+  {/if}
   {/if}
 
   <!-- Backup reminder toast -->
@@ -1818,6 +1969,21 @@
   .tab-count { background: #f3f4f6; color: #b0b8c4; font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 99px; }
   .tab-btn.active .tab-count { background: #dbeafe; color: #1e40af; }
   .edit-dot { color: #f59e0b; font-size: 10px; }
+
+  .phase-scope-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 10px 16px;
+    background: #eff6ff;
+    color: #1e3a8a;
+    border-bottom: 1px solid #bfdbfe;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .scope-reset-btn {
+    padding: 6px 10px; border: 1.5px solid #93c5fd; border-radius: 999px;
+    background: #fff; color: #1d4ed8; cursor: pointer;
+    font-size: 12px; font-weight: 700; font-family: inherit;
+  }
 
   .sync-banner {
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;

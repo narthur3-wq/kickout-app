@@ -56,3 +56,38 @@ test('returns to live capture cleanly after editing and cancelling an event', as
   await expect(page.getByRole('button', { name: /Clontarf vs Vincents/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /Save Event/i })).toBeVisible();
 });
+
+test('updates the current match setup without silently splitting saved events', async ({ page }) => {
+  await openFreshApp(page);
+  await setUpMatch(page, { opponent: 'Crokes' });
+
+  await placeLandingPoint(page);
+  await page.getByRole('button', { name: /Save Event/i }).click();
+
+  await page.locator('button.match-ctx-bar').click();
+  await page.getByLabel('Opponent').fill('Vincents');
+  await page.getByRole('button', { name: 'Done' }).click();
+
+  await page.getByRole('button', { name: /Events/i }).click();
+  await expect(page.getByRole('cell', { name: 'Vincents' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Crokes' })).toHaveCount(0);
+});
+
+test('delete all can be recovered with Undo from Capture', async ({ page }) => {
+  await openFreshApp(page);
+  await setUpMatch(page, { opponent: 'Na Fianna' });
+
+  await placeLandingPoint(page);
+  await page.getByRole('button', { name: /Save Event/i }).click();
+
+  await page.getByRole('button', { name: /Events/i }).click();
+  await page.getByRole('button', { name: /Delete all/i }).click();
+  await page.getByRole('button', { name: /Delete all data/i }).click();
+
+  await expect(page.getByRole('button', { name: /Undo/i })).toBeEnabled();
+  await page.getByRole('button', { name: /Undo/i }).click();
+  await page.getByRole('button', { name: /Remove event/i }).click();
+
+  await page.getByRole('button', { name: /Events/i }).click();
+  await expect(page.getByRole('cell', { name: 'Na Fianna' })).toBeVisible();
+});

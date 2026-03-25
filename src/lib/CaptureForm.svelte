@@ -221,7 +221,7 @@
       {savedFlash ? '✓ Saved!' : editingId ? 'Update Event' : 'Save Event'}
     </button>
     <div class="sec-row">
-      <button class="sec-btn" on:click={onClearPoints}>Clear</button>
+      <button class="sec-btn" on:click={onClearPoints}>Clear points</button>
       {#if editingId}
         <button class="sec-btn" on:click={() => dispatch('cancelEdit')}>Cancel</button>
       {/if}
