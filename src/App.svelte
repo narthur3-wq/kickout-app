@@ -520,10 +520,18 @@
   // ── Supabase helpers ──────────────────────────────────────────────────────
   async function syncFromSupabase() {
     if (!supabase || !user) return;
+    if (!teamId) {
+      setSyncError('Your account has no team assigned yet, so cloud sync is paused.');
+      return;
+    }
     syncStatus = 'syncing';
     clearSyncMessage();
     try {
-      const { data, error } = await supabase.from('events').select('*').order('created_at', { ascending: false });
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .eq('team_id', teamId)
+        .order('created_at', { ascending: false });
       if (error) throw error;
       const remoteEvents = data || [];
       // Merge: Supabase is source of truth for events not in the pending queue.
@@ -615,11 +623,11 @@
   }
 
   function startRealtimeSync() {
-    if (!supabase || !user) return;
+    if (!supabase || !user || !teamId) return;
     stopRealtimeSync();
     realtimeChannel = supabase
-      .channel(`events-live-${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, (payload) => {
+      .channel(`events-live-${user.id}-${teamId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events', filter: `team_id=eq.${teamId}` }, (payload) => {
         const changedId = payload.new?.id ?? payload.old?.id;
         if (changedId && pendingSync.has(changedId)) return;
         scheduleRealtimeSync();

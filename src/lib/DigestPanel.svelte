@@ -9,6 +9,7 @@
   const POSITIVE_KO = new Set(['retained', 'score', 'won']);
   let digestEl;
   let sharing = false;
+  let shareFeedback = null;
 
   function scoreStat(evs) {
     const goals = evs.filter((event) => String(event.outcome || '').toLowerCase() === 'goal').length;
@@ -32,6 +33,7 @@
   async function shareDigest() {
     if (sharing) return;
     sharing = true;
+    shareFeedback = null;
     try {
       const html2canvas = (await import('html2canvas')).default;
       const canvas = await html2canvas(digestEl, { backgroundColor: '#eef3ee', scale: 2, useCORS: true });
@@ -54,6 +56,14 @@
       }
     } catch (error) {
       console.error('Digest share failed', error);
+      if (error?.name === 'AbortError') {
+        shareFeedback = { type: 'info', message: 'Share cancelled.' };
+      } else {
+        shareFeedback = {
+          type: 'error',
+          message: 'Could not generate the digest image on this device. Try again or use the browser download flow.',
+        };
+      }
     } finally {
       sharing = false;
     }
@@ -77,6 +87,12 @@
         {sharing ? 'Preparing...' : 'Share image'}
       </button>
     </section>
+
+    {#if shareFeedback}
+      <div class="share-feedback share-feedback-{shareFeedback.type}">
+        {shareFeedback.message}
+      </div>
+    {/if}
 
     <section class="hero-card">
       <div class="hero-team">
@@ -237,6 +253,23 @@
   .share-btn:disabled {
     opacity: 0.6;
     cursor: default;
+  }
+  .share-feedback {
+    margin-top: -2px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .share-feedback-error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+  }
+  .share-feedback-info {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
   }
   .hero-card {
     padding: 22px 18px;
