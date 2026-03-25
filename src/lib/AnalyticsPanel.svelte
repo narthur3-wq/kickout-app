@@ -72,7 +72,7 @@
   $: wonPoints  = overlays.filter(o => HEAT_POS.has((o.outcome || '').toLowerCase())).map(o => ({ ...o, weight: 1 }));
   $: lostPoints = overlays.filter(o => !HEAT_POS.has((o.outcome || '').toLowerCase())).map(o => ({ ...o, weight: 1 }));
   $: heatPoints = heatMode === 'won' ? wonPoints : heatMode === 'lost' ? lostPoints : overlays.map(o => ({ ...o, weight: 1 }));
-  $: heatScheme = heatMode === 'won' ? 'positive' : heatMode === 'lost' ? 'negative' : 'outcome';
+  $: heatScheme = heatMode === 'won' ? 'positive' : heatMode === 'lost' ? 'negative' : 'density';
 
   function cellColor(pct) {
     const t = Math.max(0, Math.min(1, pct / 100));
@@ -337,7 +337,7 @@
         {/if}
         {#if vizMode === 'heat'}
           <div class="viz-seg">
-            <button class="vseg {heatMode === 'all'  ? 'vseg-on' : ''}" on:click={() => heatMode = 'all'}>All</button>
+            <button class="vseg {heatMode === 'all'  ? 'vseg-on' : ''}" on:click={() => heatMode = 'all'}>Density</button>
             <button class="vseg {heatMode === 'won'  ? 'vseg-on' : ''}" on:click={() => heatMode = 'won'}>Won</button>
             <button class="vseg {heatMode === 'lost' ? 'vseg-on' : ''}" on:click={() => heatMode = 'lost'}>Lost</button>
           </div>
