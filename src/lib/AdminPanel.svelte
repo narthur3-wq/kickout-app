@@ -10,6 +10,7 @@
   let newTeamName = '';
   let password = '';
   let showPassword = false;
+  let showAdvancedDelivery = false;
   let loading = false;
   let result = null;
   let error = '';
@@ -97,20 +98,18 @@
 
     <div class="full">
       <span class="field-title">Sign-in setup</span>
-      <div class="mode-row">
+      <div class="delivery-card">
+        <div class="delivery-title">Set password now</div>
+        <p class="delivery-copy">Best for this setup. Create the account here, then send the analyst the email and password directly.</p>
         <button
-          class:active={authMode === 'password'}
-          on:click={() => authMode = 'password'}
+          class="advanced-link"
           type="button"
+          on:click={() => {
+            showAdvancedDelivery = !showAdvancedDelivery;
+            if (!showAdvancedDelivery) authMode = 'password';
+          }}
         >
-          Set password now
-        </button>
-        <button
-          class:active={authMode === 'invite'}
-          on:click={() => authMode = 'invite'}
-          type="button"
-        >
-          Email invite (advanced)
+          {showAdvancedDelivery ? 'Hide advanced email invite option' : 'Show advanced email invite option'}
         </button>
       </div>
     </div>
@@ -129,7 +128,31 @@
             {showPassword ? 'Hide' : 'Show'}
           </button>
         </div>
+        <small class="field-note">If this email already has an account, this password will be ignored and only the club assignment will change.</small>
       </label>
+    {/if}
+
+    {#if showAdvancedDelivery}
+      <div class="full advanced-panel">
+        <span class="field-title">Advanced delivery</span>
+        <div class="mode-row">
+          <button
+            class:active={authMode === 'password'}
+            on:click={() => authMode = 'password'}
+            type="button"
+          >
+            Set password now
+          </button>
+          <button
+            class:active={authMode === 'invite'}
+            on:click={() => authMode = 'invite'}
+            type="button"
+          >
+            Email invite
+          </button>
+        </div>
+        <p class="advanced-note">Only use email invite if you have email delivery properly configured in Supabase.</p>
+      </div>
     {/if}
 
     <div class="full">
@@ -196,7 +219,7 @@
     <p><strong>Same club:</strong> leave it on "Your current team" and just enter the email.</p>
     <p><strong>New club:</strong> choose "Create / find another team" and enter the club name.</p>
     <p><strong>Password flow:</strong> set a temporary password here, then send the analyst the email and password directly.</p>
-    <p><strong>Invite flow:</strong> treat this as an advanced option only if you later configure email properly in Supabase.</p>
+    <p><strong>Invite flow:</strong> this is intentionally tucked away as an advanced option for later.</p>
     <p><strong>Note:</strong> if the auth account already exists, the app will just update the allowlist and team assignment.</p>
   </div>
 </section>
@@ -280,6 +303,36 @@
     outline: none;
     border-color: #1c3f8a;
     box-shadow: 0 0 0 3px rgba(28,63,138,0.12);
+  }
+  .delivery-card,
+  .advanced-panel {
+    border: 1px solid #dbe5f4;
+    background: #f8fbff;
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .delivery-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #111827;
+  }
+  .delivery-copy,
+  .advanced-note,
+  .field-note {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: #6b7280;
+  }
+  .advanced-link {
+    margin-top: 10px;
+    border: none;
+    background: none;
+    padding: 0;
+    color: #1c3f8a;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
   }
   .mode-row {
     display: flex;

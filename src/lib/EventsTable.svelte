@@ -28,7 +28,24 @@
       if (fType   !== 'ALL' && (e.event_type || 'kickout') !== fType) return false;
       if (fFlagged && !e.flag) return false;
       if (q) {
-        const hay = [e.opponent, e.team, e.outcome, e.target_player, e.zone_code, e.restart_reason]
+        const hay = [
+          e.opponent,
+          e.team,
+          e.outcome,
+          e.target_player,
+          e.target_player ? `#${e.target_player}` : '',
+          e.zone_code,
+          e.restart_reason,
+          e.event_type,
+          e.direction,
+          e.clock,
+          e.period,
+          e.contest_type,
+          e.break_outcome,
+          e.shot_type,
+          e.match_date,
+          e.flag ? 'flag flagged' : '',
+        ]
           .map(v => (v ?? '').toLowerCase()).join(' ');
         if (!hay.includes(q)) return false;
       }
@@ -79,7 +96,7 @@
     <input
       class="search-input"
       type="search"
-      placeholder="Search opponent, outcome, player, zone…"
+      placeholder="Search type, opponent, clock, player, zone…"
       bind:value={search}
     />
 
@@ -111,6 +128,8 @@
     {#if isFiltered}
       <button class="clear-btn" on:click={clearFilters}>Clear</button>
     {/if}
+
+    <span class="scope-note">These filters only change the Events table.</span>
   </div>
 
   <!-- ── Table ── -->
@@ -218,6 +237,12 @@
     color: #dc2626; font-family: inherit; transition: all 0.12s;
   }
   .clear-btn:hover { background: #fef2f2; }
+  .scope-note {
+    margin-left: auto;
+    font-size: 11px;
+    color: #9ca3af;
+    font-weight: 600;
+  }
 
   /* ── Table wrapper ── */
   .tablewrap { overflow-x: auto; border: 1px solid #f0f0f0; border-radius: 8px; margin-top: 12px; }

@@ -14,7 +14,7 @@ describe('DigestPanel', () => {
       },
     });
 
-    expect(screen.getByText(/No events yet for this view/i)).toBeInTheDocument();
+    expect(screen.getByText(/No events yet for this digest/i)).toBeInTheDocument();
   });
 
   it('renders the coach digest with the main action summary', () => {

@@ -63,8 +63,8 @@
 <div class="digest-shell" bind:this={digestEl}>
   {#if events.length === 0}
     <section class="empty-card">
-      <div class="empty-title">No events yet for this view.</div>
-      <div class="empty-sub">Capture a few live events to generate a halftime digest.</div>
+      <div class="empty-title">No events yet for this digest.</div>
+      <div class="empty-sub">Capture your first few kickouts, shots, or turnovers to build a coach-ready read for {phaseLabel}.</div>
     </section>
   {:else}
     <section class="digest-header">

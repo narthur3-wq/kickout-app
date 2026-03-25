@@ -1,7 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   export let summaryStats = null;
-  export let title = 'Match Summary';
+  export let title = 'Kickout Summary';
   export let subtitle = '';
   const dispatch = createEventDispatcher();
 
@@ -22,7 +22,7 @@
       <div class="modal-header">
         <div class="header-left">
           <div class="header-title">{title}</div>
-          <div class="header-sub">{subtitle || `${summaryStats.total} events recorded`}</div>
+          <div class="header-sub">{subtitle || `${summaryStats.total} kickouts in view`}</div>
         </div>
         <button class="close-btn" on:click={() => dispatch('close')} aria-label="Close">✕</button>
       </div>
@@ -34,7 +34,7 @@
           <div class="hero-value" style="color:{retColor(summaryStats.retPct)}">
             {summaryStats.retPct}%
           </div>
-          <div class="hero-label">Overall Retention</div>
+          <div class="hero-label">Kickout Retention</div>
           {#if summaryStats.brTotal > 0}
             <div class="hero-sub">
               Break win rate: <strong>{summaryStats.brPct ?? '—'}%</strong>
@@ -93,7 +93,7 @@
             <div class="player-detail">
               <div class="player-name">{summaryStats.topPlayer.label}</div>
               <div class="player-sub">
-                Most targeted · {summaryStats.topPlayer.total} kickouts · {summaryStats.topPlayer.retPct}% retention
+                Most targeted kickout option · {summaryStats.topPlayer.total} kickouts · {summaryStats.topPlayer.retPct}% retention
               </div>
             </div>
           </div>

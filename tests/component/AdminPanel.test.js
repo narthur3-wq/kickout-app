@@ -65,4 +65,21 @@ describe('AdminPanel', () => {
     expect(invokeMock).toHaveBeenCalledTimes(1);
     expect(screen.getByText(/Sign-in account already existed/i)).toBeInTheDocument();
   });
+
+  it('keeps invite delivery tucked behind the advanced toggle', async () => {
+    const user = userEvent.setup();
+
+    render(AdminPanel, {
+      props: {
+        user: { email: 'admin@example.com' },
+        teamName: 'Clontarf',
+      },
+    });
+
+    expect(screen.queryByRole('button', { name: 'Email invite' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Show advanced email invite option/i }));
+
+    expect(screen.getByRole('button', { name: 'Email invite' })).toBeInTheDocument();
+  });
 });

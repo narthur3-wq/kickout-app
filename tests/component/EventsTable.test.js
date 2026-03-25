@@ -44,7 +44,7 @@ describe('EventsTable', () => {
       },
     });
 
-    await user.type(screen.getByPlaceholderText(/Search opponent, outcome, player, zone/i), 'Crokes');
+    await user.type(screen.getByPlaceholderText(/Search type, opponent, clock, player, zone/i), 'Crokes');
 
     expect(screen.getByText('1 / 2')).toBeInTheDocument();
 
@@ -63,7 +63,7 @@ describe('EventsTable', () => {
       },
     });
 
-    await user.type(screen.getByPlaceholderText(/Search opponent, outcome, player, zone/i), 'Na Fianna');
+    await user.type(screen.getByPlaceholderText(/Search type, opponent, clock, player, zone/i), 'Na Fianna');
 
     expect(screen.getByText(/No events match the current filters/i)).toBeInTheDocument();
 
@@ -71,5 +71,21 @@ describe('EventsTable', () => {
 
     expect(screen.queryByText(/No events match the current filters/i)).not.toBeInTheDocument();
     expect(screen.getByText('Vincents')).toBeInTheDocument();
+  });
+
+  it('searches local event metadata beyond opponent names', async () => {
+    const user = userEvent.setup();
+    render(EventsTable, {
+      props: {
+        events: [
+          makeEvent({ id: 'event-1', event_type: 'shot', clock: '12:34', outcome: 'Wide', shot_type: 'goal' }),
+        ],
+      },
+    });
+
+    await user.type(screen.getByPlaceholderText(/Search type, opponent, clock, player, zone/i), '12:34');
+
+    expect(screen.getByText('12:34')).toBeInTheDocument();
+    expect(screen.getByText(/These filters only change the Events table/i)).toBeInTheDocument();
   });
 });

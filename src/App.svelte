@@ -1873,10 +1873,10 @@
   {#if showSummary}
     <SummaryModal
       summaryStats={summaryStats}
-      title={summaryIsFullView ? 'Match Summary' : 'Filtered Summary'}
+      title={summaryIsFullView ? 'Kickout Summary' : 'Filtered Kickout Summary'}
       subtitle={summaryIsFullView
-        ? `${summaryStats?.total ?? 0} events recorded`
-        : `${summaryStats?.total ?? 0} events in the current filtered view`}
+        ? `${summaryStats?.total ?? 0} kickouts in the current view`
+        : `${summaryStats?.total ?? 0} kickouts in the current filtered view`}
       on:close={() => showSummary = false}
     />
   {/if}
