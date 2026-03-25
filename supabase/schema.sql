@@ -45,7 +45,7 @@ create table if not exists events (
   clock                 text,
   target_player         text,
   outcome               text        not null,
-  contest_type          text        not null,
+  contest_type          text,
   break_outcome         text,
   event_type            text        not null default 'kickout',
   direction             text        not null default 'ours',
