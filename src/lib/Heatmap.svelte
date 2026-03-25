@@ -25,6 +25,26 @@
   // Positive-outcome outcomes (same set used in AnalyticsPanel)
   const HEAT_POS = new Set(['retained','score','won','goal','point']);
 
+  function mixColor(a, b, t) {
+    return {
+      r: Math.round(a.r + (b.r - a.r) * t),
+      g: Math.round(a.g + (b.g - a.g) * t),
+      b: Math.round(a.b + (b.b - a.b) * t),
+    };
+  }
+
+  function outcomeCellColor(winRate, densityRatio) {
+    const loss = { r: 220, g: 38,  b: 38 };
+    const neutral = { r: 148, g: 163, b: 184 };
+    const win = { r: 37,  g: 99,  b: 235 };
+    const certainty = Math.abs((winRate - 0.5) * 2); // 0 -> mixed, 1 -> strongly one-sided
+    const base = winRate >= 0.5
+      ? mixColor(neutral, win, (winRate - 0.5) * 2)
+      : mixColor(loss, neutral, winRate * 2);
+    const alpha = Math.min(0.92, 0.16 + 0.76 * densityRatio * (0.45 + 0.55 * certainty));
+    return `rgba(${base.r}, ${base.g}, ${base.b}, ${alpha})`;
+  }
+
   function draw() {
     if (!container || !canvas) return;
 
@@ -129,9 +149,8 @@
           const total = smTotal[y][x];
           if (total <= 0) continue;
           const winRate = smWon[y][x] / total;          // 0.0 → 1.0
-          const hue     = winRate * 120;                // 0 = red, 120 = green
-          const alpha   = 0.12 + 0.78 * (total / maxTotal); // 0.12 → 0.90
-          ctx.fillStyle = `hsla(${hue}, 85%, 55%, ${alpha})`;
+          const densityRatio = total / maxTotal;
+          ctx.fillStyle = outcomeCellColor(winRate, densityRatio);
           ctx.fillRect(x*cellW, y*cellH, cellW+1, cellH+1);
         }
       }
@@ -204,9 +223,9 @@
   }
   .legend-bar.outcome {
     background: linear-gradient(to right,
-      hsla(0,85%,55%,0.90),
-      hsla(60,85%,55%,0.55),
-      hsla(120,85%,55%,0.90)
+      rgba(220,38,38,0.90),
+      rgba(148,163,184,0.55),
+      rgba(37,99,235,0.90)
     );
   }
 </style>
