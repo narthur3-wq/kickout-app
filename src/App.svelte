@@ -10,6 +10,7 @@
   import CaptureForm from './lib/CaptureForm.svelte';
   import AdminPanel from './lib/AdminPanel.svelte';
   import { buildDraftSignature, isSetupDraftDirty } from './lib/captureDraft.js';
+  import { mergeImportedEvents, planImportMerge } from './lib/importMerge.js';
   import { supabase, supabaseConfigured, userHasAccess, getUserTeamDetails, isConfiguredAdmin } from './lib/supabase.js';
   import { buildScoreSnapshots } from './lib/score.js';
   import { buildKickoutClockTrend } from './lib/analyticsHelpers.js';
@@ -473,14 +474,25 @@
       }, timeout);
     }
   }
-  function askConfirm(message, action, confirmLabel = 'Confirm') {
-    confirmState = { message, action, confirmLabel };
+  function askConfirm(message, action, confirmLabel = 'Confirm', options = {}) {
+    confirmState = {
+      message,
+      action,
+      confirmLabel,
+      secondaryAction: options.secondaryAction || null,
+      secondaryLabel: options.secondaryLabel || '',
+    };
   }
   function dismissConfirm() {
     confirmState = null;
   }
   function runConfirm() {
     const action = confirmState?.action;
+    confirmState = null;
+    action?.();
+  }
+  function runSecondaryConfirm() {
+    const action = confirmState?.secondaryAction;
     confirmState = null;
     action?.();
   }
@@ -959,7 +971,16 @@
 
   function undoLast() {
     if (undoStack.length === 0) return;
-    askConfirm('Remove the last saved event?', () => {
+    const nextEvents = undoStack[undoStack.length - 1];
+    const currentEvents = events;
+    const restoredCount = Math.max(0, nextEvents.length - currentEvents.length);
+    const removedCount = Math.max(0, currentEvents.length - nextEvents.length);
+    const message = restoredCount > 0
+      ? `Restore the previous state and bring back ${restoredCount} event(s)?`
+      : removedCount > 0
+        ? `Restore the previous state and remove ${removedCount} recent event(s)?`
+        : 'Restore the previous saved state and undo the latest edit?';
+    askConfirm(message, () => {
       const nextEvents = undoStack[undoStack.length - 1];
       const prevEvents = events;
       events = applyDerivedScoreDisplays(nextEvents);
@@ -972,7 +993,7 @@
       for (const ev of prevEvents) {
         if (!nextIds.has(ev.id)) deleteFromSupabase(ev.id);
       }
-    }, 'Remove event');
+    }, 'Undo last change');
   }
 
   function delEvent(id) {
@@ -1097,7 +1118,8 @@
     URL.revokeObjectURL(url);
   }
 
-  function completeImport(imported, skipSchemaCheck = false) {
+  function completeImport(imported, options = {}) {
+    const { skipSchemaCheck = false, conflictStrategy = null } = options;
     if (!Array.isArray(imported)) throw new Error('Expected a JSON array');
     const REQUIRED = ['id', 'outcome', 'x', 'y'];
     const invalid = imported.filter(e =>
@@ -1111,7 +1133,7 @@
         `${unknownVer.length} record(s) use a newer schema version. Import them anyway?`,
         () => {
           try {
-            completeImport(imported, true);
+            completeImport(imported, { skipSchemaCheck: true });
           } catch (e) {
             showNotice('error', `Import failed: ${e.message}`, 7000);
           }
@@ -1139,28 +1161,58 @@
         shot_type: type === 'shot' ? (event.shot_type || 'point') : null,
       };
     };
-    const existingById = new Map(events.map((event) => [event.id, JSON.stringify(event)]));
-    let conflictingDuplicates = 0;
-    const newEvents = imported.reduce((acc, event) => {
-      const normalizedImport = normalizeImportedEvent(event);
-      const existing = existingById.get(normalizedImport.id);
-      if (existing) {
-        if (existing !== JSON.stringify(normalizedImport)) conflictingDuplicates += 1;
-        return acc;
-      }
-      acc.push(normalizedImport);
-      return acc;
-    }, []);
-    events = applyDerivedScoreDisplays([...events, ...newEvents]);
-    persistLocal();
-    if (newEvents.length > 0) {
-      for (const ev of newEvents) upsertToSupabase(ev);
+    const normalizedImported = imported.map(normalizeImportedEvent);
+    const importPlan = planImportMerge(events, normalizedImported);
+
+    if (!conflictStrategy && importPlan.conflictingCount > 0) {
+      askConfirm(
+        `${importPlan.conflictingCount} existing event(s) have different data in this file. Replace those events with the imported versions, or keep your current versions and import only brand-new events?`,
+        () => {
+          try {
+            completeImport(imported, { skipSchemaCheck: true, conflictStrategy: 'replace' });
+          } catch (e) {
+            showNotice('error', `Import failed: ${e.message}`, 7000);
+          }
+        },
+        'Replace duplicates',
+        {
+          secondaryAction: () => {
+            try {
+              completeImport(imported, { skipSchemaCheck: true, conflictStrategy: 'skip' });
+            } catch (e) {
+              showNotice('error', `Import failed: ${e.message}`, 7000);
+            }
+          },
+          secondaryLabel: 'Import new only',
+        }
+      );
+      return;
     }
-    const duplicateCount = imported.length - newEvents.length;
-    const duplicateNote = conflictingDuplicates > 0
-      ? ` ${conflictingDuplicates} duplicate(s) with different data were skipped.`
+
+    const { events: mergedEvents, upsertEvents, plan } = mergeImportedEvents(events, normalizedImported, conflictStrategy || 'skip');
+    if (upsertEvents.length === 0) {
+      const duplicateMessage = plan.conflictingCount > 0
+        ? `${plan.conflictingCount} conflicting duplicate(s) were kept as current data.`
+        : `${plan.duplicateCount} duplicate(s) matched existing data.`;
+      showNotice('success', `No new events imported. ${duplicateMessage}`, 7000);
+      return;
+    }
+
+    undoStack = [...undoStack.slice(-9), [...events]];
+    events = applyDerivedScoreDisplays(mergedEvents);
+    persistLocal();
+    if (upsertEvents.length > 0) {
+      for (const ev of upsertEvents) upsertToSupabase(ev);
+    }
+    const actionNote = plan.conflictingCount > 0
+      ? conflictStrategy === 'replace'
+        ? ` Replaced ${plan.conflictingCount} conflicting duplicate(s).`
+        : ` Kept ${plan.conflictingCount} conflicting duplicate(s) as current data.`
       : '';
-    showNotice('success', `Imported ${newEvents.length} new event(s). ${duplicateCount} duplicate(s) skipped.${duplicateNote}`, 7000);
+    const identicalNote = plan.identicalCount > 0
+      ? ` ${plan.identicalCount} identical duplicate(s) skipped.`
+      : '';
+    showNotice('success', `Imported ${plan.newEvents.length} new event(s).${actionNote}${identicalNote}`, 7000);
   }
 
   function importJSON() {
@@ -1514,7 +1566,7 @@
       {:else if syncStatus === 'error'}
         <span class="chip error">!</span>
       {/if}
-      <button class="flip-pill" on:click={() => ourGoalAtTop = !ourGoalAtTop} title="Swap which goal end is ours on the pitch (use at half-time if not auto-detected)">Swap ends</button>
+      <button class="flip-pill" on:click={() => ourGoalAtTop = !ourGoalAtTop} title="Swap which goal end is ours on the pitch">Swap ends</button>
       <button class="icon-btn" title="{wakeLock ? 'Screen locked on' : 'Keep screen on'}"
         on:click={toggleWakeLock}>{wakeLock ? 'Awake' : 'Keep awake'}</button>
       {#if supabaseConfigured && user}
@@ -1642,11 +1694,11 @@
         onUndoLast={undoLast}
         on:periodChange={(e) => {
           const p = e.detail;
-          const wasH2 = period === 'H2';
-          const goingH2 = p === 'H2';
+          const previousPeriod = period;
           period = p;
-          if (goingH2 && !wasH2) ourGoalAtTop = !ourGoalAtTop;
-          else if (wasH2 && !goingH2) ourGoalAtTop = !ourGoalAtTop;
+          if (previousPeriod !== p && ((previousPeriod === 'H1' && p === 'H2') || (previousPeriod === 'H2' && p === 'H1'))) {
+            showNotice('success', `Period set to ${p}. Ends stay as they are - use "Swap ends" if teams have changed direction.`, 5000);
+          }
         }}
         on:cancelEdit={cancelEditMode}
       />
@@ -1665,7 +1717,7 @@
       <div class="pitch-card">
         <div class="goal-indicator">
           <span>{ourGoalAtTop ? '◀ Your goal — left end' : 'Your goal — right end ▶'}</span>
-          <button class="flip-btn" on:click={() => ourGoalAtTop = !ourGoalAtTop} title="Swap ends">⇄ Swap ends</button>
+          <button class="flip-btn" on:click={() => ourGoalAtTop = !ourGoalAtTop} title="Swap ends manually">⇄ Swap ends</button>
         </div>
         <Pitch
           contestType={contest}
@@ -1836,6 +1888,9 @@
         <div class="confirm-text">{confirmState.message}</div>
         <div class="confirm-actions">
           <button class="confirm-cancel" on:click={dismissConfirm}>Cancel</button>
+          {#if confirmState.secondaryAction}
+            <button class="confirm-secondary" on:click={runSecondaryConfirm}>{confirmState.secondaryLabel}</button>
+          {/if}
           <button class="confirm-accept" on:click={runConfirm}>{confirmState.confirmLabel}</button>
         </div>
       </div>
@@ -2018,10 +2073,11 @@
   .confirm-title { font-size: 16px; font-weight: 800; color: #111827; }
   .confirm-text { margin-top: 8px; font-size: 14px; color: #4b5563; line-height: 1.5; }
   .confirm-actions { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
-  .confirm-cancel, .confirm-accept {
+  .confirm-cancel, .confirm-secondary, .confirm-accept {
     padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 700;
   }
   .confirm-cancel { background: #fff; color: #4b5563; border: 1px solid #d1d5db; }
+  .confirm-secondary { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
   .confirm-accept { background: #1c3f8a; color: #fff; border: 1px solid #1c3f8a; }
 
   /* ── Match context bar (Capture tab, always visible) ── */

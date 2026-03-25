@@ -98,15 +98,21 @@ function buildPositionResolver(items) {
     const min = Math.min(...minutes);
     const max = Math.max(...minutes);
     if (max > min) {
-      return (item, index) => (
-        Number.isFinite(item.minute)
-          ? (item.minute - min) / (max - min)
-          : (items.length === 1 ? 1 : index / (items.length - 1))
-      );
+      return {
+        usesClock: true,
+        positionFor: (item, index) => (
+          Number.isFinite(item.minute)
+            ? (item.minute - min) / (max - min)
+            : (items.length === 1 ? 1 : index / (items.length - 1))
+        ),
+      };
     }
   }
 
-  return (_item, index) => (items.length === 1 ? 1 : index / (items.length - 1));
+  return {
+    usesClock: false,
+    positionFor: (_item, index) => (items.length === 1 ? 1 : index / (items.length - 1)),
+  };
 }
 
 function isPositiveKickout(event) {
@@ -201,7 +207,7 @@ function summarizeScoreWindow(items) {
   return { line: 'Recent scoring is balanced.', tone: 'neutral' };
 }
 
-function phaseBuckets(items, metricKey) {
+function phaseBuckets(items, metricKey, resolver) {
   if (!hasMinimumSample(items.length, MIN_PHASE_SAMPLE)) return null;
 
   const phases = [
@@ -210,28 +216,31 @@ function phaseBuckets(items, metricKey) {
     { key: 'late', label: 'late', ours: 0, theirs: 0 },
   ];
 
-  const positionFor = buildPositionResolver(items);
+  const positionFor = resolver.positionFor;
 
   items.forEach((item, index) => {
     const phase = phases.find((candidate) => candidate.key === phaseFromRatio(positionFor(item, index)));
     phase[item.team] += item[metricKey];
   });
 
-  return phases.map((phase) => {
-    const diff = phase.ours - phase.theirs;
-    let leader = 'level';
-    if (diff >= 2) leader = 'ours';
-    else if (diff <= -2) leader = 'theirs';
-    return { ...phase, leader, diff };
-  });
+  return {
+    usesClock: resolver.usesClock,
+    phases: phases.map((phase) => {
+      const diff = phase.ours - phase.theirs;
+      let leader = 'level';
+      if (diff >= 2) leader = 'ours';
+      else if (diff <= -2) leader = 'theirs';
+      return { ...phase, leader, diff };
+    }),
+  };
 }
 
-function longestRun(items, metricKey) {
+function longestRun(items, metricKey, resolver) {
   if (!items.length) return null;
 
   let best = null;
   let current = null;
-  const positionFor = buildPositionResolver(items);
+  const positionFor = resolver.positionFor;
 
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index];
@@ -243,11 +252,13 @@ function longestRun(items, metricKey) {
         count: 1,
         total: item[metricKey],
         phase,
+        usesClock: resolver.usesClock,
       };
     } else {
       current.count += 1;
       current.total += item[metricKey];
       current.phase = phase;
+      current.usesClock = resolver.usesClock;
     }
 
     if (
@@ -266,16 +277,24 @@ function buildFlowNarratives(scoreItems, kickoutItems) {
   const scoreLines = [];
   const kickoutLines = [];
 
-  const scorePhases = phaseBuckets(scoreItems, 'points');
-  const scoreRun = longestRun(scoreItems, 'points');
-  const kickoutPhases = phaseBuckets(kickoutItems, 'value');
-  const kickoutRun = longestRun(kickoutItems, 'value');
+  const scoreResolver = buildPositionResolver(scoreItems);
+  const kickoutResolver = buildPositionResolver(kickoutItems);
+  const scorePhaseState = phaseBuckets(scoreItems, 'points', scoreResolver);
+  const scoreRun = longestRun(scoreItems, 'points', scoreResolver);
+  const kickoutPhaseState = phaseBuckets(kickoutItems, 'value', kickoutResolver);
+  const kickoutRun = longestRun(kickoutItems, 'value', kickoutResolver);
+  const scorePhases = scorePhaseState?.phases || null;
+  const kickoutPhases = kickoutPhaseState?.phases || null;
 
   if (scoreRun && scoreRun.total >= 5) {
-    scoreLines.push(`${pronoun(scoreRun.team)} hit the biggest scoring run ${scoreRun.phase} (${scoreRun.total} unanswered points).`);
+    if (scoreRun.usesClock) {
+      scoreLines.push(`${pronoun(scoreRun.team)} hit the biggest scoring run ${scoreRun.phase} (${scoreRun.total} unanswered points).`);
+    } else {
+      scoreLines.push(`${pronoun(scoreRun.team)} had the biggest scoring run (${scoreRun.total} unanswered points).`);
+    }
   }
 
-  if (scorePhases) {
+  if (scorePhases && scorePhaseState?.usesClock) {
     const early = scorePhases[0]?.leader;
     const late = scorePhases[2]?.leader;
     const middle = scorePhases[1]?.leader;
@@ -288,10 +307,14 @@ function buildFlowNarratives(scoreItems, kickoutItems) {
   }
 
   if (kickoutRun && kickoutRun.count >= 3) {
-    kickoutLines.push(`${pronoun(kickoutRun.team)} had the longest kickout spell ${kickoutRun.phase} (${kickoutRun.count} in a row).`);
+    if (kickoutRun.usesClock) {
+      kickoutLines.push(`${pronoun(kickoutRun.team)} had the longest kickout spell ${kickoutRun.phase} (${kickoutRun.count} in a row).`);
+    } else {
+      kickoutLines.push(`${pronoun(kickoutRun.team)} had the longest kickout spell (${kickoutRun.count} in a row).`);
+    }
   }
 
-  if (kickoutPhases) {
+  if (kickoutPhases && kickoutPhaseState?.usesClock) {
     const early = kickoutPhases[0]?.leader;
     const late = kickoutPhases[2]?.leader;
     const middle = kickoutPhases[1]?.leader;
@@ -306,6 +329,7 @@ function buildFlowNarratives(scoreItems, kickoutItems) {
   return {
     lines: [...scoreLines, ...kickoutLines].slice(0, 3),
     coachLines: [...kickoutLines, ...scoreLines].slice(0, 2),
+    hasClockConfidence: Boolean(scorePhaseState?.usesClock || kickoutPhaseState?.usesClock),
   };
 }
 
@@ -371,19 +395,20 @@ function buildKickoutPattern(events) {
   let line = 'No clear opposition kickout pattern yet.';
   if (
     primaryWinner &&
-    dominantShare(primaryWinner.total, wonKickouts.length, 0.4, 3)
+    hasMinimumSample(wonKickouts.length, 4) &&
+    dominantShare(primaryWinner.total, wonKickouts.length, 0.5, 3)
   ) {
-    line = `${primaryWinner.label} is winning most of their kickouts (${primaryWinner.total} wins).`;
+    line = `${primaryWinner.label} is their main successful kickout target so far (${primaryWinner.total} of ${wonKickouts.length} wins).`;
   } else if (
     primaryTarget &&
-    dominantShare(primaryTarget.total, theirKickouts.length, 0.4, 3)
+    dominantShare(primaryTarget.total, theirKickouts.length, 0.45, 3)
   ) {
-    line = `${primaryTarget.label} is their most targeted kickout option (${primaryTarget.total} of ${theirKickouts.length}).`;
+    line = `${primaryTarget.label} is their most targeted kickout option so far (${primaryTarget.total} of ${theirKickouts.length}).`;
   } else if (
     primaryLane &&
-    dominantShare(primaryLane.total, theirKickouts.length, 0.4, 3)
+    dominantShare(primaryLane.total, theirKickouts.length, 0.45, 3)
   ) {
-    line = `${primaryLane.label} is their main kickout lane (${primaryLane.total} of ${theirKickouts.length}).`;
+    line = `${primaryLane.label} is their most-used kickout lane so far (${primaryLane.total} of ${theirKickouts.length}).`;
   }
 
   let trendLine = null;
@@ -400,13 +425,13 @@ function buildKickoutPattern(events) {
   return {
     total: theirKickouts.length,
     wonTotal: wonKickouts.length,
-    primaryWinner: primaryWinner && dominantShare(primaryWinner.total, wonKickouts.length, 0.4, 3)
+    primaryWinner: primaryWinner && hasMinimumSample(wonKickouts.length, 4) && dominantShare(primaryWinner.total, wonKickouts.length, 0.5, 3)
       ? { ...primaryWinner, pct: pct(primaryWinner.total, wonKickouts.length) }
       : null,
-    primaryTarget: primaryTarget && dominantShare(primaryTarget.total, theirKickouts.length, 0.4, 3)
+    primaryTarget: primaryTarget && dominantShare(primaryTarget.total, theirKickouts.length, 0.45, 3)
       ? { ...primaryTarget, pct: pct(primaryTarget.total, theirKickouts.length) }
       : null,
-    primaryLane: primaryLane && dominantShare(primaryLane.total, theirKickouts.length, 0.4, 3)
+    primaryLane: primaryLane && dominantShare(primaryLane.total, theirKickouts.length, 0.45, 3)
       ? { ...primaryLane, pct: pct(primaryLane.total, theirKickouts.length) }
       : null,
     line,

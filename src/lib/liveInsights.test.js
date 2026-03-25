@@ -73,6 +73,23 @@ describe('buildLiveInsights', () => {
     expect(insights.recommendations.map((item) => item.type)).toContain('avoid_restart_lane');
   });
 
+  it('softens flow narration when clock data is missing', () => {
+    const events = [
+      baseEvent({ id: 's1', ko_sequence: 1, created_at: '2026-03-24T10:00:00.000Z', event_type: 'shot', direction: 'ours', outcome: 'Point' }),
+      baseEvent({ id: 's2', ko_sequence: 2, created_at: '2026-03-24T10:01:00.000Z', event_type: 'shot', direction: 'ours', outcome: 'Goal' }),
+      baseEvent({ id: 's3', ko_sequence: 3, created_at: '2026-03-24T10:02:00.000Z', event_type: 'shot', direction: 'ours', outcome: 'Point' }),
+      baseEvent({ id: 'k1', ko_sequence: 4, created_at: '2026-03-24T10:03:00.000Z', direction: 'theirs', outcome: 'Won', target_player: '8', side_band: 'Right', depth_band: 'Medium' }),
+      baseEvent({ id: 'k2', ko_sequence: 5, created_at: '2026-03-24T10:04:00.000Z', direction: 'theirs', outcome: 'Won', target_player: '8', side_band: 'Right', depth_band: 'Medium' }),
+      baseEvent({ id: 'k3', ko_sequence: 6, created_at: '2026-03-24T10:05:00.000Z', direction: 'theirs', outcome: 'Won', target_player: '8', side_band: 'Right', depth_band: 'Medium' }),
+    ];
+
+    const insights = buildLiveInsights(events);
+
+    expect(insights.flow.hasClockConfidence).toBe(false);
+    expect(insights.flow.lines[0]).not.toContain('early');
+    expect(insights.flow.lines[0]).not.toContain('late');
+  });
+
   it('uses event time, not event density, to describe the flow and prioritises kickout lines for coaches', () => {
     const events = [
       baseEvent({ id: 's1', ko_sequence: 1, created_at: '2026-03-24T10:00:00.000Z', event_type: 'shot', direction: 'ours', outcome: 'Point', clock: '02:00' }),
@@ -89,5 +106,6 @@ describe('buildLiveInsights', () => {
 
     expect(insights.flow.lines[0]).toContain('late');
     expect(insights.flow.coachLines[0]).toContain('kickout');
+    expect(insights.flow.hasClockConfidence).toBe(true);
   });
 });

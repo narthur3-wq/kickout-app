@@ -225,7 +225,7 @@
       {#if editingId}
         <button class="sec-btn" on:click={() => dispatch('cancelEdit')}>Cancel</button>
       {/if}
-      <button class="sec-btn" on:click={onUndoLast} disabled={undoStack.length === 0} title="Undo last save">↩ Undo</button>
+      <button class="sec-btn" on:click={onUndoLast} disabled={undoStack.length === 0} title="Undo last change">↩ Undo last change</button>
       <label class="flag-inline" title="Flag for review"><input type="checkbox" bind:checked={flagEvent}/> ⚑</label>
     </div>
   </div>

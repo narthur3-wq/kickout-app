@@ -137,6 +137,9 @@
         </div>
       </div>
       <div class="flow-lines">
+        {#if !insights.flow.hasClockConfidence && (insights.flow.scoreItems.length > 0 || insights.flow.kickoutItems.length > 0)}
+          <p class="detail-note">Flow read is based on event order because clock data is sparse.</p>
+        {/if}
         {#if insights.flow.lines.length === 0}
           <p class="empty-copy">Not enough data to describe the flow yet.</p>
         {:else}
@@ -152,7 +155,7 @@
       <p class="headline-copy">{insights.kickoutPattern.line}</p>
       {#if insights.kickoutPattern.primaryWinner}
         <div class="stat-chip">
-          <span class="stat-chip-label">Primary winner</span>
+          <span class="stat-chip-label">Most successful target</span>
           <span class="stat-chip-value">{insights.kickoutPattern.primaryWinner.label}</span>
           <span class="stat-chip-sub">{insights.kickoutPattern.primaryWinner.total} of {insights.kickoutPattern.wonTotal} successful kickouts</span>
         </div>

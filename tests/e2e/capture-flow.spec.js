@@ -86,8 +86,19 @@ test('delete all can be recovered with Undo from Capture', async ({ page }) => {
 
   await expect(page.getByRole('button', { name: /Undo/i })).toBeEnabled();
   await page.getByRole('button', { name: /Undo/i }).click();
-  await page.getByRole('button', { name: /Remove event/i }).click();
+  await page.locator('.confirm-card').getByRole('button', { name: 'Undo last change', exact: true }).click();
 
   await page.getByRole('button', { name: /Events/i }).click();
   await expect(page.getByRole('cell', { name: 'Na Fianna' })).toBeVisible();
+});
+
+test('changing period does not auto-swap ends and gives a halftime reminder', async ({ page }) => {
+  await openFreshApp(page);
+  await setUpMatch(page, { opponent: 'Boden' });
+
+  await expect(page.getByText(/Your goal/i)).toContainText('left end');
+  await page.locator('.form-panel').getByRole('button', { name: 'H2' }).click();
+
+  await expect(page.getByText(/Ends stay as they are/i)).toBeVisible();
+  await expect(page.getByText(/Your goal/i)).toContainText('left end');
 });
