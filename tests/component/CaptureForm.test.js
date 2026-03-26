@@ -76,6 +76,22 @@ describe('CaptureForm', () => {
 
     await user.type(screen.getByPlaceholderText('16+'), '23');
 
-    expect(screen.getByText(/Target player · #23/i)).toBeInTheDocument();
+    expect(screen.getByText(/Target player - #23/i)).toBeInTheDocument();
+  });
+
+  it('shows turnover winner and loser inputs instead of the target-player grid', async () => {
+    const user = userEvent.setup();
+    renderForm({
+      outcome: 'Won',
+      turnoverLostTeam: 'Vincents',
+      turnoverWonTeam: 'Clontarf',
+    });
+
+    await user.click(screen.getByRole('button', { name: /turnover/i }));
+
+    expect(screen.getByText(/Record who lost the ball and who won it/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Lost by \(Vincents\)/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Won by \(Clontarf\)/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Target player/i)).not.toBeInTheDocument();
   });
 });

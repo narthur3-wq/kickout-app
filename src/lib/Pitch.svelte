@@ -7,6 +7,7 @@
   export let pickup  = { x: NaN, y: NaN };
   export let overlays: Array<any> = [];
   export let showZoneLabels = false;
+  export let showZoneLegend = showZoneLabels;
   export let resetToken = 0;
   export let ownGoalFill = 'rgba(196,18,48,0.35)';
   export let oppositionGoalFill = 'rgba(255,255,255,0.07)';
@@ -295,7 +296,7 @@
     vector-effect="non-scaling-stroke" />
 </svg>
 
-{#if showZoneLabels}
+{#if showZoneLabels && showZoneLegend}
   <div class="zone-legend">
     <span>L / C / R — side band</span>
     <span>20 / 45 / 65 — metres from goal</span>

@@ -407,10 +407,10 @@
     font-size: 10px;
   }
   .marker.ours {
-    background: #1d4ed8;
+    background: #166534;
   }
   .marker.theirs {
-    background: #c2410c;
+    background: #b91c1c;
   }
   .summary-line,
   .headline-copy,

@@ -343,18 +343,35 @@
           </div>
         {/if}
       </div>
-      <div class="pitch-viz-card">
-        {#if vizMode === 'heat'}
-          <Heatmap points={heatPoints} cols={140} radius={3} smooth={2} colorScheme={heatScheme} />
+      <div class="pitch-viz-frame">
+        <div class="pitch-viz-card">
+          {#if vizMode === 'heat'}
+            <Heatmap points={heatPoints} cols={140} radius={3} smooth={2} colorScheme={heatScheme} />
+          {:else}
+            <Pitch
+              contestType="clean"
+              landing={{x:NaN,y:NaN}}
+              pickup={{x:NaN,y:NaN}}
+              {overlays}
+              showZoneLabels={true}
+              showZoneLegend={false}
+            />
+          {/if}
+        </div>
+      </div>
+      <div class="pitch-viz-legend">
+        <span><span class="legend-swatch legend-goal"></span> Our goal</span>
+        {#if vizMode === 'dots'}
+          <span><span class="legend-swatch legend-dot"></span> Event locations</span>
+        {:else if heatMode === 'won'}
+          <span><span class="legend-swatch legend-heat-won"></span> Won density</span>
+        {:else if heatMode === 'lost'}
+          <span><span class="legend-swatch legend-heat-lost"></span> Lost density</span>
         {:else}
-          <Pitch
-            contestType="clean"
-            landing={{x:NaN,y:NaN}}
-            pickup={{x:NaN,y:NaN}}
-            {overlays}
-            showZoneLabels={true}
-          />
+          <span><span class="legend-swatch legend-heat-density"></span> Event density</span>
         {/if}
+        <span>L / C / R = side band</span>
+        <span>20 / 45 / 65 = metres from goal</span>
       </div>
     </div>
 
@@ -723,10 +740,54 @@
     background: #fff; color: #1c3f8a;
     box-shadow: 0 1px 3px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.05);
   }
+  .pitch-viz-frame {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 12px;
+  }
   .pitch-viz-card {
-    border-radius: 10px; overflow: hidden;
+    border-radius: 10px;
+    overflow: hidden;
     box-shadow: 0 4px 20px rgba(0,50,0,0.18), 0 1px 6px rgba(0,0,0,0.08);
-    margin-bottom: 14px; aspect-ratio: 145 / 90; width: 100%;
+    aspect-ratio: 145 / 90;
+    width: min(100%, calc(58svh * 145 / 90));
+    max-width: 1280px;
+  }
+  .pitch-viz-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    align-items: center;
+    font-size: 11px;
+    color: #64748b;
+    margin: 0 2px 14px;
+    padding-top: 10px;
+    border-top: 1px solid #e5e7eb;
+  }
+  .legend-swatch {
+    width: 12px;
+    height: 12px;
+    display: inline-block;
+    border-radius: 999px;
+    margin-right: 6px;
+    vertical-align: -1px;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+  }
+  .legend-goal {
+    background: rgba(255,255,255,0.95);
+    border-color: rgba(148, 163, 184, 0.9);
+  }
+  .legend-dot {
+    background: #f97316;
+  }
+  .legend-heat-density {
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+  }
+  .legend-heat-won {
+    background: linear-gradient(135deg, #facc15, #ca8a04);
+  }
+  .legend-heat-lost {
+    background: linear-gradient(135deg, #f87171, #dc2626);
   }
 
   /* ── Timeline ── */
@@ -797,6 +858,12 @@
   button { padding: 7px 14px; border: 1.5px solid #e5e7eb; border-radius: 7px; background: #fff; cursor: pointer; font-size: 13px; font-weight: 600; font-family: inherit; transition: all 0.12s; }
   button:hover { background: #f9fafb; }
   label { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+
+  @media (max-width: 900px) {
+    .pitch-viz-card {
+      width: 100%;
+    }
+  }
 
   /* ── Headline summary KPI row (shots / turnovers) ── */
   .summary-kpi-row {

@@ -54,6 +54,7 @@
   /** @type {'Retained'|'Lost'|'Score'|'Wide'|'Out'|'Foul'} */ let outcome = 'Retained';
   /** @type {'won'|'lost'|'neutral'|''} */ let breakOutcome = '';
   let clock = '', targetPlayer = '';
+  let turnoverLostPlayer = '', turnoverWonPlayer = '';
   let landing = {x:NaN, y:NaN}, pickup = {x:NaN, y:NaN};
   let eventType = 'kickout';
   let direction = 'ours';
@@ -175,6 +176,8 @@
       outcome,
       breakOutcome,
       targetPlayer,
+      turnoverLostPlayer,
+      turnoverWonPlayer,
       landing,
       pickup,
       eventType,
@@ -207,6 +210,8 @@
     breakOutcome = '';
     clock = '';
     targetPlayer = '';
+    turnoverLostPlayer = '';
+    turnoverWonPlayer = '';
     landing = { x: NaN, y: NaN };
     pickup = { x: NaN, y: NaN };
     eventType = 'kickout';
@@ -245,6 +250,8 @@
       outcome,
       breakOutcome,
       targetPlayer,
+      turnoverLostPlayer,
+      turnoverWonPlayer,
       landing: { ...landing },
       pickup: { ...pickup },
       eventType,
@@ -271,6 +278,8 @@
     outcome = snapshot.outcome;
     breakOutcome = snapshot.breakOutcome;
     targetPlayer = snapshot.targetPlayer;
+    turnoverLostPlayer = snapshot.turnoverLostPlayer;
+    turnoverWonPlayer = snapshot.turnoverWonPlayer;
     landing = { ...snapshot.landing };
     pickup = { ...snapshot.pickup };
     eventType = snapshot.eventType;
@@ -857,6 +866,15 @@
     pickup = { x: NaN, y: NaN };
   }
 
+  $: if (eventType !== 'turnover') {
+    turnoverLostPlayer = '';
+    turnoverWonPlayer = '';
+  }
+
+  $: if (eventType === 'turnover') {
+    targetPlayer = '';
+  }
+
   $: if (contest !== 'break') {
     breakOutcome = '';
     pickup = { x: NaN, y: NaN };
@@ -872,10 +890,18 @@
     }
     if (clock.trim() !== '' && !/^(\d{1,2}):\d{2}$/.test(clock))
       return 'Clock must be mm:ss or blank.';
+    if (eventType === 'turnover') {
+      if (!turnoverLostPlayer.trim()) return 'Enter the player who lost the turnover.';
+      if (!turnoverWonPlayer.trim()) return 'Enter the player who won the turnover.';
+    }
     if (Number.isNaN(landing.x) || Number.isNaN(landing.y)) {
       pitchError = true;
       setTimeout(() => { pitchError = false; }, 1200);
-      return 'Tap the pitch to set the landing point.';
+      return eventType === 'shot'
+        ? 'Tap the pitch to set the shot location.'
+        : eventType === 'turnover'
+          ? 'Tap the pitch to set the turnover location.'
+          : 'Tap the pitch to set the landing point.';
     }
     if (eventType === 'kickout' && contest === 'break') {
       if (Number.isNaN(pickup.x) || Number.isNaN(pickup.y))
@@ -918,7 +944,9 @@
       opponent:     opponent.trim(),
       period,
       clock,
-      target_player: targetPlayer.trim(),
+      target_player: eventType === 'turnover' ? null : targetPlayer.trim(),
+      turnover_lost_player: eventType === 'turnover' ? turnoverLostPlayer.trim() : null,
+      turnover_won_player: eventType === 'turnover' ? turnoverWonPlayer.trim() : null,
       outcome,
       contest_type:  eventType === 'kickout' ? contest : null,
       break_outcome: eventType === 'kickout' && contest === 'break' ? breakOutcome : null,
@@ -971,6 +999,8 @@
       clearPoints();
       editingId = null;
       targetPlayer = '';
+      turnoverLostPlayer = '';
+      turnoverWonPlayer = '';
       flagEvent = false;
       restartReason = '';
       shotType = 'point';
@@ -1070,6 +1100,8 @@
     contest      = e.contest_type;
     breakOutcome = e.break_outcome || '';
     targetPlayer = e.target_player || '';
+    turnoverLostPlayer = e.turnover_lost_player || '';
+    turnoverWonPlayer = e.turnover_won_player || '';
     matchDate    = e.match_date || (e.created_at || '').slice(0,10) || new Date().toISOString().slice(0,10);
     // Do NOT change ourGoalAtTop here — keep the analyst's current orientation.
     // e.y / e.pickup_y are stored in "our goal at top = true" normalised space:
@@ -1098,6 +1130,8 @@
       outcome,
       breakOutcome,
       targetPlayer,
+      turnoverLostPlayer,
+      turnoverWonPlayer,
       landing,
       pickup,
       eventType,
@@ -1113,7 +1147,7 @@
   function exportCSV(subset = events) {
     const headers = [
       'id','created_at','match_date','team','opponent','period','clock',
-      'target_player','outcome','contest_type','break_outcome',
+      'target_player','turnover_lost_player','turnover_won_player','outcome','contest_type','break_outcome',
       'x','y','x_m','y_m','depth_from_own_goal_m','side_band','depth_band','zone_code','our_goal_at_top',
       'pickup_x','pickup_y','pickup_x_m','pickup_y_m','break_displacement_m',
       'score_us','score_them','flag','ko_sequence','event_type','direction',
@@ -1224,6 +1258,12 @@
     showNotice('success', `Imported ${plan.newEvents.length} new event(s).${actionNote}${identicalNote}`, 7000);
   }
 
+  function switchTab(nextTab) {
+    accountOpen = false;
+    showSummary = false;
+    activeTab = nextTab;
+  }
+
   function importJSON() {
     if (supabaseConfigured && user && !teamId) {
       showNotice('error', 'Your account has no team assigned, so imports cannot be synced yet.');
@@ -1318,6 +1358,11 @@
     };
     return { us: calc('ours'), them: calc('theirs'), hasShots: shots.length > 0 };
   })();
+
+  $: selectedTeamLabel = direction === 'ours' ? (team || 'Ours') : (opponent || 'Theirs');
+  $: opposingTeamLabel = direction === 'ours' ? (opponent || 'Theirs') : (team || 'Ours');
+  $: turnoverWonTeamLabel = outcome === 'Won' ? selectedTeamLabel : opposingTeamLabel;
+  $: turnoverLostTeamLabel = outcome === 'Lost' ? selectedTeamLabel : opposingTeamLabel;
 
   // ── Filtered events for viz & KPIs ───────────────────────────────────────
   $: vizEvents = events.filter(e => {
@@ -1613,29 +1658,29 @@
 
   <!-- Tab bar -->
   <nav class="tab-bar">
-    <button class="tab-btn {activeTab === 'capture' ? 'active' : ''}" on:click={() => activeTab = 'capture'}>
+    <button type="button" class="tab-btn {activeTab === 'capture' ? 'active' : ''}" on:click={() => switchTab('capture')}>
       Capture{#if editingId}&nbsp;<span class="edit-dot">●</span>{/if}
     </button>
-    <button class="tab-btn {activeTab === 'live' ? 'active' : ''}" on:click={() => activeTab = 'live'}>
+    <button type="button" class="tab-btn {activeTab === 'live' ? 'active' : ''}" on:click={() => switchTab('live')}>
       Live
     </button>
-    <button class="tab-btn {activeTab === 'digest' ? 'active' : ''}" on:click={() => activeTab = 'digest'}>
+    <button type="button" class="tab-btn {activeTab === 'digest' ? 'active' : ''}" on:click={() => switchTab('digest')}>
       Digest
     </button>
-    <button class="tab-btn {activeTab === 'kickouts' ? 'active' : ''}" on:click={() => activeTab = 'kickouts'}>
+    <button type="button" class="tab-btn {activeTab === 'kickouts' ? 'active' : ''}" on:click={() => switchTab('kickouts')}>
       Kickouts
     </button>
-    <button class="tab-btn {activeTab === 'shots' ? 'active' : ''}" on:click={() => activeTab = 'shots'}>
+    <button type="button" class="tab-btn {activeTab === 'shots' ? 'active' : ''}" on:click={() => switchTab('shots')}>
       Shots
     </button>
-    <button class="tab-btn {activeTab === 'turnovers' ? 'active' : ''}" on:click={() => activeTab = 'turnovers'}>
+    <button type="button" class="tab-btn {activeTab === 'turnovers' ? 'active' : ''}" on:click={() => switchTab('turnovers')}>
       Turnovers
     </button>
-    <button class="tab-btn {activeTab === 'events' ? 'active' : ''}" on:click={() => activeTab = 'events'}>
+    <button type="button" class="tab-btn {activeTab === 'events' ? 'active' : ''}" on:click={() => switchTab('events')}>
       Events <span class="tab-count">{events.length}</span>
     </button>
     {#if isAdminUser}
-      <button class="tab-btn {activeTab === 'admin' ? 'active' : ''}" on:click={() => activeTab = 'admin'}>
+      <button type="button" class="tab-btn {activeTab === 'admin' ? 'active' : ''}" on:click={() => switchTab('admin')}>
         Admin
       </button>
     {/if}
@@ -1684,6 +1729,8 @@
         bind:outcome
         bind:breakOutcome
         bind:targetPlayer
+        bind:turnoverLostPlayer
+        bind:turnoverWonPlayer
         bind:flagEvent
         bind:period
         bind:restartReason
@@ -1693,6 +1740,8 @@
         {editingId}
         team={team}
         opponent={opponent}
+        turnoverLostTeam={turnoverLostTeamLabel}
+        turnoverWonTeam={turnoverWonTeamLabel}
         landingSet={!Number.isNaN(landing.x)}
         pickupSet={!Number.isNaN(pickup.x)}
         {undoStack}
@@ -1774,7 +1823,13 @@
         {:else if !Number.isNaN(landing.x)}
           <span class="ps-coords">{sideBand(landing.x)} · {Math.round(depthMetersFromOwnGoal(landing.y))}m</span>
         {:else}
-          <span class="ps-prompt">Tap pitch — set landing point</span>
+          <span class="ps-prompt">
+            {eventType === 'shot'
+              ? 'Tap pitch — set shot location'
+              : eventType === 'turnover'
+                ? 'Tap pitch — set turnover location'
+                : 'Tap pitch — set landing point'}
+          </span>
         {/if}
       </div>
     </div><!-- /pitch-panel -->
@@ -1805,7 +1860,7 @@
       teamName={team}
       opponentName={opponent}
       phaseLabel={currentPhaseLabel}
-      on:showTab={(e) => activeTab = e.detail}
+      on:showTab={(e) => switchTab(e.detail)}
     />
   </div>
 

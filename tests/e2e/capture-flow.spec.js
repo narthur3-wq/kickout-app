@@ -104,6 +104,40 @@ test('returns to live capture cleanly after editing and cancelling an event', as
   await expect(page.getByRole('button', { name: /Save Event/i })).toBeVisible();
 });
 
+test('top navigation can reach Kickouts from the main tabs', async ({ page }) => {
+  await openFreshApp(page);
+  await setUpMatch(page, { opponent: 'Crokes' });
+
+  const tabsToCheck = [/^Capture/i, /^Live/i, /^Digest/i, /^Events/i];
+  const tabBar = page.locator('nav.tab-bar');
+
+  for (const tab of tabsToCheck) {
+    await tabBar.getByRole('button', { name: tab }).click();
+    await tabBar.getByRole('button', { name: /^Kickouts/i }).click();
+    await expect(tabBar.getByRole('button', { name: /^Kickouts/i })).toHaveClass(/active/);
+  }
+
+  await tabBar.getByRole('button', { name: /^Shots/i }).click();
+  await tabBar.getByRole('button', { name: /^Turnovers/i }).click();
+  await tabBar.getByRole('button', { name: /^Kickouts/i }).click();
+  await expect(tabBar.getByRole('button', { name: /^Kickouts/i })).toHaveClass(/active/);
+});
+
+test('captures a turnover with explicit loser and winner players', async ({ page }) => {
+  await openFreshApp(page);
+  await setUpMatch(page, { opponent: 'Crokes' });
+
+  await page.locator('.form-panel').getByRole('button', { name: /^Turnover$/i }).click();
+  await page.getByRole('button', { name: 'Lost' }).click();
+  await page.getByLabel(/Lost by \(Clontarf\)/i).fill('2');
+  await page.getByLabel(/Won by \(Crokes\)/i).fill('14');
+  await placeLandingPoint(page, { x: 260, y: 140 });
+  await page.getByRole('button', { name: /Save Event/i }).click();
+
+  await page.getByRole('button', { name: /^Events/i }).click();
+  await expect(page.getByText(/Lost Clontarf #2 \/ Won Crokes #14/i)).toBeVisible();
+});
+
 test('updates the current match setup without silently splitting saved events', async ({ page }) => {
   await openFreshApp(page);
   await setUpMatch(page, { opponent: 'Crokes' });

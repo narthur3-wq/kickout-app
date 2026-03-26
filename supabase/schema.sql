@@ -44,6 +44,8 @@ create table if not exists events (
   period                text,
   clock                 text,
   target_player         text,
+  turnover_lost_player  text,
+  turnover_won_player   text,
   outcome               text        not null,
   contest_type          text,
   break_outcome         text,

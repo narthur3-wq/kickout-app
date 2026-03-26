@@ -6,6 +6,8 @@ export function buildDraftSignature(source = {}) {
     outcome: source.outcome || 'Retained',
     breakOutcome: source.breakOutcome || '',
     targetPlayer: source.targetPlayer || '',
+    turnoverLostPlayer: source.turnoverLostPlayer || '',
+    turnoverWonPlayer: source.turnoverWonPlayer || '',
     landing: {
       x: Number.isFinite(source.landing?.x) ? +source.landing.x.toFixed(4) : null,
       y: Number.isFinite(source.landing?.y) ? +source.landing.y.toFixed(4) : null,
