@@ -116,6 +116,28 @@
     return '#e2e8f0';
   }
 
+  function overlayFill(o: any) {
+    return o?.marker_fill || outcomeColor(o?.outcome);
+  }
+
+  function overlayShape(o: any) {
+    if (o?.marker_shape) return o.marker_shape;
+    const t = String(o?.contest_type || 'clean');
+    if (t === 'break') return 'triangle';
+    if (t === 'foul') return 'diamond';
+    if (t === 'out') return 'square';
+    return 'circle';
+  }
+
+  function overlayRing(o: any) {
+    if (o?.marker_ring) return o.marker_ring;
+    return o?.at_target ? 'target' : null;
+  }
+
+  function overlayRingColor(o: any) {
+    return o?.marker_ring_color || 'rgba(255,255,255,0.9)';
+  }
+
   const SZ = 2.0;
 </script>
 
@@ -205,9 +227,11 @@
     {#each overlays as o, index (`${o.id ?? 'overlay'}-${index}`)}
       {@const sx = svgX(o)}
       {@const sy = svgY(o)}
-      {@const col = outcomeColor(o.outcome)}
-      {@const t = String(o.contest_type || 'clean')}
-      {#if t === 'break'}
+      {@const col = overlayFill(o)}
+      {@const shape = overlayShape(o)}
+      {@const ring = overlayRing(o)}
+      {@const ringColor = overlayRingColor(o)}
+      {#if shape === 'triangle'}
         <polygon
           points={`${sx},${sy-SZ} ${sx-SZ*.9},${sy+SZ*.7} ${sx+SZ*.9},${sy+SZ*.7}`}
           fill={col}
@@ -215,7 +239,7 @@
           stroke-width="0.55"
           vector-effect="non-scaling-stroke"
         />
-      {:else if t === 'foul'}
+      {:else if shape === 'diamond'}
         <polygon
           points={`${sx},${sy-SZ} ${sx-SZ},${sy} ${sx},${sy+SZ} ${sx+SZ},${sy}`}
           fill={col}
@@ -223,7 +247,7 @@
           stroke-width="0.55"
           vector-effect="non-scaling-stroke"
         />
-      {:else if t === 'out'}
+      {:else if shape === 'square'}
         <rect
           x={sx - SZ * 0.88}
           y={sy - SZ * 0.88}
@@ -245,14 +269,15 @@
           vector-effect="non-scaling-stroke"
         />
       {/if}
-      {#if o.at_target}
+      {#if ring}
         <circle
           cx={sx}
           cy={sy}
           r={SZ * 1.55}
           fill="none"
-          stroke="rgba(255,255,255,0.9)"
-          stroke-width="0.7"
+          stroke={ringColor}
+          stroke-width={ring === 'goal-attempt' ? 0.9 : 0.7}
+          stroke-dasharray={ring === 'target' ? '1.6 1.2' : null}
           vector-effect="non-scaling-stroke"
         />
       {/if}

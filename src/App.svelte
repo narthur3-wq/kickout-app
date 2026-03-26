@@ -26,7 +26,7 @@
   import { supabase, supabaseConfigured, userHasAccess, getUserTeamDetails, isConfiguredAdmin } from './lib/supabase.js';
   import { buildScoreSnapshots } from './lib/score.js';
   import { buildKickoutClockTrend } from './lib/analyticsHelpers.js';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
   // ── Constants ────────────────────────────────────────────────────────────
@@ -113,6 +113,11 @@
     else                                analyticsEventType = 'ALL';
   }
 
+  // Scroll the active tab button into view whenever the tab changes
+  $: activeTab, tick().then(() => {
+    document.querySelector('.tab-btn.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  });
+
   // ── Clock timer ───────────────────────────────────────────────────────────
   let timerRunning = false;
   let timerInterval = null;
@@ -158,6 +163,43 @@
   const defaultMatchDate = () => new Date().toISOString().slice(0,10);
   const scoreOutcomeOf = (event) => String(event?.outcome || '').trim().toLowerCase();
   let draftPristineSignature = '';
+
+  function analyticsMarkerShape(event) {
+    return String(event?.direction || 'ours').toLowerCase() === 'theirs' ? 'square' : 'circle';
+  }
+
+  function analyticsMarkerFill(event) {
+    const type = String(event?.event_type || 'kickout').toLowerCase();
+    const outcome = scoreOutcomeOf(event);
+
+    if (type === 'shot') {
+      switch (outcome) {
+        case 'goal':    return '#15803d';
+        case 'point':   return '#0f766e';
+        case 'wide':    return '#f59e0b';
+        case 'blocked': return '#ea580c';
+        case 'saved':   return '#64748b';
+        default:        return '#94a3b8';
+      }
+    }
+
+    if (type === 'turnover') {
+      if (outcome === 'won') return '#16a34a';
+      if (outcome === 'lost') return '#dc2626';
+      return '#d97706';
+    }
+
+    if (outcome === 'retained' || outcome === 'won' || outcome === 'score') return '#16a34a';
+    if (outcome === 'lost') return '#dc2626';
+    return '#d97706';
+  }
+
+  function analyticsMarkerRing(event) {
+    const type = String(event?.event_type || 'kickout').toLowerCase();
+    if (type === 'kickout' && event?.target_player) return 'target';
+    if (type === 'shot' && String(event?.shot_type || '').toLowerCase() === 'goal') return 'goal-attempt';
+    return null;
+  }
 
   // YTD: compare year strings to avoid UTC-vs-local timezone edge cases
   const eventYear = e => (e.match_date || (e.created_at||'').slice(0,10)).slice(0,4);
@@ -1383,9 +1425,33 @@
   // Overlays with outcome weight for heatmap density
   $: overlays = vizEvents.map(e =>
     overlayMode === 'landing'
-      ? { x: e.x, y: e.y, outcome: e.outcome, contest_type: e.contest_type, at_target: !!e.target_player, weight: outcomeWeight(e.outcome) }
+      ? {
+          id: e.id,
+          x: e.x,
+          y: e.y,
+          outcome: e.outcome,
+          contest_type: e.contest_type,
+          at_target: !!e.target_player,
+          marker_shape: analyticsMarkerShape(e),
+          marker_fill: analyticsMarkerFill(e),
+          marker_ring: analyticsMarkerRing(e),
+          marker_ring_color: 'rgba(255,255,255,0.92)',
+          weight: outcomeWeight(e.outcome),
+        }
       : (e.pickup_x == null || e.pickup_y == null ? null
-          : { x: e.pickup_x, y: e.pickup_y, outcome: e.outcome, contest_type: e.contest_type, at_target: !!e.target_player, weight: outcomeWeight(e.outcome) })
+          : {
+              id: e.id,
+              x: e.pickup_x,
+              y: e.pickup_y,
+              outcome: e.outcome,
+              contest_type: e.contest_type,
+              at_target: !!e.target_player,
+              marker_shape: analyticsMarkerShape(e),
+              marker_fill: analyticsMarkerFill(e),
+              marker_ring: analyticsMarkerRing(e),
+              marker_ring_color: 'rgba(255,255,255,0.92)',
+              weight: outcomeWeight(e.outcome),
+            })
   ).filter(Boolean);
 
   // ── KPIs ──────────────────────────────────────────────────────────────────

@@ -82,19 +82,66 @@
   function outcomeColor(o) {
     switch ((o||'').toLowerCase()) {
       case 'score':
-      case 'point':    return '#2563eb';
       case 'retained':
       case 'won':      return '#16a34a';
+      case 'goal':     return '#15803d';
+      case 'point':    return '#0f766e';
       case 'lost':     return '#dc2626';
-      case 'goal':     return '#7c3aed';
-      case 'wide':     return '#d97706';
-      case 'blocked':  return '#b45309';
-      case 'saved':    return '#6b7280';
-      case 'out':      return '#7c3aed';
-      case 'foul':     return '#db2777';
+      case 'wide':
+      case 'out':
+      case 'foul':     return '#d97706';
+      case 'blocked':  return '#ea580c';
+      case 'saved':    return '#64748b';
       default:         return '#6b7280';
     }
   }
+
+  const TEAM_LEGEND = [
+    { label: 'Ours', shape: 'circle', color: '#f8fafc' },
+    { label: 'Theirs', shape: 'square', color: '#f8fafc' },
+  ];
+
+  $: heatSuccessButtonLabel =
+    analyticsEventType === 'shot' ? 'Scored'
+    : analyticsEventType === 'turnover' ? 'Won'
+    : 'Successful';
+
+  $: heatFailureButtonLabel =
+    analyticsEventType === 'shot' ? 'Missed'
+    : 'Lost';
+
+  $: dotsOutcomeLegend = (() => {
+    if (analyticsEventType === 'shot') {
+      return [
+        { label: 'Goal', color: outcomeColor('goal') },
+        { label: 'Point', color: outcomeColor('point') },
+        { label: 'Wide', color: outcomeColor('wide') },
+        { label: 'Blocked', color: outcomeColor('blocked') },
+        { label: 'Saved', color: outcomeColor('saved') },
+      ];
+    }
+    if (analyticsEventType === 'turnover') {
+      return [
+        { label: 'Won', color: outcomeColor('won') },
+        { label: 'Lost', color: outcomeColor('lost') },
+      ];
+    }
+    return [
+      { label: 'Successful', color: outcomeColor('retained') },
+      { label: 'Lost', color: outcomeColor('lost') },
+      { label: 'Dead-ball / foul', color: outcomeColor('wide') },
+    ];
+  })();
+
+  $: specialLegend = (() => {
+    if (analyticsEventType === 'shot' && vizEvents.some((e) => String(e.shot_type || '').toLowerCase() === 'goal')) {
+      return [{ label: 'Goal attempt', ring: 'goal-attempt' }];
+    }
+    if (analyticsEventType === 'kickout' && vizEvents.some((e) => e.target_player)) {
+      return [{ label: 'Targeted player', ring: 'target' }];
+    }
+    return [];
+  })();
 
   function toggleContest(val) {
     const s = new SvelteSet(fContest); s.has(val) ? s.delete(val) : s.add(val); fContest = s;
@@ -338,8 +385,8 @@
         {#if vizMode === 'heat'}
           <div class="viz-seg">
             <button class="vseg {heatMode === 'all'  ? 'vseg-on' : ''}" on:click={() => heatMode = 'all'}>Density</button>
-            <button class="vseg {heatMode === 'won'  ? 'vseg-on' : ''}" on:click={() => heatMode = 'won'}>Won</button>
-            <button class="vseg {heatMode === 'lost' ? 'vseg-on' : ''}" on:click={() => heatMode = 'lost'}>Lost</button>
+            <button class="vseg {heatMode === 'won'  ? 'vseg-on' : ''}" on:click={() => heatMode = 'won'}>{heatSuccessButtonLabel}</button>
+            <button class="vseg {heatMode === 'lost' ? 'vseg-on' : ''}" on:click={() => heatMode = 'lost'}>{heatFailureButtonLabel}</button>
           </div>
         {/if}
       </div>
@@ -360,18 +407,61 @@
         </div>
       </div>
       <div class="pitch-viz-legend">
-        <span><span class="legend-swatch legend-goal"></span> Our goal</span>
         {#if vizMode === 'dots'}
-          <span><span class="legend-swatch legend-dot"></span> Event locations</span>
-        {:else if heatMode === 'won'}
-          <span><span class="legend-swatch legend-heat-won"></span> Won density</span>
-        {:else if heatMode === 'lost'}
-          <span><span class="legend-swatch legend-heat-lost"></span> Lost density</span>
+          <div class="legend-group">
+            <span class="legend-group-label">Team</span>
+            {#each TEAM_LEGEND as item (item.label)}
+              <span class="legend-item">
+                <span class="legend-marker-wrap">
+                  <span class="legend-marker {item.shape === 'square' ? 'legend-marker-square' : 'legend-marker-circle'}" style="background:{item.color}"></span>
+                </span>
+                {item.label}
+              </span>
+            {/each}
+          </div>
+
+          <div class="legend-group">
+            <span class="legend-group-label">Outcome</span>
+            {#each dotsOutcomeLegend as item (item.label)}
+              <span class="legend-item">
+                <span class="legend-marker-wrap">
+                  <span class="legend-marker legend-marker-circle" style="background:{item.color}"></span>
+                </span>
+                {item.label}
+              </span>
+            {/each}
+          </div>
+
+          {#if specialLegend.length > 0}
+            <div class="legend-group">
+              <span class="legend-group-label">Special</span>
+              {#each specialLegend as item (item.label)}
+                <span class="legend-item">
+                  <span class="legend-marker-wrap">
+                    <span class="legend-marker legend-marker-circle" style="background:#f8fafc"></span>
+                    <span class="legend-marker-ring {item.ring}"></span>
+                  </span>
+                  {item.label}
+                </span>
+              {/each}
+            </div>
+          {/if}
         {:else}
-          <span><span class="legend-swatch legend-heat-density"></span> Event density</span>
+          <div class="legend-group">
+            <span class="legend-group-label">Heat</span>
+            <span class="legend-item">
+              <span class="legend-heat-swatch {heatMode === 'won' ? 'legend-heat-won' : heatMode === 'lost' ? 'legend-heat-lost' : 'legend-heat-density'}"></span>
+              {heatMode === 'won' ? `${heatSuccessButtonLabel} density` : heatMode === 'lost' ? `${heatFailureButtonLabel} density` : 'Event density'}
+            </span>
+          </div>
         {/if}
-        <span>L / C / R = side band</span>
-        <span>20 / 45 / 65 = metres from goal</span>
+
+        <div class="legend-group">
+          <span class="legend-group-label">Pitch</span>
+          <span class="legend-item"><span class="legend-end-swatch"></span> Highlighted end = our goal</span>
+          <span class="legend-item">L / C / R = side band</span>
+          <span class="legend-item">20 / 45 / 65 = metres from goal</span>
+        </div>
       </div>
     </div>
 
@@ -755,36 +845,80 @@
   }
   .pitch-viz-legend {
     display: flex;
-    flex-wrap: wrap;
-    gap: 10px 14px;
-    align-items: center;
+    flex-direction: column;
+    gap: 10px;
     font-size: 11px;
     color: #64748b;
     margin: 0 2px 14px;
     padding-top: 10px;
     border-top: 1px solid #e5e7eb;
   }
-  .legend-swatch {
+  .legend-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+  }
+  .legend-group-label {
+    color: #94a3b8;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    min-width: 54px;
+  }
+  .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .legend-marker-wrap {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+  }
+  .legend-marker {
     width: 12px;
+    height: 12px;
+    border: 1px solid rgba(15, 23, 42, 0.14);
+    background: #f8fafc;
+  }
+  .legend-marker-circle { border-radius: 999px; }
+  .legend-marker-square { border-radius: 3px; }
+  .legend-marker-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    border: 1.6px solid rgba(255,255,255,0.95);
+    pointer-events: none;
+  }
+  .legend-marker-ring.target { border-style: dashed; }
+  .legend-marker-ring.goal-attempt { border-style: solid; }
+  .legend-end-swatch {
+    width: 18px;
+    height: 12px;
+    border: 1px solid rgba(255,255,255,0.92);
+    border-left: 3px solid rgba(255,255,255,0.98);
+    border-radius: 2px;
+    background: rgba(255,255,255,0.12);
+    box-shadow: inset 0 0 0 1px rgba(148,163,184,0.2);
+  }
+  .legend-heat-swatch {
+    width: 22px;
     height: 12px;
     display: inline-block;
     border-radius: 999px;
-    margin-right: 6px;
-    vertical-align: -1px;
     border: 1px solid rgba(15, 23, 42, 0.12);
-  }
-  .legend-goal {
-    background: rgba(255,255,255,0.95);
-    border-color: rgba(148, 163, 184, 0.9);
-  }
-  .legend-dot {
-    background: #f97316;
   }
   .legend-heat-density {
     background: linear-gradient(135deg, #f59e0b, #ef4444);
   }
   .legend-heat-won {
-    background: linear-gradient(135deg, #facc15, #ca8a04);
+    background: linear-gradient(135deg, #fde68a, #ca8a04);
   }
   .legend-heat-lost {
     background: linear-gradient(135deg, #f87171, #dc2626);
