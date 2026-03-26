@@ -2149,6 +2149,7 @@
   .tab-bar {
     flex-shrink: 0; display: flex; background: #fff; border-bottom: 1px solid #e5e7eb;
     overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 0 4px;
+    position: relative; z-index: 8;
   }
   .tab-bar::-webkit-scrollbar { display: none; }
   .tab-btn {
@@ -2157,6 +2158,8 @@
     background: none; cursor: pointer; color: #b0b8c4;
     display: flex; align-items: center; justify-content: center; gap: 5px;
     white-space: nowrap; transition: color 0.15s; letter-spacing: 0;
+    position: relative; z-index: 9; touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
   .tab-btn.active { color: #1c3f8a; border-bottom-color: #1c3f8a; font-weight: 800; }
   .tab-btn:hover:not(.active) { color: #4b5563; }

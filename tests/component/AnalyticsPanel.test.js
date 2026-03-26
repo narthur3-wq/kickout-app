@@ -69,4 +69,26 @@ describe('AnalyticsPanel legends', () => {
     expect(screen.getByRole('button', { name: 'Missed' })).toBeInTheDocument();
     expect(screen.getByText(/Scored density/i)).toBeInTheDocument();
   });
+
+  it('uses the rendered event set to resolve the legend when the incoming tab type is stale', () => {
+    render(AnalyticsPanel, {
+      props: {
+        analyticsEventType: 'shot',
+        vizEvents: [
+          { id: 'to-1', event_type: 'turnover', direction: 'ours', outcome: 'Won' },
+          { id: 'to-2', event_type: 'turnover', direction: 'theirs', outcome: 'Lost' },
+        ],
+        overlays: [
+          { id: 'to-1', x: 0.2, y: 0.3, outcome: 'Won', marker_shape: 'circle', marker_fill: '#16a34a' },
+          { id: 'to-2', x: 0.4, y: 0.5, outcome: 'Lost', marker_shape: 'square', marker_fill: '#dc2626' },
+        ],
+      },
+    });
+
+    expect(screen.getByText('Turnovers')).toBeInTheDocument();
+    expect(screen.getByText('Won')).toBeInTheDocument();
+    expect(screen.getByText('Lost')).toBeInTheDocument();
+    expect(screen.queryByText('Goal attempt')).not.toBeInTheDocument();
+    expect(screen.queryByText('Blocked')).not.toBeInTheDocument();
+  });
 });

@@ -102,16 +102,16 @@
   ];
 
   $: heatSuccessButtonLabel =
-    analyticsEventType === 'shot' ? 'Scored'
-    : analyticsEventType === 'turnover' ? 'Won'
+    effectiveEventType === 'shot' ? 'Scored'
+    : effectiveEventType === 'turnover' ? 'Won'
     : 'Successful';
 
   $: heatFailureButtonLabel =
-    analyticsEventType === 'shot' ? 'Missed'
+    effectiveEventType === 'shot' ? 'Missed'
     : 'Lost';
 
   $: dotsOutcomeLegend = (() => {
-    if (analyticsEventType === 'shot') {
+    if (effectiveEventType === 'shot') {
       return [
         { label: 'Goal', color: outcomeColor('goal') },
         { label: 'Point', color: outcomeColor('point') },
@@ -120,7 +120,7 @@
         { label: 'Saved', color: outcomeColor('saved') },
       ];
     }
-    if (analyticsEventType === 'turnover') {
+    if (effectiveEventType === 'turnover') {
       return [
         { label: 'Won', color: outcomeColor('won') },
         { label: 'Lost', color: outcomeColor('lost') },
@@ -134,10 +134,10 @@
   })();
 
   $: specialLegend = (() => {
-    if (analyticsEventType === 'shot' && vizEvents.some((e) => String(e.shot_type || '').toLowerCase() === 'goal')) {
+    if (effectiveEventType === 'shot' && vizEvents.some((e) => String(e.shot_type || '').toLowerCase() === 'goal')) {
       return [{ label: 'Goal attempt', ring: 'goal-attempt' }];
     }
-    if (analyticsEventType === 'kickout' && vizEvents.some((e) => e.target_player)) {
+    if (effectiveEventType === 'kickout' && vizEvents.some((e) => e.target_player)) {
       return [{ label: 'Targeted player', ring: 'target' }];
     }
     return [];
@@ -159,16 +159,22 @@
       .sort((a, b) => b.count - a.count);
   })();
 
-  $: isKickoutView = analyticsEventType === 'kickout' || analyticsEventType === 'ALL';
   $: hasBreakEvents = vizEvents.some(e => e.contest_type === 'break');
   $: zoneRetTotal = zoneTableRet.reduce((s, row) => s + row.cells.reduce((rs, c) => rs + c.tot, 0), 0);
 
   const TYPE_LABELS = { 'kickout': 'Kickouts', 'shot': 'Shots', 'turnover': 'Turnovers', 'ALL': 'Analytics' };
-  $: panelTitle = TYPE_LABELS[analyticsEventType] || 'Analytics';
+  $: inferredEventType = (() => {
+    const types = [...new Set(vizEvents.map((event) => String(event?.event_type || 'kickout').toLowerCase()))];
+    return types.length === 1 ? types[0] : analyticsEventType;
+  })();
+  $: effectiveEventType = inferredEventType || analyticsEventType;
+  $: panelTitle = TYPE_LABELS[effectiveEventType] || 'Analytics';
+
+  $: isKickoutView = effectiveEventType === 'kickout' || effectiveEventType === 'ALL';
 
   // Headline summary stats for shots and turnovers
-  $: shotSummary = buildShotSummary(vizEvents, analyticsEventType);
-  $: turnoverSummary = buildTurnoverSummary(vizEvents, analyticsEventType);
+  $: shotSummary = buildShotSummary(vizEvents, effectiveEventType);
+  $: turnoverSummary = buildTurnoverSummary(vizEvents, effectiveEventType);
 
   // Active filter tags for summary bar
   $: filterTags = (() => {
