@@ -284,3 +284,58 @@ test('import can keep current conflicting data while still adding brand-new even
   await expect(page.getByRole('cell', { name: 'Vincents' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Na Fianna' })).toHaveCount(0);
 });
+
+test('analytics legends update to match the active tab', async ({ page }) => {
+  const kickout = storedEvent('legend-ko', {
+    opponent: 'Crokes',
+    event_type: 'kickout',
+    outcome: 'Retained',
+    target_player: '8',
+  });
+  const shot = storedEvent('legend-shot', {
+    opponent: 'Crokes',
+    event_type: 'shot',
+    outcome: 'Goal',
+    shot_type: 'goal',
+  });
+  const turnover = storedEvent('legend-to', {
+    opponent: 'Crokes',
+    event_type: 'turnover',
+    outcome: 'Won',
+  });
+
+  await page.addInitScript(({ events, meta }) => {
+    window.localStorage.clear();
+    window.localStorage.setItem('ko_events', JSON.stringify(events));
+    window.localStorage.setItem('ko_meta', JSON.stringify(meta));
+    window.localStorage.setItem('ko_sync_queue', JSON.stringify([]));
+  }, {
+    events: [kickout, shot, turnover],
+    meta: {
+      team: 'Clontarf',
+      opponent: 'Crokes',
+      match_date: '2026-03-25',
+      period: 'H1',
+      our_goal_at_top: true,
+    },
+  });
+
+  await page.goto('/');
+  const legend = page.locator('.pitch-viz-legend');
+
+  await page.getByRole('button', { name: /^Shots/i }).click();
+  await expect(legend.getByText('Goal attempt')).toBeVisible();
+  await expect(legend.getByText('Blocked')).toBeVisible();
+
+  await page.getByRole('button', { name: /^Kickouts/i }).click();
+  await expect(legend.getByText('Successful')).toBeVisible();
+  await expect(legend.getByText('Dead-ball / foul')).toBeVisible();
+  await expect(legend.getByText('Targeted player')).toBeVisible();
+  await expect(legend.getByText('Goal attempt')).toHaveCount(0);
+
+  await page.getByRole('button', { name: /^Turnovers/i }).click();
+  await expect(legend.getByText('Won')).toBeVisible();
+  await expect(legend.getByText('Lost')).toBeVisible();
+  await expect(legend.getByText('Blocked')).toHaveCount(0);
+  await expect(legend.getByText('Goal attempt')).toHaveCount(0);
+});
