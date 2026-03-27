@@ -2151,7 +2151,7 @@
   .tab-bar {
     flex-shrink: 0; display: flex; background: #fff; border-bottom: 1px solid #e5e7eb;
     overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 0 4px;
-    position: relative; z-index: 8; touch-action: pan-x;
+    position: relative; z-index: 8; overscroll-behavior-x: contain;
   }
   .tab-bar::-webkit-scrollbar { display: none; }
   .tab-btn {

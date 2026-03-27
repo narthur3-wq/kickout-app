@@ -123,6 +123,21 @@ test('top navigation can reach Kickouts from the main tabs', async ({ page }) =>
   await expect(tabBar.getByRole('button', { name: /^Kickouts/i })).toHaveClass(/active/);
 });
 
+test.describe('touch navigation', () => {
+  test.use({ hasTouch: true, isMobile: false, viewport: { width: 1180, height: 820 } });
+
+  test('touch users can open Kickouts directly from Capture', async ({ page }) => {
+    await openFreshApp(page);
+    await setUpMatch(page, { opponent: 'Crokes' });
+
+    const kickoutsTab = page.locator('nav.tab-bar').getByRole('button', { name: /^Kickouts/i });
+    await kickoutsTab.tap();
+
+    await expect(kickoutsTab).toHaveClass(/active/);
+    await expect(page.getByText(/Showing all periods in this view/i)).toBeVisible();
+  });
+});
+
 test('captures a turnover with explicit loser and winner players', async ({ page }) => {
   await openFreshApp(page);
   await setUpMatch(page, { opponent: 'Crokes' });
