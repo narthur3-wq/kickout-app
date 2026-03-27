@@ -490,12 +490,12 @@
       <div class="section-card">
         <div class="section-hd">Timeline <span class="section-ct">{timelineEvents.length}</span></div>
         <div class="timeline-wrap">
-          {#each timelineEvents as e (e.id)}
+          {#each timelineEvents as e, index (e.id)}
             <div
               class="tl-dot {e.flag ? 'tl-flagged' : ''}"
               style="background:{outcomeColor(e.outcome)}"
-              title="#{e.ko_sequence ?? i+1} · {e.outcome} · {e.contest_type} · {e.period} {e.clock}{e.target_player ? ' → #' + e.target_player : ''}{e.notes ? ' — ' + e.notes : ''}"
-            >{e.ko_sequence ?? i+1}</div>
+              title="#{e.ko_sequence ?? index + 1} · {e.outcome} · {e.contest_type} · {e.period} {e.clock}{e.target_player ? ' → #' + e.target_player : ''}{e.notes ? ' — ' + e.notes : ''}"
+            >{e.ko_sequence ?? index + 1}</div>
           {/each}
         </div>
       </div>
