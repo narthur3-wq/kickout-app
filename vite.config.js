@@ -7,9 +7,12 @@ export default defineConfig({
     svelte(),
     VitePWA({
       registerType: 'autoUpdate',
+      useCredentials: true,
+      includeAssets: ['favicon.svg', 'icon.svg', 'crest.png'],
+      manifestFilename: 'manifest.webmanifest',
       manifest: {
-        name: 'Páirc — GAA Match Analyst',
-        short_name: 'Páirc',
+        name: 'P\u00E1irc \u2014 GAA Match Analyst',
+        short_name: 'P\u00E1irc',
         description: 'Live GAA match event capture and analytics',
         start_url: './',
         display: 'standalone',
@@ -22,9 +25,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Cache the app shell + all static assets
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
-        // Don't precache Supabase or external URLs
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api\//],
       },
