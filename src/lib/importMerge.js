@@ -50,7 +50,21 @@ export function planImportMerge(existingEvents = [], importedEvents = []) {
   };
 }
 
+export function extractImportedEvents(parsed) {
+  if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.events)) {
+    return {
+      eventArray: parsed.events,
+      importedMatches: Array.isArray(parsed.matches) ? parsed.matches : [],
+    };
+  }
+  if (Array.isArray(parsed)) {
+    return { eventArray: parsed, importedMatches: [] };
+  }
+  throw new Error('Unrecognised import format. Expected a JSON array or { matches, events } object.');
+}
+
 export function mergeImportedEvents(existingEvents = [], importedEvents = [], strategy = 'skip') {
+
   const plan = planImportMerge(existingEvents, importedEvents);
   const replacements = strategy === 'replace'
     ? new Map(plan.conflictingEvents.map((event) => [event.id, event]))

@@ -375,8 +375,9 @@
       {/if}
     {/if}
 
+    <div class="panel-sections">
     <!-- ── Viz section: Pitch (dots) or Heatmap ── -->
-    <div class="section-card viz-section">
+    <div class="section-card viz-section full-width">
       <div class="viz-controls-bar">
         <div class="viz-seg">
           <button class="vseg {vizMode === 'dots' ? 'vseg-on' : ''}" on:click={() => vizMode = 'dots'}>Dots</button>
@@ -544,7 +545,7 @@
 
     <!-- ── Zone breakdown (kickout only) ── -->
     {#if isKickoutView}
-      <div class="section-card">
+      <div class="section-card full-width">
         <div class="section-hd">Zone Breakdown</div>
         <div class="kpi-grid">
           <div class="kpi">
@@ -552,7 +553,8 @@
             {#if zoneRetTotal < 5}
               <p class="hint">Add more events to see zone breakdown.</p>
             {:else}
-              <table class="kpi-table">
+              <table class="kpi-table" aria-label="Retention rate by zone">
+                <caption class="kpi-table-caption">% shown when n ≥ 5</caption>
                 <thead><tr><th></th><th>L</th><th>C</th><th>R</th></tr></thead>
                 <tbody>
                   {#each zoneTableRet as row (row.D)}
@@ -561,13 +563,13 @@
                       {#each row.cells as c (c.zk)}
                         {@const trend = retTrend(c.pct, c.zk)}
                         <td
-                          style="background:{c.tot >= 8 ? cellColor(c.pct) : c.tot > 0 && c.tot < 3 ? '#f3f4f6' : 'transparent'}"
-                          class="{c.tot >= 3 && c.tot < 8 ? 'low-n' : ''}"
+                          style="background:{c.tot >= 5 ? cellColor(c.pct) : 'transparent'}"
+                          class="{c.tot > 0 && c.tot < 5 ? 'low-n' : ''}"
                           title="{c.ret}/{c.tot} retained"
                         >
-                          {#if c.tot >= 8}
+                          {#if c.tot >= 5}
                             {Math.round(c.pct)}%{#if trend}<span class="trend-{trend}">{trend === 'up' ? ' ▲' : ' ▼'}</span>{/if}
-                          {:else if c.tot >= 3}
+                          {:else if c.tot > 0}
                             n={c.tot}
                           {:else}
                             —
@@ -589,7 +591,8 @@
             {#if overallBreak.tot < 5}
               <p class="hint">Add more events to see zone breakdown.</p>
             {:else}
-              <table class="kpi-table">
+              <table class="kpi-table" aria-label="Break win-rate by zone">
+                <caption class="kpi-table-caption">% shown when n ≥ 5</caption>
                 <thead><tr><th></th><th>L</th><th>C</th><th>R</th></tr></thead>
                 <tbody>
                   {#each zoneTableBreak as row (row.D)}
@@ -597,11 +600,11 @@
                       <th>{row.D}</th>
                       {#each row.cells as c (c.zk)}
                         <td
-                          style="background:{c.tot >= 3 ? cellColor(c.pct) : '#f3f4f6'}"
-                          class="{c.tot > 0 && c.tot < 3 ? 'low-n' : ''}"
+                          style="background:{c.tot >= 5 ? cellColor(c.pct) : 'transparent'}"
+                          class="{c.tot > 0 && c.tot < 5 ? 'low-n' : ''}"
                           title="{c.won}/{c.tot}"
                         >
-                          {#if c.tot >= 3}
+                          {#if c.tot >= 5}
                             {Math.round(c.pct)}%
                           {:else if c.tot > 0}
                             n={c.tot}
@@ -623,7 +626,7 @@
 
     <!-- ── Target players (kickout only) ── -->
     {#if isKickoutView && sortedPlayers.length > 0}
-      <div class="section-card">
+      <div class="section-card full-width">
         <div class="section-hd">
           Target Players
           <div class="player-sort">
@@ -685,6 +688,7 @@
       </div>
     {/if}
 
+    </div><!-- /panel-sections -->
   {/if}<!-- /vizEvents.length > 0 -->
 
 </section>
@@ -944,10 +948,14 @@
   .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .kpi { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
   .kpi-title { font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 8px; }
-  .kpi-table { border-collapse: collapse; font-size: 13px; width: 100%; font-variant-numeric: tabular-nums; }
-  .kpi-table th, .kpi-table td { border: 1px solid #f3f4f6; padding: 7px 8px; text-align: center; }
-  .kpi-table thead th { background: #f9fafb; font-size: 11px; font-weight: 600; color: #9ca3af; border-bottom: 1px solid #e5e7eb; }
-  .kpi-table tbody tr:hover { background: #f9fbf9; }
+  .kpi-table { border-collapse: collapse; font-size: 13px; width: 100%; font-variant-numeric: tabular-nums; caption-side: bottom; border-radius: 8px; overflow: hidden; }
+  .kpi-table-caption { font-size: 10px; color: #9ca3af; text-align: right; padding-top: 4px; font-style: italic; }
+  .kpi-table th, .kpi-table td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: center; }
+  .kpi-table tbody th { text-align: left; font-size: 11px; font-weight: 700; color: #6b7280; background: #f9fafb; text-transform: uppercase; letter-spacing: 0.04em; }
+  .kpi-table thead th { background: #111827; color: #fff; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; border-color: #374151; }
+  .kpi-table tbody tr:hover td, .kpi-table tbody tr:hover th { background-color: rgba(0,0,0,0.03); }
+  .kpi-table td { font-weight: 600; }
+  .low-n { font-size: 11px; color: #9ca3af; font-style: italic; font-weight: 400; }
   .player-table { width: 100%; }
   .player-sort {
     margin-left: auto; display: flex; align-items: center; gap: 4px;
@@ -959,7 +967,6 @@
     color: #6b7280; font-family: inherit;
   }
   .psort.psort-on { background: #1c3f8a; color: #fff; border-color: #1c3f8a; }
-  .low-n { color: #b0b8b0; font-size: 11px; font-style: italic; background: #f3f4f6; }
   :global(.trend-up)   { color: #16a34a; font-weight: 800; }
   :global(.trend-down) { color: #dc2626; font-weight: 800; }
 
@@ -1057,9 +1064,22 @@
   .ss-pct { font-size: 12px; font-weight: 700; width: 38px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
   .ss-null { font-size: 12px; font-weight: 600; color: #d1d5db; width: 38px; text-align: right; flex-shrink: 0; }
 
+  /* ── Responsive section grid ── */
+  .panel-sections {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .section-card.full-width { grid-column: 1 / -1; }
+
   /* ── Desktop whitespace ── */
   @media (min-width: 900px) {
-    .section-card { margin-bottom: 12px; padding: 14px 16px; }
+    .panel-sections {
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+    .section-card { margin-bottom: 0; padding: 14px 16px; }
     .card { margin-bottom: 10px; }
     .kpi-grid { gap: 10px; }
     .kpi { padding: 12px 14px; }

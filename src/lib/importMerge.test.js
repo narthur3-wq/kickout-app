@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeImportedEvents, planImportMerge } from './importMerge.js';
+import { extractImportedEvents, mergeImportedEvents, planImportMerge } from './importMerge.js';
 
 function event(id, overrides = {}) {
   return {
@@ -14,6 +14,59 @@ function event(id, overrides = {}) {
   };
 }
 
+// ── extractImportedEvents ─────────────────────────────────────────────────────
+describe('extractImportedEvents', () => {
+  it('accepts a flat event array (old format)', () => {
+    const arr = [{ id: '1' }, { id: '2' }];
+    const result = extractImportedEvents(arr);
+    expect(result.eventArray).toEqual(arr);
+    expect(result.importedMatches).toEqual([]);
+  });
+
+  it('accepts new { matches, events } format', () => {
+    const matches = [{ id: 'm1' }];
+    const events = [{ id: 'e1' }];
+    const result = extractImportedEvents({ matches, events });
+    expect(result.eventArray).toEqual(events);
+    expect(result.importedMatches).toEqual(matches);
+  });
+
+  it('accepts { events } without matches key — returns empty importedMatches', () => {
+    const events = [{ id: 'e1' }];
+    const result = extractImportedEvents({ events });
+    expect(result.eventArray).toEqual(events);
+    expect(result.importedMatches).toEqual([]);
+  });
+
+  it('accepts { matches: null, events } — coerces to empty importedMatches', () => {
+    const events = [{ id: 'e1' }];
+    const result = extractImportedEvents({ matches: null, events });
+    expect(result.importedMatches).toEqual([]);
+  });
+
+  it('throws on plain object with no events array', () => {
+    expect(() => extractImportedEvents({ foo: 'bar' })).toThrow();
+  });
+
+  it('throws on null', () => {
+    expect(() => extractImportedEvents(null)).toThrow();
+  });
+
+  it('throws on a string', () => {
+    expect(() => extractImportedEvents('[]')).toThrow();
+  });
+
+  it('round-trips: export shape is importable', () => {
+    const matches = [{ id: 'm1', team: 'Clontarf' }];
+    const events = [{ id: 'e1', match_id: 'm1' }];
+    const exported = { matches, events };
+    const result = extractImportedEvents(exported);
+    expect(result.eventArray).toEqual(events);
+    expect(result.importedMatches).toEqual(matches);
+  });
+});
+
+// ── planImportMerge / mergeImportedEvents ─────────────────────────────────────
 describe('importMerge', () => {
   it('treats identical events with different key order as identical duplicates', () => {
     const existing = [event('1', { score_us: '0-1', score_them: '0-0', direction: 'ours' })];

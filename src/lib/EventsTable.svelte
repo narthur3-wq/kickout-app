@@ -173,7 +173,7 @@
   </div>
 
   <div class="tablewrap">
-    <table>
+    <table aria-label="Events log">
       <thead>
         <tr>
           <th>#</th>

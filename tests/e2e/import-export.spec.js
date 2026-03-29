@@ -9,10 +9,11 @@ async function openFreshApp(page) {
 
 async function setUpMatch(page, { team = 'Clontarf', opponent = 'Crokes', date = '2026-03-25' } = {}) {
   await page.getByRole('button', { name: /Tap to set up match/i }).click();
+  await page.getByRole('button', { name: /\+ New match/i }).click();
   await page.getByLabel('Team').fill(team);
   await page.getByLabel('Opponent').fill(opponent);
   await page.getByLabel('Date').fill(date);
-  await page.getByRole('button', { name: 'Done' }).click();
+  await page.getByRole('button', { name: 'Create' }).click();
 }
 
 async function placeLandingPoint(page, position = { x: 220, y: 120 }) {
@@ -33,8 +34,13 @@ test('JSON export can round-trip back into the app', async ({ page }) => {
   const downloadedPath = await download.path();
   const downloadedJson = JSON.parse(await readFile(downloadedPath, 'utf8'));
 
-  expect(downloadedJson).toHaveLength(1);
-  expect(downloadedJson[0]).toEqual(expect.objectContaining({ opponent: 'Na Fianna', outcome: 'Retained' }));
+  expect(downloadedJson).toEqual(expect.objectContaining({
+    matches: expect.any(Array),
+    events: expect.any(Array),
+  }));
+  expect(downloadedJson.matches).toHaveLength(1);
+  expect(downloadedJson.events).toHaveLength(1);
+  expect(downloadedJson.events[0]).toEqual(expect.objectContaining({ opponent: 'Na Fianna', outcome: 'Retained' }));
 
   await page.evaluate(() => window.localStorage.clear());
   await page.reload();

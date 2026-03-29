@@ -37,6 +37,9 @@
     "vitest": "^4.1.1",
     "workbox-window": "^7.4.0"
   },
+  "overrides": {
+    "serialize-javascript": ">=7.0.5"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.2",
     "html2canvas": "^1.4.1"

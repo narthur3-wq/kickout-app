@@ -28,6 +28,10 @@
   $: theirScores = scoreStat(events.filter((event) => (event.event_type || 'kickout') === 'shot' && (event.direction || 'ours') === 'theirs'));
   $: ourKickouts = koStat(events.filter((event) => (event.event_type || 'kickout') === 'kickout' && (event.direction || 'ours') === 'ours'));
   $: theirKickouts = koStat(events.filter((event) => (event.event_type || 'kickout') === 'kickout' && (event.direction || 'ours') === 'theirs'));
+  $: ourTurnovers = koStat(events.filter((event) => event.event_type === 'turnover' && (event.direction || 'ours') === 'ours'));
+  $: theirTurnovers = koStat(events.filter((event) => event.event_type === 'turnover' && (event.direction || 'ours') === 'theirs'));
+  $: turnoverNet = ourTurnovers.won - theirTurnovers.won;
+  $: hasTurnovers = ourTurnovers.total + theirTurnovers.total > 0;
   $: scoreMargin = ourScores.total - theirScores.total;
 
   async function shareDigest() {
@@ -116,13 +120,20 @@
         <div class="restart-pill">
           <span>Our kickouts</span>
           <strong>{ourKickouts.pct ?? '-'}%</strong>
-          <small>{ourKickouts.won}/{ourKickouts.total}</small>
+          <small>{ourKickouts.won}/{ourKickouts.total}{#if insights.kickoutPattern.primaryWinner} · {insights.kickoutPattern.primaryWinner.label}{/if}</small>
         </div>
         <div class="restart-pill">
           <span>Their kickouts</span>
           <strong>{theirKickouts.pct ?? '-'}%</strong>
           <small>{theirKickouts.won}/{theirKickouts.total}</small>
         </div>
+        {#if hasTurnovers}
+          <div class="restart-pill turnover-pill {turnoverNet > 0 ? 'net-pos' : turnoverNet < 0 ? 'net-neg' : ''}">
+            <span>Turnover net</span>
+            <strong>{turnoverNet > 0 ? '+' : ''}{turnoverNet}</strong>
+            <small>ours {ourTurnovers.won}/{ourTurnovers.total} · theirs {theirTurnovers.won}/{theirTurnovers.total}</small>
+          </div>
+        {/if}
       </div>
     </section>
 
@@ -142,12 +153,33 @@
         <div class="eyebrow">Main Threat</div>
         <p class="copy strong">{insights.threat.line}</p>
         {#if insights.threat.mainThreat}
-          <p class="detail">{insights.threat.mainThreat.label}: {insights.threat.mainThreat.points} points from {insights.threat.mainThreat.chances} chances.</p>
+          <p class="detail"><strong>#{insights.threat.mainThreat.label}</strong>: {insights.threat.mainThreat.points} pts from {insights.threat.mainThreat.chances} chances.</p>
+        {/if}
+        {#if insights.threat.secondaryThreat}
+          <p class="detail">Also: #{insights.threat.secondaryThreat.label} — {insights.threat.secondaryThreat.points} pts.</p>
         {/if}
         {#if insights.threat.channelThreat}
-          <p class="detail">Danger side: {insights.threat.channelThreat.label}.</p>
+          <p class="detail threat-side">Danger side: {insights.threat.channelThreat.label}.</p>
         {/if}
       </section>
+
+      {#if insights.scoreMomentum.line || insights.kickoutMomentum.line}
+        <section class="card momentum-card">
+          <div class="eyebrow">Momentum</div>
+          {#if insights.scoreMomentum.line}
+            <p class="copy momentum-line momentum-{insights.scoreMomentum.tone}">
+              <span class="momentum-icon">{insights.scoreMomentum.tone === 'positive' ? '▲' : insights.scoreMomentum.tone === 'negative' ? '▼' : '—'}</span>
+              {insights.scoreMomentum.line}
+            </p>
+          {/if}
+          {#if insights.kickoutMomentum.line}
+            <p class="copy momentum-line momentum-{insights.kickoutMomentum.tone}">
+              <span class="momentum-icon">{insights.kickoutMomentum.tone === 'positive' ? '▲' : insights.kickoutMomentum.tone === 'negative' ? '▼' : '—'}</span>
+              {insights.kickoutMomentum.line}
+            </p>
+          {/if}
+        </section>
+      {/if}
 
       <section class="card">
         <div class="eyebrow">Best Opportunity</div>
@@ -312,7 +344,7 @@
   .restart-strip {
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     gap: 10px;
     margin-top: 4px;
   }
@@ -349,9 +381,28 @@
     padding: 18px;
   }
   .actions-card,
-  .keep-card {
+  .keep-card,
+  .momentum-card {
     grid-column: 1 / -1;
   }
+
+  /* Turnover net pill */
+  .turnover-pill { background: rgba(255,255,255,0.82); }
+  .turnover-pill.net-pos strong { color: #166534; }
+  .turnover-pill.net-neg strong { color: #991b1b; }
+
+  /* Momentum card */
+  .momentum-line {
+    display: flex; align-items: flex-start; gap: 8px; margin-top: 10px;
+    font-size: 14px; line-height: 1.5;
+  }
+  .momentum-icon { font-size: 13px; font-weight: 900; flex-shrink: 0; margin-top: 2px; }
+  .momentum-positive { color: #166534; }
+  .momentum-negative { color: #991b1b; }
+  .momentum-neutral { color: #475569; }
+
+  /* Secondary threat styling */
+  .threat-side { font-style: italic; color: #64748b; }
   .copy,
   .detail {
     margin: 10px 0 0;

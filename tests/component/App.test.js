@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MATCH_KEYS } from '../../src/lib/matchStore.js';
 import { LOCAL_STORAGE_SCOPE, STORAGE_KEYS, storageKey } from '../../src/lib/storageScope.js';
 
 const mockState = vi.hoisted(() => {
@@ -72,6 +73,18 @@ function seedScopedMeta(scope, meta) {
 
 function seedScopedEvents(scope, events) {
   localStorage.setItem(storageKey(STORAGE_KEYS.events, scope), JSON.stringify(events));
+}
+
+function seedScopedMatches(scope, matches) {
+  localStorage.setItem(storageKey(MATCH_KEYS.matches, scope), JSON.stringify(matches));
+}
+
+function seedScopedActiveMatchId(scope, id) {
+  if (id) {
+    localStorage.setItem(storageKey(MATCH_KEYS.activeMatchId, scope), id);
+  } else {
+    localStorage.removeItem(storageKey(MATCH_KEYS.activeMatchId, scope));
+  }
 }
 
 describe('App shell auth and sync', () => {
@@ -156,13 +169,18 @@ describe('App shell auth and sync', () => {
     mockState.getSessionMock.mockResolvedValue({ data: { session } });
     mockState.getUserTeamDetailsMock.mockResolvedValue({ id: null, name: null });
 
-    seedScopedMeta('user:user-2', {
+    seedScopedMatches('user:user-2', [{
+      id: 'match-1',
       team: 'Clontarf',
       opponent: 'Crokes',
       match_date: '2026-03-25',
-      period: 'H1',
-      our_goal_at_top: true,
-    });
+      status: 'open',
+      created_at: '2026-03-25T10:00:00.000Z',
+      updated_at: '2026-03-25T10:00:00.000Z',
+      last_event_at: '2026-03-25T10:00:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId('user:user-2', 'match-1');
 
     await renderApp();
 
@@ -172,5 +190,55 @@ describe('App shell auth and sync', () => {
     await user.click(screen.getByRole('button', { name: /Save Event/i }));
 
     expect(await screen.findByText(/finish onboarding before recording events/i)).toBeInTheDocument();
+  });
+
+  it('falls back to the most recent open match when no active match id is stored', async () => {
+    const session = { user: { id: 'user-3', email: 'analyst@example.com' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches('user:user-3', [
+      {
+        id: 'closed-1',
+        team: 'Clontarf',
+        opponent: 'Na Fianna',
+        match_date: '2026-03-22',
+        status: 'closed',
+        created_at: '2026-03-22T10:00:00.000Z',
+        updated_at: '2026-03-22T12:00:00.000Z',
+        last_event_at: '2026-03-22T12:00:00.000Z',
+        closed_at: '2026-03-22T13:00:00.000Z',
+      },
+      {
+        id: 'open-1',
+        team: 'Clontarf',
+        opponent: 'Kilmacud Crokes',
+        match_date: '2026-03-29',
+        status: 'open',
+        created_at: '2026-03-29T10:00:00.000Z',
+        updated_at: '2026-03-29T12:00:00.000Z',
+        last_event_at: '2026-03-29T12:00:00.000Z',
+        closed_at: null,
+      },
+    ]);
+    seedScopedActiveMatchId('user:user-3', null);
+
+    await renderApp();
+
+    expect(await screen.findByRole('button', { name: /Clontarf vs Kilmacud Crokes/i })).toBeInTheDocument();
+  });
+
+  it('blocks saving until a match exists and opens the setup flow', async () => {
+    const session = { user: { id: 'user-4', email: 'analyst@example.com' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Save Event/i }));
+
+    expect(await screen.findByText(/Create a match before recording events/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Done/i })).toBeInTheDocument();
   });
 });

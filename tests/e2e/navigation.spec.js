@@ -8,10 +8,11 @@ async function openFreshApp(page) {
 
 async function setUpMatch(page, { team = 'Clontarf', opponent = 'Crokes', date = '2026-03-25' } = {}) {
   await page.getByRole('button', { name: /Tap to set up match/i }).click();
+  await page.getByRole('button', { name: /\+ New match/i }).click();
   await page.getByLabel('Team').fill(team);
   await page.getByLabel('Opponent').fill(opponent);
   await page.getByLabel('Date').fill(date);
-  await page.getByRole('button', { name: 'Done' }).click();
+  await page.getByRole('button', { name: 'Create' }).click();
 }
 
 test('moving between tabs keeps Kickouts reachable from every main screen', async ({ page }) => {

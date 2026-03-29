@@ -1,5 +1,6 @@
 <script>
   import Pitch from './lib/Pitch.svelte';
+  import MatchPicker from './lib/MatchPicker.svelte';
   import Login from './lib/Login.svelte';
   import SummaryModal from './lib/SummaryModal.svelte';
   import EventsTable from './lib/EventsTable.svelte';
@@ -20,7 +21,7 @@
   } from './lib/appShellHelpers.js';
   import { buildDraftSignature, isSetupDraftDirty } from './lib/captureDraft.js';
   import { normalizeEventRecord } from './lib/eventRecord.js';
-  import { mergeImportedEvents, planImportMerge } from './lib/importMerge.js';
+  import { extractImportedEvents, mergeImportedEvents, planImportMerge } from './lib/importMerge.js';
   import {
     LOCAL_STORAGE_SCOPE,
     STORAGE_KEYS,
@@ -33,6 +34,20 @@
     storageScopeForUser,
   } from './lib/storageScope.js';
   import { supabase, supabaseConfigured, userHasAccess, getUserTeamDetails, isConfiguredAdmin } from './lib/supabase.js';
+  import {
+    clearMatchStorage,
+    closeMatch,
+    createMatch,
+    inferredMatchKey,
+    loadActiveMatchId,
+    loadMatches,
+    migrateEventsToMatches,
+    reopenMatch,
+    saveActiveMatchId,
+    saveMatches,
+    touchMatchLastEvent,
+    updateMatchFields,
+  } from './lib/matchStore.js';
   import { buildScoreSnapshots } from './lib/score.js';
   import { buildKickoutClockTrend } from './lib/analyticsHelpers.js';
   import { onMount, tick } from 'svelte';
@@ -100,6 +115,11 @@
   let editReturnContext = null;
   let pitchResetToken = 0;
 
+  // ── Match entity state ────────────────────────────────────────────────────
+  let matches = [];
+  let activeMatchId = null;
+  let matchPickerOpen = false;
+
   // ── Viz filters ───────────────────────────────────────────────────────────
   let fContest = new SvelteSet(CONTESTS);
   let fOutcome = new SvelteSet(OUTCOMES);
@@ -121,6 +141,10 @@
     else if (activeTab === 'turnovers') analyticsEventType = 'turnover';
     else                                analyticsEventType = 'ALL';
   }
+
+  // ── Derived match ─────────────────────────────────────────────────────────
+  $: activeMatch = matches.find((m) => m.id === activeMatchId) ?? null;
+  $: isMatchClosed = activeMatch?.status === 'closed';
 
   // Scroll the active tab button into view whenever the tab changes
   $: activeTab, tick().then(() => {
@@ -204,6 +228,33 @@
     setupDraftDate = matchDate;
   }
 
+  function syncShellMatchContext(match = null) {
+    if (!match) {
+      team = '';
+      opponent = '';
+      matchDate = defaultMatchDate();
+      syncSetupDraftFromMatch();
+      return;
+    }
+    team = match.team || '';
+    opponent = match.opponent || '';
+    matchDate = match.match_date || defaultMatchDate();
+    syncSetupDraftFromMatch();
+  }
+
+  function resolveActiveMatchId(matchList = [], preferredId = null) {
+    if (!Array.isArray(matchList) || matchList.length === 0) return null;
+    if (preferredId && matchList.some((match) => match.id === preferredId)) return preferredId;
+    const sorted = [...matchList].sort((a, b) => {
+      const statusDelta = Number(a.status === 'closed') - Number(b.status === 'closed');
+      if (statusDelta !== 0) return statusDelta;
+      const aTime = a.last_event_at || a.updated_at || a.created_at || '';
+      const bTime = b.last_event_at || b.updated_at || b.created_at || '';
+      return bTime.localeCompare(aTime);
+    });
+    return sorted[0]?.id ?? null;
+  }
+
   function resetMatchContext() {
     team = '';
     opponent = '';
@@ -237,6 +288,8 @@
   function resetRuntimeState() {
     events = [];
     undoStack = [];
+    matches = [];
+    activeMatchId = null;
     pendingSync = new SvelteMap();
     syncStatus = '';
     syncMessage = '';
@@ -331,6 +384,42 @@
     return normalizeEventRecord(event, { teamIdFallback: teamId });
   }
 
+  function persistMatches() {
+    if (!storageScope) return;
+    try {
+      saveMatches(matches, storageScope, { storage: localStorage });
+      saveActiveMatchId(activeMatchId, storageScope, { storage: localStorage });
+    } catch {}
+  }
+
+  function loadMatchesFromStorage(scope = storageScope) {
+    const storedMatches = loadMatches(scope, { storage: localStorage });
+    const storedActiveId = loadActiveMatchId(scope, { storage: localStorage });
+
+    if (storedMatches.length > 0) {
+      matches = storedMatches;
+      activeMatchId = resolveActiveMatchId(storedMatches, storedActiveId);
+      syncShellMatchContext(storedMatches.find((match) => match.id === activeMatchId) ?? null);
+      return;
+    }
+
+    // No matches yet — run one-time migration if there are events
+    if (events.length > 0) {
+      const result = migrateEventsToMatches(events, scope, {
+        storage: localStorage,
+        teamId,
+        userId: user?.id ?? null,
+      });
+      if (result.migrated) {
+        events = applyDerivedScoreDisplays(result.updatedEvents);
+        persistLocal();
+      }
+      matches = result.matches;
+      activeMatchId = resolveActiveMatchId(result.matches, result.activeMatchId);
+      syncShellMatchContext(result.matches.find((match) => match.id === activeMatchId) ?? null);
+    }
+  }
+
   function activateStorageScope(scope) {
     metaReady = false;
     storageScope = scope;
@@ -338,6 +427,7 @@
     if (scope) {
       loadFromLocalStorage(scope);
       loadPendingSync(scope);
+      loadMatchesFromStorage(scope);
     }
     syncSetupDraftFromMatch();
     markDraftPristine();
@@ -419,6 +509,12 @@
     period;
     ourGoalAtTop;
     persistMeta();
+  }
+
+  $: if (metaReady && storageScope) {
+    matches;
+    activeMatchId;
+    persistMatches();
   }
 
   // ── Sync queue ───────────────────────────────────────────────────────────
@@ -830,7 +926,24 @@
   function updateCurrentMatchSetup(nextTeam, nextOpponent, nextMatchDate) {
     const previousKey = `${matchDate}|${norm(team)}|${norm(opponent)}`;
     const nextKey = `${nextMatchDate}|${norm(nextTeam)}|${norm(nextOpponent)}`;
-    const currentMatchIds = new Set(events.filter((event) => matchKey(event) === previousKey).map((event) => event.id));
+
+    // Update the active match record if one exists
+    if (activeMatchId) {
+      matches = matches.map((m) =>
+        m.id === activeMatchId
+          ? updateMatchFields(m, { team: nextTeam, opponent: nextOpponent, match_date: nextMatchDate })
+          : m
+      );
+    }
+
+    const currentMatchIds = new Set(
+      events
+        .filter((event) => activeMatchId
+          ? event.match_id === activeMatchId || (!event.match_id && matchKey(event) === previousKey)
+          : matchKey(event) === previousKey
+        )
+        .map((event) => event.id)
+    );
 
     team = nextTeam;
     opponent = nextOpponent;
@@ -840,7 +953,13 @@
       undoStack = [...undoStack.slice(-9), [...events]];
       events = applyDerivedScoreDisplays(events.map((event) => (
         currentMatchIds.has(event.id)
-          ? { ...event, team: nextTeam, opponent: nextOpponent, match_date: nextMatchDate }
+          ? {
+              ...event,
+              ...(activeMatchId && !event.match_id ? { match_id: activeMatchId } : {}),
+              team: nextTeam,
+              opponent: nextOpponent,
+              match_date: nextMatchDate,
+            }
           : event
       )));
       persistLocal();
@@ -863,8 +982,12 @@
       showNotice('error', 'Match date must be YYYY-MM-DD.');
       return;
     }
-    updateCurrentMatchSetup(nextTeam, nextOpponent, nextMatchDate);
-    syncSetupDraftFromMatch();
+    if (activeMatchId) {
+      updateCurrentMatchSetup(nextTeam, nextOpponent, nextMatchDate);
+      syncSetupDraftFromMatch();
+    } else {
+      createAndSelectMatch({ team: nextTeam, opponent: nextOpponent, match_date: nextMatchDate });
+    }
     setupModalOpen = false;
   }
 
@@ -890,6 +1013,14 @@
   }
 
   function validate() {
+    if (!activeMatchId) {
+      if (matches.length > 0) {
+        matchPickerOpen = true;
+        return 'Select a match before recording events.';
+      }
+      openSetupModal();
+      return 'Create a match before recording events.';
+    }
     if (!team.trim() || !opponent.trim()) {
       openSetupModal();
       return 'Set up the match (team and opponent) before logging events.';
@@ -939,13 +1070,12 @@
       const existing = events.find(r => r.id === editingId);
       koSequence = existing?.ko_sequence ?? null;
     } else {
-      const currentKey = `${matchDate}|${norm(team)}|${norm(opponent)}`;
-      const matchEvents = events.filter(e => matchKey(e) === currentKey);
-      koSequence = matchEvents.length + 1;
+      koSequence = currentMatchEvents.length + 1;
     }
 
     return normalizeEventForStorage({
       id:           editingId ?? crypto.randomUUID(),
+      match_id:     activeMatchId ?? null,
       created_at:   originalCreatedAt,
       team_id:      teamId,
       match_date:   matchDate,
@@ -986,6 +1116,7 @@
   }
 
   async function saveEvent() {
+    if (isMatchClosed) { showNotice('error', 'This match is closed. Reopen it before recording events.'); return; }
     const err = validate();
     if (err) { showNotice('error', err); return; }
     const ev = buildEvent();
@@ -1000,6 +1131,14 @@
     events = applyDerivedScoreDisplays(events);
 
     persistLocal();
+
+    // Touch last_event_at on the active match
+    if (activeMatchId) {
+      matches = matches.map((m) =>
+        m.id === activeMatchId ? touchMatchLastEvent(m) : m
+      );
+    }
+
     if (restoreAfterEdit) {
       restoreCaptureContext(restoreAfterEdit);
       editReturnContext = null;
@@ -1059,6 +1198,7 @@
   }
 
   function delEvent(id) {
+    if (isMatchClosed) { showNotice('error', 'This match is closed. Reopen it to delete events.'); return; }
     askConfirm('Delete this event?', () => {
       undoStack = [...undoStack.slice(-9), [...events]];
       events = applyDerivedScoreDisplays(events.filter(e => e.id !== id));
@@ -1070,6 +1210,7 @@
   }
 
   function confirmDeleteAllEvents() {
+    if (isMatchClosed) { showNotice('error', 'This match is closed. Reopen it to delete events.'); return; }
     if (events.length === 0) return;
     askConfirm(
       `Delete all ${events.length} events from this device? You can use Undo once from Capture to restore them if needed.`,
@@ -1093,6 +1234,62 @@
     for (const id of allIds) {
       deleteFromSupabase(id);
     }
+  }
+
+  // ── Match management ──────────────────────────────────────────────────────
+  function doSwitchMatch(id) {
+    if (editingId) cancelEditMode();
+    activeMatchId = resolveActiveMatchId(matches, id);
+    syncShellMatchContext(matches.find((match) => match.id === activeMatchId) ?? null);
+  }
+
+  function switchActiveMatch(id) {
+    if (id === activeMatchId) { matchPickerOpen = false; return; }
+    if (hasUnsaved) {
+      askConfirm(
+        'You have an unsaved event draft. Discard it and switch match?',
+        () => { resetCaptureDraft(); doSwitchMatch(id); matchPickerOpen = false; },
+        'Discard and switch'
+      );
+      return;
+    }
+    doSwitchMatch(id);
+    matchPickerOpen = false;
+  }
+
+  function createAndSelectMatch({ team: t, opponent: o, match_date: d }) {
+    if (!t || !o) { showNotice('error', 'Team and opponent are required.'); return; }
+    const m = createMatch({ team: t, opponent: o, match_date: d || matchDate, team_id: teamId, created_by: user?.id ?? null });
+    matches = [m, ...matches];
+    switchActiveMatch(m.id);
+  }
+
+  function editActiveMatch({ team: t, opponent: o, match_date: d }) {
+    if (!activeMatchId) return;
+    if (!t || !o) { showNotice('error', 'Team and opponent are required.'); return; }
+    const d2 = d || matchDate;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d2)) { showNotice('error', 'Match date must be YYYY-MM-DD.'); return; }
+    updateCurrentMatchSetup(t.trim(), o.trim(), d2);
+    syncSetupDraftFromMatch();
+    matchPickerOpen = false;
+  }
+
+  function closeActiveMatch() {
+    if (!activeMatchId) return;
+    askConfirm(
+      'Close this match? It will become read-only until reopened.',
+      () => {
+        matches = matches.map((m) => m.id === activeMatchId ? closeMatch(m) : m);
+        showNotice('success', 'Match closed. All captures are now locked.');
+      },
+      'Close match'
+    );
+  }
+
+  function reopenActiveMatch() {
+    if (!activeMatchId) return;
+    matches = matches.map((m) => m.id === activeMatchId ? reopenMatch(m) : m);
+    showNotice('success', 'Match reopened.');
   }
 
   function loadToForm(e) {
@@ -1177,7 +1374,10 @@
 
   // ── JSON import / export ──────────────────────────────────────────────────
   function exportJSON() {
-    const blob = new Blob([JSON.stringify(events, null, 2)], { type: 'application/json' });
+    const payload = matches.length > 0
+      ? { matches, events }
+      : events;
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href = url; a.download = 'pairc_events.json'; a.click();
@@ -1185,6 +1385,7 @@
   }
 
   function completeImport(imported, options = {}) {
+    if (isMatchClosed) { showNotice('error', 'This match is closed. Reopen it before importing events.'); return; }
     const { skipSchemaCheck = false, conflictStrategy = null } = options;
     if (!Array.isArray(imported)) throw new Error('Expected a JSON array');
     const REQUIRED = ['id', 'outcome', 'x', 'y'];
@@ -1274,6 +1475,7 @@
   }
 
   function importJSON() {
+    if (isMatchClosed) { showNotice('error', 'This match is closed. Reopen it before importing.'); return; }
     if (supabaseConfigured && user && !teamId) {
       showNotice('error', 'Your account has no team assigned, so imports cannot be synced yet.');
       return;
@@ -1283,8 +1485,20 @@
     input.onchange = async () => {
       const file = input.files?.[0]; if (!file) return;
       try {
-        const text  = await file.text();
-        completeImport(JSON.parse(text));
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        const { eventArray, importedMatches } = extractImportedEvents(parsed);
+
+        // Merge imported match records (preserve existing, add new by id)
+        if (importedMatches.length > 0) {
+          const existingIds = new Set(matches.map((m) => m.id));
+          const newMatches = importedMatches.filter((m) => !existingIds.has(m.id));
+          if (newMatches.length > 0) {
+            matches = [...matches, ...newMatches];
+          }
+        }
+
+        completeImport(eventArray);
       } catch (e) {
         showNotice('error', `Import failed: ${e.message}`, 7000);
       }
@@ -1481,7 +1695,9 @@
 
   // ── Current match events (for Digest tab) ────────────────────────────────
   $: currentKey = `${matchDate}|${norm(team)}|${norm(opponent)}`;
-  $: currentMatchEvents = events.filter(e => matchKey(e) === currentKey);
+  $: currentMatchEvents = activeMatchId
+    ? events.filter((e) => e.match_id === activeMatchId || (!e.match_id && matchKey(e) === currentKey))
+    : events.filter((e) => matchKey(e) === currentKey);
   $: currentPhaseEvents = currentMatchEvents.filter((e) => periodFilter === 'ALL' || e.period === periodFilter);
   $: currentPhaseLabel = periodFilter === 'ALL' ? 'Match (all periods)' : periodFilter;
   $: scoreSnapshots = buildScoreSnapshots(events);
@@ -1712,19 +1928,48 @@
     {/if}
   </nav>
 
+  <!-- Match picker overlay (available on all tabs) -->
+  {#if matchPickerOpen}
+    <div class="modal-backdrop" role="presentation"
+      on:click={() => matchPickerOpen = false}
+      on:keydown={(e) => e.key === 'Escape' && (matchPickerOpen = false)}>
+      <div role="presentation" on:click|stopPropagation on:keydown|stopPropagation>
+        <MatchPicker
+          {matches}
+          {activeMatchId}
+          {isMatchClosed}
+          on:close={() => matchPickerOpen = false}
+          on:select={(e) => switchActiveMatch(e.detail)}
+          on:create={(e) => createAndSelectMatch(e.detail)}
+          on:edit={(e) => editActiveMatch(e.detail)}
+          on:close-match={closeActiveMatch}
+          on:reopen-match={reopenActiveMatch}
+        />
+      </div>
+    </div>
+  {/if}
+
   <!-- ══ CAPTURE TAB ══ -->
   {#if activeTab === 'capture'}
-  <button class="match-ctx-bar" on:click={openSetupModal}>
+  <button class="match-ctx-bar" on:click={() => matchPickerOpen = true}>
     {#if team || opponent}
-      {team || '—'} vs {opponent || '—'}{matchDate ? ' · ' + matchDate : ''} <span class="ctx-edit">✎</span>
+      {team || '—'} vs {opponent || '—'}{matchDate ? ' · ' + matchDate : ''}
+      {#if isMatchClosed}<span class="ctx-closed">Closed</span>{/if}
+      <span class="ctx-edit">✎</span>
     {:else}
       Tap to set up match →
     {/if}
   </button>
 
-  <!-- Match setup modal -->
+  {#if isMatchClosed}
+    <div class="closed-match-banner">
+      Match closed — read-only. <button class="reopen-inline-btn" on:click={reopenActiveMatch}>Reopen</button>
+    </div>
+  {/if}
+
+  <!-- Match setup modal (kept for backward compat, triggered from MatchPicker edit flow) -->
   {#if setupModalOpen}
-    <div class="modal-backdrop" role="button" tabindex="-1" on:click={dismissSetupModal} on:keydown={(e) => e.key === 'Escape' && dismissSetupModal()}>
+    <div class="modal-backdrop" role="presentation" on:click={dismissSetupModal} on:keydown={(e) => e.key === 'Escape' && dismissSetupModal()}>
       <div class="modal-card" role="dialog" aria-modal="true" tabindex="0" aria-label="Match setup" on:click|stopPropagation on:keydown|stopPropagation>
         <div class="modal-header">
           <span class="modal-title">Match Setup</span>
@@ -1992,7 +2237,7 @@
   {/if}
 
   {#if confirmState}
-    <div class="confirm-backdrop" role="button" tabindex="-1" on:click={dismissConfirm} on:keydown={(e) => e.key === 'Escape' && dismissConfirm()}>
+    <div class="confirm-backdrop" role="presentation" on:click={dismissConfirm} on:keydown={(e) => e.key === 'Escape' && dismissConfirm()}>
       <div class="confirm-card" role="alertdialog" aria-modal="true" tabindex="0" aria-label="Confirm action" on:click|stopPropagation on:keydown|stopPropagation>
         <div class="confirm-title">Please confirm</div>
         <div class="confirm-text">{confirmState.message}</div>
@@ -2195,6 +2440,22 @@
   }
   .match-ctx-bar:hover { background: rgba(196, 18, 48, 0.10); }
   .ctx-edit { font-size: 13px; color: #c41230; opacity: 0.7; margin-left: auto; }
+  .ctx-closed {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    background: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 8px;
+    letter-spacing: 0.04em;
+  }
+  .closed-match-banner {
+    background: #fef2f2; border-bottom: 1px solid #fca5a5;
+    padding: 8px 14px; font-size: 13px; font-weight: 600; color: #991b1b;
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  }
+  .reopen-inline-btn {
+    background: none; border: 1px solid #f87171; border-radius: 5px;
+    padding: 3px 10px; font-size: 12px; font-weight: 700; color: #b91c1c;
+    cursor: pointer;
+  }
+  .reopen-inline-btn:hover { background: #fee2e2; }
 
   /* ── Match setup modal ── */
   .modal-backdrop {
@@ -2242,23 +2503,30 @@
 
   /* ── Goal indicator + flip button ── */
   .goal-indicator {
-    font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.9); background: #2d5a33;
-    padding: 5px 12px; letter-spacing: 0.05em;
+    font-size: 13px; font-weight: 800; color: #fff; background: #1a6b22;
+    padding: 8px 14px; letter-spacing: 0.04em;
     flex-shrink: 0; text-transform: uppercase; border-radius: 0;
-    display: flex; align-items: center; justify-content: center; gap: 10px;
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    border-bottom: 2px solid #145c1b;
   }
   .goal-copy {
-    display: flex; align-items: center; justify-content: center; gap: 10px;
+    display: flex; align-items: center; justify-content: center; gap: 14px;
     flex-wrap: wrap;
   }
-  .flip-btn {
-    padding: 3px 9px; font-size: 10px; font-weight: 700;
-    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3);
-    color: rgba(255,255,255,0.85); border-radius: 5px; cursor: pointer;
-    font-family: inherit; letter-spacing: 0.04em; text-transform: uppercase;
-    transition: background 0.12s; line-height: 1.4;
+  .goal-copy span:first-child {
+    font-size: 12px; color: rgba(255,255,255,0.75); font-weight: 600; text-transform: uppercase;
   }
-  .flip-btn:hover { background: rgba(255,255,255,0.28); }
+  .goal-copy span:last-child {
+    font-size: 15px; font-weight: 900; letter-spacing: 0.02em;
+  }
+  .flip-btn {
+    padding: 5px 12px; font-size: 11px; font-weight: 700;
+    background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.4);
+    color: #fff; border-radius: 6px; cursor: pointer;
+    font-family: inherit; letter-spacing: 0.04em; text-transform: uppercase;
+    transition: background 0.12s; line-height: 1.4; flex-shrink: 0;
+  }
+  .flip-btn:hover { background: rgba(255,255,255,0.32); }
 
   /* ── Events tab danger toolbar ── */
   .events-toolbar-danger {
