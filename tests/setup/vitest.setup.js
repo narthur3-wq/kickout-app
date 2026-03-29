@@ -31,6 +31,10 @@ if (!globalThis.scrollTo) {
   globalThis.scrollTo = () => {};
 }
 
+if (!globalThis.HTMLElement.prototype.scrollIntoView) {
+  globalThis.HTMLElement.prototype.scrollIntoView = () => {};
+}
+
 if (!globalThis.URL.createObjectURL) {
   globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
 }

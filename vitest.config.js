@@ -15,6 +15,8 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html'],
       reportsDirectory: './coverage',
+      include: ['src/**/*.{js,svelte}'],
+      exclude: ['src/**/*.test.js'],
     },
   },
 });

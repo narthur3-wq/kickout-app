@@ -12,6 +12,24 @@ beforeAll(() => {
 });
 
 describe('AnalyticsPanel legends', () => {
+  it('shows a resettable empty state when filters remove all events', async () => {
+    const user = userEvent.setup();
+
+    render(AnalyticsPanel, {
+      props: {
+        analyticsEventType: 'kickout',
+        vizEvents: [],
+        periodFilter: 'H1',
+        oppFilter: 'crokes',
+        ytdOnly: true,
+      },
+    });
+
+    expect(screen.getByText(/No Kickouts logged yet/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Reset filters/i }));
+    expect(screen.getByText(/Adjust or clear your filters to see data/i)).toBeInTheDocument();
+  });
+
   it('renders a kickout dots legend with team, outcome, and target cues', () => {
     render(AnalyticsPanel, {
       props: {
@@ -34,6 +52,25 @@ describe('AnalyticsPanel legends', () => {
     expect(screen.getByText('Targeted player')).toBeInTheDocument();
     expect(screen.getByText('Highlighted end = our goal')).toBeInTheDocument();
     expect(screen.queryByText('Event locations')).not.toBeInTheDocument();
+  });
+
+  it('shows kickout-only controls like Summary and the small-sample notice', () => {
+    render(AnalyticsPanel, {
+      props: {
+        analyticsEventType: 'kickout',
+        vizEvents: [
+          { id: 'ko-1', event_type: 'kickout', direction: 'ours', outcome: 'Retained' },
+          { id: 'ko-2', event_type: 'kickout', direction: 'theirs', outcome: 'Lost' },
+        ],
+        overlays: [
+          { id: 'ko-1', x: 0.2, y: 0.3, outcome: 'Retained', marker_shape: 'circle', marker_fill: '#16a34a' },
+          { id: 'ko-2', x: 0.4, y: 0.5, outcome: 'Lost', marker_shape: 'square', marker_fill: '#dc2626' },
+        ],
+      },
+    });
+
+    expect(screen.getByRole('button', { name: /Summary/i })).toBeInTheDocument();
+    expect(screen.getByText(/small sample/i)).toBeInTheDocument();
   });
 
   it('renders richer shot outcome legends and heat labels', async () => {
@@ -68,6 +105,24 @@ describe('AnalyticsPanel legends', () => {
     expect(screen.getByRole('button', { name: 'Scored' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Missed' })).toBeInTheDocument();
     expect(screen.getByText(/Scored density/i)).toBeInTheDocument();
+  });
+
+  it('renders the shot headline summary and omits the kickout summary button', () => {
+    render(AnalyticsPanel, {
+      props: {
+        analyticsEventType: 'shot',
+        vizEvents: [
+          { id: 's1', event_type: 'shot', direction: 'ours', outcome: 'Goal', shot_type: 'goal' },
+          { id: 's2', event_type: 'shot', direction: 'ours', outcome: 'Point', shot_type: 'point' },
+          { id: 's3', event_type: 'shot', direction: 'theirs', outcome: 'Wide', shot_type: 'point' },
+          { id: 's4', event_type: 'shot', direction: 'theirs', outcome: 'Saved', shot_type: 'goal' },
+        ],
+      },
+    });
+
+    expect(screen.getByText('Total shots')).toBeInTheDocument();
+    expect(screen.getByText('Goal chances / scored')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Summary/i })).not.toBeInTheDocument();
   });
 
   it('shows kickout landing and pickup toggles plus kickout heat labels when break events exist', async () => {
@@ -116,6 +171,22 @@ describe('AnalyticsPanel legends', () => {
     expect(screen.getByRole('button', { name: 'Won' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Lost' })).toBeInTheDocument();
     expect(screen.queryByText('Successful')).not.toBeInTheDocument();
+  });
+
+  it('renders the turnover headline summary chips', () => {
+    render(AnalyticsPanel, {
+      props: {
+        analyticsEventType: 'turnover',
+        vizEvents: [
+          { id: 't1', event_type: 'turnover', direction: 'ours', outcome: 'Won' },
+          { id: 't2', event_type: 'turnover', direction: 'theirs', outcome: 'Lost' },
+          { id: 't3', event_type: 'turnover', direction: 'ours', outcome: 'Won' },
+        ],
+      },
+    });
+
+    expect(screen.getByText('Total turnovers')).toBeInTheDocument();
+    expect(screen.getByText('Net')).toBeInTheDocument();
   });
 
   it('uses the rendered event set to resolve the legend when the incoming tab type is stale', () => {
