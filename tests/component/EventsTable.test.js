@@ -88,4 +88,26 @@ describe('EventsTable', () => {
     expect(screen.getByText('12:34')).toBeInTheDocument();
     expect(screen.getByText(/These filters only change the Events table/i)).toBeInTheDocument();
   });
+
+  it('searches turnover loser and winner details in the players column', async () => {
+    const user = userEvent.setup();
+    render(EventsTable, {
+      props: {
+        events: [
+          makeEvent({
+            id: 'turnover-1',
+            event_type: 'turnover',
+            outcome: 'Won',
+            turnover_lost_player: '2',
+            turnover_won_player: '14',
+            opponent: 'Crokes',
+          }),
+        ],
+      },
+    });
+
+    await user.type(screen.getByPlaceholderText(/Search type, opponent, clock, player, zone/i), '#14');
+
+    expect(screen.getByText(/Lost Crokes #2 \/ Won Clontarf #14/i)).toBeInTheDocument();
+  });
 });

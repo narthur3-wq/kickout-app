@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "lint": "eslint . --ignore-pattern coverage",
+    "lint": "eslint . --ignore-pattern coverage --ignore-pattern dev-dist",
     "test": "npm run test:unit",
     "test:unit": "vitest run",
     "test:watch": "vitest",

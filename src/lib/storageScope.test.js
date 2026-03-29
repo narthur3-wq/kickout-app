@@ -98,4 +98,42 @@ describe('storageScope helpers', () => {
     expect(storage.getItem('ko_meta')).toBeNull();
     expect(storage.getItem('ko_sync_queue')).toBeNull();
   });
+
+  it('merges local data into an existing user scope without dropping newer scoped records', () => {
+    const storage = {
+      values: new Map([
+        ['ko_events', JSON.stringify([{ id: 'local-1', outcome: 'Retained' }, { id: 'shared-1', outcome: 'Lost' }])],
+        ['ko_meta', JSON.stringify({ team: 'Clontarf', opponent: 'Boden', match_date: '2026-03-25', period: 'H2', our_goal_at_top: false })],
+        ['ko_sync_queue', JSON.stringify([{ id: 'local-1', op: 'upsert' }])],
+        ['ko_events:user:abc', JSON.stringify([{ id: 'remote-1', outcome: 'Point' }, { id: 'shared-1', outcome: 'Retained' }])],
+        ['ko_meta:user:abc', JSON.stringify({ team: 'Clontarf', opponent: 'Na Fianna', match_date: '2026-03-24', period: 'H1', our_goal_at_top: true })],
+        ['ko_sync_queue:user:abc', JSON.stringify([{ id: 'remote-1', op: 'delete' }])],
+      ]),
+      getItem(key) { return this.values.get(key) ?? null; },
+      setItem(key, value) { this.values.set(key, value); },
+      removeItem(key) { this.values.delete(key); },
+    };
+
+    const result = migrateLocalScopeToUserScope('user:abc', { storage });
+
+    expect(result).toEqual({ migrated: true, eventCount: 2, reason: 'migrated' });
+    expect(readScopeSnapshot('user:abc', { storage })).toEqual({
+      events: [
+        { id: 'remote-1', outcome: 'Point' },
+        { id: 'shared-1', outcome: 'Lost' },
+        { id: 'local-1', outcome: 'Retained' },
+      ],
+      meta: {
+        team: 'Clontarf',
+        opponent: 'Boden',
+        match_date: '2026-03-25',
+        period: 'H2',
+        our_goal_at_top: false,
+      },
+      pendingSync: [
+        ['remote-1', 'delete'],
+        ['local-1', 'upsert'],
+      ],
+    });
+  });
 });

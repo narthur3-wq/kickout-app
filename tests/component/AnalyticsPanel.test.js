@@ -70,6 +70,54 @@ describe('AnalyticsPanel legends', () => {
     expect(screen.getByText(/Scored density/i)).toBeInTheDocument();
   });
 
+  it('shows kickout landing and pickup toggles plus kickout heat labels when break events exist', async () => {
+    const user = userEvent.setup();
+
+    render(AnalyticsPanel, {
+      props: {
+        analyticsEventType: 'kickout',
+        vizEvents: [
+          { id: 'k1', event_type: 'kickout', direction: 'ours', outcome: 'Retained', contest_type: 'break', target_player: '8' },
+        ],
+        overlays: [
+          { id: 'k1', x: 0.2, y: 0.3, outcome: 'Retained', marker_shape: 'circle', marker_fill: '#16a34a', marker_ring: 'target' },
+        ],
+      },
+    });
+
+    expect(screen.getByRole('button', { name: 'Landing' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pickup' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Heat' }));
+    expect(screen.getByRole('button', { name: 'Density' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Successful' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Lost' })).toBeInTheDocument();
+  });
+
+  it('uses won and lost labels for turnover heat maps', async () => {
+    const user = userEvent.setup();
+
+    render(AnalyticsPanel, {
+      props: {
+        analyticsEventType: 'turnover',
+        vizEvents: [
+          { id: 't1', event_type: 'turnover', direction: 'ours', outcome: 'Won' },
+          { id: 't2', event_type: 'turnover', direction: 'theirs', outcome: 'Lost' },
+        ],
+        overlays: [
+          { id: 't1', x: 0.2, y: 0.3, outcome: 'Won', marker_shape: 'circle', marker_fill: '#16a34a' },
+          { id: 't2', x: 0.4, y: 0.5, outcome: 'Lost', marker_shape: 'square', marker_fill: '#dc2626' },
+        ],
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Heat' }));
+
+    expect(screen.getByRole('button', { name: 'Won' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Lost' })).toBeInTheDocument();
+    expect(screen.queryByText('Successful')).not.toBeInTheDocument();
+  });
+
   it('uses the rendered event set to resolve the legend when the incoming tab type is stale', () => {
     render(AnalyticsPanel, {
       props: {

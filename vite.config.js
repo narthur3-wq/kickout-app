@@ -8,6 +8,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       useCredentials: true,
+      devOptions: {
+        enabled: true,
+      },
       includeAssets: ['favicon.svg', 'icon.svg', 'crest.png'],
       manifestFilename: 'manifest.webmanifest',
       manifest: {
