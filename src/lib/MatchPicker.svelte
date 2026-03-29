@@ -5,11 +5,13 @@
   export let matches = [];
   export let activeMatchId = null;
   export let isMatchClosed = false;
+  export let activeEventCount = 0;
+  export let startInCreateMode = false;
 
   const dispatch = createEventDispatcher();
 
   // ── View state ──────────────────────────────────────────────────────────
-  let view = 'list'; // 'list' | 'create' | 'edit'
+  let view = startInCreateMode ? 'create' : 'list'; // 'list' | 'create' | 'edit'
   let draftTeam = '';
   let draftOpponent = '';
   let draftDate = defaultMatchDate();
@@ -51,6 +53,10 @@
   }
 
   function cancel() {
+    if (matches.length === 0 && view === 'create') {
+      dispatch('close');
+      return;
+    }
     view = 'list';
   }
 </script>
@@ -148,9 +154,16 @@
       <label>Opponent<input bind:value={draftOpponent} /></label>
       <label>Date<input type="date" bind:value={draftDate} /></label>
     </div>
+    <p class="helper-text">
+      {#if activeEventCount > 0}
+        Updating this match will refresh the team, opponent, and date on {activeEventCount} attached event{activeEventCount === 1 ? '' : 's'} so exports and history stay aligned.
+      {:else}
+        Updating these details will change the active match record.
+      {/if}
+    </p>
     <div class="form-actions">
       <button class="cancel-btn" on:click={cancel}>Cancel</button>
-      <button class="save-btn" on:click={submitEdit}>Save</button>
+      <button class="save-btn" on:click={submitEdit}>Update match</button>
     </div>
   {/if}
 
@@ -257,6 +270,13 @@
 
   .form-actions {
     display: flex; gap: 8px; padding: 0 16px 16px; justify-content: flex-end;
+  }
+  .helper-text {
+    margin: 0;
+    padding: 0 16px 12px;
+    color: #6b7280;
+    font-size: 12px;
+    line-height: 1.45;
   }
   .cancel-btn {
     padding: 8px 16px; border: 1px solid #d1d5db; border-radius: 6px;

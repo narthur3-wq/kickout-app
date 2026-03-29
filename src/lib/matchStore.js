@@ -11,31 +11,74 @@ function normText(value) {
   return String(value ?? '').trim().toLowerCase();
 }
 
+function resolveMatchDate(record) {
+  return record?.match_date || String(record?.created_at || '').slice(0, 10);
+}
+
+function sanitizeStatus(status) {
+  return status === 'closed' ? 'closed' : 'open';
+}
+
 /**
  * The inferred match key used before explicit match records existed.
  * Kept here so migration can group events by the same key the shell used.
  */
 export function inferredMatchKey(event) {
-  const date = event?.match_date || String(event?.created_at || '').slice(0, 10);
+  const date = resolveMatchDate(event);
   return `${date}|${normText(event?.team)}|${normText(event?.opponent)}`;
 }
 
+export function matchIdentityKey(match) {
+  return inferredMatchKey(match);
+}
+
 // ── Match factory ─────────────────────────────────────────────────────────────
-export function createMatch({ team, opponent, match_date, team_id = null, created_by = null } = {}) {
+export function createMatch({
+  id,
+  team,
+  opponent,
+  match_date,
+  team_id = null,
+  created_by = null,
+  status = 'open',
+  created_at,
+  updated_at,
+  last_event_at = null,
+  closed_at = null,
+} = {}) {
   const now = new Date().toISOString();
+  const nextStatus = sanitizeStatus(status);
+  const nextCreatedAt = created_at ?? now;
+  const nextUpdatedAt = updated_at ?? nextCreatedAt;
   return {
-    id: crypto.randomUUID(),
+    id: id ?? crypto.randomUUID(),
     team_id: team_id ?? null,
     team: String(team ?? '').trim(),
     opponent: String(opponent ?? '').trim(),
-    match_date: match_date ?? '',
-    status: 'open',
-    created_at: now,
-    updated_at: now,
-    last_event_at: null,
+    match_date: match_date ?? resolveMatchDate({ created_at: nextCreatedAt }),
+    status: nextStatus,
+    created_at: nextCreatedAt,
+    updated_at: nextUpdatedAt,
+    last_event_at,
     created_by: created_by ?? null,
-    closed_at: null,
+    closed_at: nextStatus === 'closed' ? (closed_at ?? nextUpdatedAt) : null,
   };
+}
+
+export function normalizeMatchRecord(match, { teamIdFallback = null, userIdFallback = null } = {}) {
+  return createMatch({
+    id: match?.id,
+    team: match?.team,
+    opponent: match?.opponent,
+    match_date: resolveMatchDate(match),
+    team_id: match?.team_id ?? teamIdFallback,
+    created_by: match?.created_by ?? userIdFallback,
+    status: match?.status,
+    created_at: match?.created_at,
+    updated_at: match?.updated_at,
+    last_event_at: match?.last_event_at ?? null,
+    closed_at: match?.closed_at ?? null,
+  });
 }
 
 // ── Match mutations (pure — return new objects) ───────────────────────────────

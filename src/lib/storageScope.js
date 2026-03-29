@@ -4,6 +4,7 @@ export const STORAGE_KEYS = {
   events: 'ko_events',
   meta: 'ko_meta',
   sync: 'ko_sync_queue',
+  matchSync: 'ko_match_sync_queue',
 };
 
 export function storageScopeForUser(nextUser, supabaseConfigured) {
@@ -75,6 +76,7 @@ export function readScopeSnapshot(scope, options = {}) {
     events: readStoredJson(STORAGE_KEYS.events, [], scope, { storage }),
     meta: readStoredJson(STORAGE_KEYS.meta, {}, scope, { storage }),
     pendingSync: parsePendingSyncEntries(readStoredJson(STORAGE_KEYS.sync, [], scope, { storage })),
+    pendingMatchSync: parsePendingSyncEntries(readStoredJson(STORAGE_KEYS.matchSync, [], scope, { storage })),
   };
 }
 
@@ -88,6 +90,7 @@ export function migrateLocalScopeToUserScope(targetScope, options = {}) {
   const localHasData =
     localSnapshot.events.length > 0 ||
     localSnapshot.pendingSync.length > 0 ||
+    localSnapshot.pendingMatchSync.length > 0 ||
     hasMeaningfulMeta(localSnapshot.meta);
 
   if (!localHasData) {
@@ -106,6 +109,11 @@ export function migrateLocalScopeToUserScope(targetScope, options = {}) {
     mergedPendingById.set(id, op);
   }
 
+  const mergedPendingMatchesById = new Map(targetSnapshot.pendingMatchSync);
+  for (const [id, op] of localSnapshot.pendingMatchSync) {
+    mergedPendingMatchesById.set(id, op);
+  }
+
   const mergedMeta = hasMeaningfulMeta(localSnapshot.meta)
     ? { ...targetSnapshot.meta, ...localSnapshot.meta }
     : targetSnapshot.meta;
@@ -113,13 +121,15 @@ export function migrateLocalScopeToUserScope(targetScope, options = {}) {
   const eventsKey = storageKey(STORAGE_KEYS.events, targetScope);
   const metaKey = storageKey(STORAGE_KEYS.meta, targetScope);
   const syncKey = storageKey(STORAGE_KEYS.sync, targetScope);
-  if (!eventsKey || !metaKey || !syncKey) {
+  const matchSyncKey = storageKey(STORAGE_KEYS.matchSync, targetScope);
+  if (!eventsKey || !metaKey || !syncKey || !matchSyncKey) {
     return { migrated: false, eventCount: 0, reason: 'invalid-target' };
   }
 
   storage.setItem(eventsKey, JSON.stringify([...mergedEventsById.values()]));
   storage.setItem(metaKey, JSON.stringify(mergedMeta));
   storage.setItem(syncKey, JSON.stringify([...mergedPendingById].map(([id, op]) => ({ id, op }))));
+  storage.setItem(matchSyncKey, JSON.stringify([...mergedPendingMatchesById].map(([id, op]) => ({ id, op }))));
 
   for (const baseKey of Object.values(STORAGE_KEYS)) {
     const localKey = storageKey(baseKey, LOCAL_STORAGE_SCOPE);

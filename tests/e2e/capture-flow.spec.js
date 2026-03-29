@@ -9,12 +9,11 @@ async function openFreshApp(page) {
 }
 
 async function setUpMatch(page, { team = 'Clontarf', opponent = 'Crokes', date = '2026-03-25' } = {}) {
-  await page.getByRole('button', { name: /Tap to set up match/i }).click();
-  await page.getByRole('button', { name: /\+ New match/i }).click();
+  await page.getByRole('button', { name: /Tap to (set up|create)/i }).click();
   await page.getByLabel('Team').fill(team);
   await page.getByLabel('Opponent').fill(opponent);
   await page.getByLabel('Date').fill(date);
-  await page.getByRole('button', { name: 'Create' }).click();
+  await page.getByRole('dialog', { name: 'Match picker' }).getByRole('button', { name: 'Create', exact: true }).click();
 }
 
 async function placeLandingPoint(page, position = { x: 220, y: 120 }) {
@@ -164,7 +163,8 @@ test('updates the current match setup without silently splitting saved events', 
   await page.locator('button.match-ctx-bar').click();
   await page.getByRole('button', { name: 'Edit' }).click();
   await page.getByLabel('Opponent').fill('Vincents');
-  await page.getByRole('dialog', { name: 'Match picker' }).getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('dialog', { name: 'Match picker' }).getByRole('button', { name: 'Update match' }).click();
+  await page.locator('.confirm-card').getByRole('button', { name: 'Update match', exact: true }).click();
 
   await page.getByRole('button', { name: /Events/i }).click();
   await expect(page.getByRole('cell', { name: 'Vincents' })).toBeVisible();

@@ -93,10 +93,12 @@ describe('storageScope helpers', () => {
         our_goal_at_top: true,
       },
       pendingSync: [['local-1', 'upsert']],
+      pendingMatchSync: [],
     });
     expect(storage.getItem('ko_events')).toBeNull();
     expect(storage.getItem('ko_meta')).toBeNull();
     expect(storage.getItem('ko_sync_queue')).toBeNull();
+    expect(storage.getItem('ko_match_sync_queue')).toBeNull();
   });
 
   it('merges local data into an existing user scope without dropping newer scoped records', () => {
@@ -108,6 +110,7 @@ describe('storageScope helpers', () => {
         ['ko_events:user:abc', JSON.stringify([{ id: 'remote-1', outcome: 'Point' }, { id: 'shared-1', outcome: 'Retained' }])],
         ['ko_meta:user:abc', JSON.stringify({ team: 'Clontarf', opponent: 'Na Fianna', match_date: '2026-03-24', period: 'H1', our_goal_at_top: true })],
         ['ko_sync_queue:user:abc', JSON.stringify([{ id: 'remote-1', op: 'delete' }])],
+        ['ko_match_sync_queue:user:abc', JSON.stringify([{ id: 'match-1', op: 'upsert' }])],
       ]),
       getItem(key) { return this.values.get(key) ?? null; },
       setItem(key, value) { this.values.set(key, value); },
@@ -134,6 +137,7 @@ describe('storageScope helpers', () => {
         ['remote-1', 'delete'],
         ['local-1', 'upsert'],
       ],
+      pendingMatchSync: [['match-1', 'upsert']],
     });
   });
 });

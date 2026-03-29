@@ -228,7 +228,62 @@ describe('App shell auth and sync', () => {
     expect(await screen.findByRole('button', { name: /Clontarf vs Kilmacud Crokes/i })).toBeInTheDocument();
   });
 
-  it('blocks saving until a match exists and opens the setup flow', async () => {
+  it('loads shared matches from Supabase into the current match context', async () => {
+    const session = { user: { id: 'user-remote', email: 'analyst@example.com' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+    mockState.selectOrderMock
+      .mockResolvedValueOnce({
+        data: [{
+          id: 'remote-match',
+          team_id: 'team-1',
+          team: 'Clontarf',
+          opponent: 'Kilmacud Crokes',
+          match_date: '2026-03-29',
+          status: 'open',
+          created_at: '2026-03-29T10:00:00.000Z',
+          updated_at: '2026-03-29T12:00:00.000Z',
+          last_event_at: '2026-03-29T12:00:00.000Z',
+          closed_at: null,
+        }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [], error: null });
+
+    await renderApp();
+
+    expect(await screen.findByRole('button', { name: /Clontarf vs Kilmacud Crokes/i })).toBeInTheDocument();
+    expect(mockState.fromMock).toHaveBeenCalledWith('matches');
+    expect(mockState.fromMock).toHaveBeenCalledWith('events');
+  });
+
+  it('syncs a newly created match to Supabase for shared selection', async () => {
+    const session = { user: { id: 'user-create', email: 'analyst@example.com' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Tap to create your first match/i }));
+    await user.type(screen.getByLabelText('Team'), 'Clontarf');
+    await user.type(screen.getByLabelText('Opponent'), 'Na Fianna');
+    await user.clear(screen.getByLabelText('Date'));
+    await user.type(screen.getByLabelText('Date'), '2026-04-01');
+    await user.click(screen.getByRole('button', { name: 'Create', exact: true }));
+
+    await waitFor(() => {
+      expect(mockState.fromMock).toHaveBeenCalledWith('matches');
+      expect(mockState.upsertMock).toHaveBeenCalledWith(expect.objectContaining({
+        team: 'Clontarf',
+        opponent: 'Na Fianna',
+        match_date: '2026-04-01',
+        team_id: 'team-1',
+      }));
+    });
+  });
+
+  it('blocks saving until a match exists and opens the match picker in create mode', async () => {
     const session = { user: { id: 'user-4', email: 'analyst@example.com' } };
     mockState.sessionState.session = session;
     mockState.getSessionMock.mockResolvedValue({ data: { session } });
@@ -239,6 +294,8 @@ describe('App shell auth and sync', () => {
     await user.click(await screen.findByRole('button', { name: /Save Event/i }));
 
     expect(await screen.findByText(/Create a match before recording events/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Done/i })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: /Match picker/i })).toBeInTheDocument();
+    expect(screen.getByText('New match')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create' })).toBeInTheDocument();
   });
 });

@@ -21,7 +21,13 @@
   } from './lib/appShellHelpers.js';
   import { buildDraftSignature, isSetupDraftDirty } from './lib/captureDraft.js';
   import { normalizeEventRecord } from './lib/eventRecord.js';
-  import { extractImportedEvents, mergeImportedEvents, planImportMerge } from './lib/importMerge.js';
+  import {
+    describeMatchImportSummary,
+    extractImportedEvents,
+    mergeImportedEvents,
+    mergeImportedMatches,
+    planImportMerge,
+  } from './lib/importMerge.js';
   import {
     LOCAL_STORAGE_SCOPE,
     STORAGE_KEYS,
@@ -41,7 +47,9 @@
     inferredMatchKey,
     loadActiveMatchId,
     loadMatches,
+    matchIdentityKey,
     migrateEventsToMatches,
+    normalizeMatchRecord,
     reopenMatch,
     saveActiveMatchId,
     saveMatches,
@@ -103,6 +111,7 @@
   let activeTab = 'capture';
   let savedFlash = false;
   let pendingSync = new SvelteMap(); // id -> 'upsert' | 'delete'
+  let pendingMatchSync = new SvelteMap(); // id -> 'upsert'
   let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
   let syncMessage = '';
   let metaReady = false;
@@ -119,6 +128,7 @@
   let matches = [];
   let activeMatchId = null;
   let matchPickerOpen = false;
+  let matchPickerStartInCreateMode = false;
 
   // ── Viz filters ───────────────────────────────────────────────────────────
   let fContest = new SvelteSet(CONTESTS);
@@ -145,6 +155,11 @@
   // ── Derived match ─────────────────────────────────────────────────────────
   $: activeMatch = matches.find((m) => m.id === activeMatchId) ?? null;
   $: isMatchClosed = activeMatch?.status === 'closed';
+  $: matchContextPrompt = matches.length === 0
+    ? 'Tap to create your first match →'
+    : activeMatchId
+      ? ''
+      : 'Tap to select or create a match →';
 
   // Scroll the active tab button into view whenever the tab changes
   $: activeTab, tick().then(() => {
@@ -242,6 +257,16 @@
     syncSetupDraftFromMatch();
   }
 
+  function openMatchPicker(options = {}) {
+    matchPickerStartInCreateMode = !!options.startInCreateMode;
+    matchPickerOpen = true;
+  }
+
+  function closeMatchPicker() {
+    matchPickerOpen = false;
+    matchPickerStartInCreateMode = false;
+  }
+
   function resolveActiveMatchId(matchList = [], preferredId = null) {
     if (!Array.isArray(matchList) || matchList.length === 0) return null;
     if (preferredId && matchList.some((match) => match.id === preferredId)) return preferredId;
@@ -290,7 +315,10 @@
     undoStack = [];
     matches = [];
     activeMatchId = null;
+    matchPickerStartInCreateMode = false;
+    matchPickerOpen = false;
     pendingSync = new SvelteMap();
+    pendingMatchSync = new SvelteMap();
     syncStatus = '';
     syncMessage = '';
     backupReminder = false;
@@ -384,6 +412,13 @@
     return normalizeEventRecord(event, { teamIdFallback: teamId });
   }
 
+  function normalizeMatchForStorage(match) {
+    return normalizeMatchRecord(match, {
+      teamIdFallback: teamId,
+      userIdFallback: user?.id ?? null,
+    });
+  }
+
   function persistMatches() {
     if (!storageScope) return;
     try {
@@ -427,6 +462,7 @@
     if (scope) {
       loadFromLocalStorage(scope);
       loadPendingSync(scope);
+      loadPendingMatchSync(scope);
       loadMatchesFromStorage(scope);
     }
     syncSetupDraftFromMatch();
@@ -440,6 +476,39 @@
     }
     try {
       const result = migrateLocalScopeToUserScope(nextScope, { storage: localStorage });
+      const localActiveMatchId = loadActiveMatchId(LOCAL_STORAGE_SCOPE, { storage: localStorage });
+      const localMatches = loadMatches(LOCAL_STORAGE_SCOPE, { storage: localStorage });
+      const userMatches = loadMatches(nextScope, { storage: localStorage });
+      if (localMatches.length > 0) {
+        const mergedMatchesById = Object.fromEntries(userMatches.map((match) => [match.id, match]));
+        for (const match of localMatches) {
+          mergedMatchesById[match.id] = match;
+        }
+        saveMatches(Object.values(mergedMatchesById), nextScope, { storage: localStorage });
+        clearMatchStorage(LOCAL_STORAGE_SCOPE, { storage: localStorage });
+      }
+
+      const userActiveMatchId = loadActiveMatchId(nextScope, { storage: localStorage });
+      if (!userActiveMatchId && localActiveMatchId) {
+        saveActiveMatchId(localActiveMatchId, nextScope, { storage: localStorage });
+        saveActiveMatchId(null, LOCAL_STORAGE_SCOPE, { storage: localStorage });
+      }
+
+      const localMatchSyncKey = storageKey(STORAGE_KEYS.matchSync, LOCAL_STORAGE_SCOPE);
+      const userMatchSyncKey = storageKey(STORAGE_KEYS.matchSync, nextScope);
+      if (localMatchSyncKey && userMatchSyncKey) {
+        const localPendingMatches = parsePendingSyncEntries(JSON.parse(localStorage.getItem(localMatchSyncKey) || '[]'));
+        const userPendingMatches = parsePendingSyncEntries(JSON.parse(localStorage.getItem(userMatchSyncKey) || '[]'));
+        if (localPendingMatches.length > 0) {
+          const mergedPendingMatches = Object.fromEntries(userPendingMatches);
+          for (const [id, op] of localPendingMatches) mergedPendingMatches[id] = op;
+          localStorage.setItem(
+            userMatchSyncKey,
+            JSON.stringify(Object.entries(mergedPendingMatches).map(([id, op]) => ({ id, op })))
+          );
+          localStorage.removeItem(localMatchSyncKey);
+        }
+      }
       return result.migrated ? result : null;
     } catch (error) {
       console.error('Local data migration failed', error);
@@ -549,6 +618,18 @@
       pendingSync = new SvelteMap();
     }
   }
+  function loadPendingMatchSync(scope = storageScope) {
+    const key = storageKey(STORAGE_KEYS.matchSync, scope);
+    if (!key) {
+      pendingMatchSync = new SvelteMap();
+      return;
+    }
+    try {
+      pendingMatchSync = new SvelteMap(parsePendingSyncEntries(JSON.parse(localStorage.getItem(key) || '[]')));
+    } catch {
+      pendingMatchSync = new SvelteMap();
+    }
+  }
   function savePendingSync() {
     const key = storageKey(STORAGE_KEYS.sync, storageScope);
     if (!key) return;
@@ -559,13 +640,39 @@
       );
     } catch {}
   }
+  function savePendingMatchSync() {
+    const key = storageKey(STORAGE_KEYS.matchSync, storageScope);
+    if (!key) return;
+    try {
+      localStorage.setItem(
+        key,
+        JSON.stringify([...pendingMatchSync].map(([id, op]) => ({ id, op })))
+      );
+    } catch {}
+  }
   function queuePendingSync(id, op) {
     pendingSync.set(id, op);
     savePendingSync();
   }
+  function queuePendingMatchSync(id) {
+    pendingMatchSync.set(id, 'upsert');
+    savePendingMatchSync();
+  }
   function clearPendingSync(id) {
     pendingSync.delete(id);
     savePendingSync();
+  }
+  function clearPendingMatchSync(id) {
+    pendingMatchSync.delete(id);
+    savePendingMatchSync();
+  }
+  function refreshSyncStateFromQueues() {
+    if (pendingSync.size === 0 && pendingMatchSync.size === 0) {
+      syncStatus = 'synced';
+      clearSyncMessage();
+    } else if (syncStatus !== 'error') {
+      syncStatus = 'syncing';
+    }
   }
   function setSyncError(message) {
     syncStatus = 'error';
@@ -606,8 +713,37 @@
     confirmState = null;
     action?.();
   }
+  async function upsertMatchToSupabase(match) {
+    if (!match) return;
+    if (!supabase || !user || !isOnline) {
+      if (user) queuePendingMatchSync(match.id);
+      return;
+    }
+    queuePendingMatchSync(match.id);
+    const { error } = await supabase.from('matches').upsert(normalizeMatchForStorage(match));
+    if (error) {
+      console.error('Supabase match upsert failed', match.id, error.message);
+      setSyncError(`Match update queued but cloud sync failed: ${error.message}`);
+    } else {
+      clearPendingMatchSync(match.id);
+      refreshSyncStateFromQueues();
+    }
+  }
   async function flushSyncQueue() {
-    if (!supabase || !user || pendingSync.size === 0 || !isOnline) return;
+    if (!supabase || !user || (!pendingSync.size && !pendingMatchSync.size) || !isOnline) return;
+    for (const [id] of [...pendingMatchSync]) {
+      const match = matches.find((item) => item.id === id);
+      if (!match) {
+        clearPendingMatchSync(id);
+        continue;
+      }
+      const { error } = await supabase.from('matches').upsert(normalizeMatchForStorage(match));
+      if (!error) {
+        clearPendingMatchSync(id);
+      } else {
+        setSyncError(`Some match updates are blocked from syncing: ${error.message}`);
+      }
+    }
     for (const [id, op] of [...pendingSync]) {
       if (op === 'delete') {
         const { error } = await supabase.from('events').delete().eq('id', id);
@@ -624,6 +760,7 @@
         clearPendingSync(id);
         continue;
       }
+      if (ev.match_id && pendingMatchSync.has(ev.match_id)) continue;
       const { error } = await supabase.from('events').upsert(normalizeEventForStorage(ev));
       if (!error) {
         clearPendingSync(id);
@@ -631,10 +768,7 @@
         setSyncError(`Some saves are blocked from syncing: ${error.message}`);
       }
     }
-    if (pendingSync.size === 0) {
-      syncStatus = 'synced';
-      clearSyncMessage();
-    }
+    refreshSyncStateFromQueues();
   }
 
   // ── Supabase helpers ──────────────────────────────────────────────────────
@@ -647,13 +781,66 @@
     syncStatus = 'syncing';
     clearSyncMessage();
     try {
+      const { data: matchData, error: matchError } = await supabase
+        .from('matches')
+        .select('*')
+        .eq('team_id', teamId)
+        .order('updated_at', { ascending: false });
+      if (matchError) throw matchError;
+
       const { data, error } = await supabase
         .from('events')
         .select('*')
         .eq('team_id', teamId)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      const remoteEvents = (data || []).map(normalizeEventForStorage);
+
+      let remoteMatches = (matchData || []).map(normalizeMatchForStorage);
+      let remoteEvents = (data || []).map(normalizeEventForStorage);
+      let remoteBackfill = null;
+
+      if (remoteMatches.length === 0 && remoteEvents.length > 0) {
+        remoteBackfill = mergeImportedMatches([], [], remoteEvents, {
+          teamId,
+          userId: user?.id ?? null,
+        });
+        remoteMatches = remoteBackfill.matches.map(normalizeMatchForStorage);
+        remoteEvents = remoteBackfill.events.map(normalizeEventForStorage);
+      }
+
+      const remoteMatchIds = new Set(remoteMatches.map((match) => match.id));
+      const localOnlyMatches = matches
+        .filter((match) => !remoteMatchIds.has(match.id) && !pendingMatchSync.has(match.id))
+        .map(normalizeMatchForStorage);
+      const remoteFilteredMatches = remoteMatches.filter((match) => !pendingMatchSync.has(match.id));
+      const pendingLocalMatches = matches
+        .filter((match) => pendingMatchSync.get(match.id) === 'upsert')
+        .map(normalizeMatchForStorage);
+      matches = [...remoteFilteredMatches, ...localOnlyMatches, ...pendingLocalMatches];
+      activeMatchId = resolveActiveMatchId(matches, activeMatchId);
+      syncShellMatchContext(matches.find((match) => match.id === activeMatchId) ?? null);
+
+      if (remoteBackfill?.matches?.length) {
+        const { error: matchBackfillError } = await supabase.from('matches').upsert(remoteBackfill.matches.map(normalizeMatchForStorage));
+        if (matchBackfillError) {
+          for (const match of remoteBackfill.matches) queuePendingMatchSync(match.id);
+          throw matchBackfillError;
+        }
+        const { error: eventBackfillError } = await supabase.from('events').upsert(remoteBackfill.events.map(normalizeEventForStorage));
+        if (eventBackfillError) {
+          for (const event of remoteBackfill.events) queuePendingSync(event.id, 'upsert');
+          throw eventBackfillError;
+        }
+      }
+
+      if (localOnlyMatches.length > 0) {
+        const { error: localMatchUpsertError } = await supabase.from('matches').upsert(localOnlyMatches);
+        if (localMatchUpsertError) {
+          for (const match of localOnlyMatches) queuePendingMatchSync(match.id);
+          throw localMatchUpsertError;
+        }
+      }
+
       // Merge: Supabase is source of truth for events not in the pending queue.
       // Any event currently queued (pending upsert or delete) is authoritative locally —
       // do not overwrite it with the remote version, and do not re-add locally deleted events.
@@ -673,12 +860,7 @@
       }
       persistLocal();
       await flushSyncQueue();
-      if (pendingSync.size === 0) {
-        syncStatus = 'synced';
-        clearSyncMessage();
-      } else if (syncStatus !== 'error') {
-        syncStatus = 'syncing';
-      }
+      refreshSyncStateFromQueues();
     } catch (e) {
       console.error('Sync failed', e);
       setSyncError(e?.message || 'Sync failed.');
@@ -690,6 +872,14 @@
       if (user) queuePendingSync(ev.id, 'upsert');
       return;
     }
+    if (ev.match_id) {
+      const match = matches.find((item) => item.id === ev.match_id);
+      if (match) await upsertMatchToSupabase(match);
+      if (pendingMatchSync.has(ev.match_id)) {
+        queuePendingSync(ev.id, 'upsert');
+        return;
+      }
+    }
     const { error } = await supabase.from('events').upsert(normalizeEventForStorage(ev));
     if (error) {
       console.error('Supabase upsert failed', ev.id, error.message);
@@ -697,10 +887,7 @@
       setSyncError(`Save queued but cloud sync failed: ${error.message}`);
     } else {
       clearPendingSync(ev.id);
-      if (pendingSync.size === 0) {
-        syncStatus = 'synced';
-        clearSyncMessage();
-      }
+      refreshSyncStateFromQueues();
     }
   }
 
@@ -716,10 +903,7 @@
       setSyncError(`Delete queued but cloud sync failed: ${error.message}`);
     } else {
       clearPendingSync(id);
-      if (pendingSync.size === 0) {
-        syncStatus = 'synced';
-        clearSyncMessage();
-      }
+      refreshSyncStateFromQueues();
     }
   }
 
@@ -746,7 +930,12 @@
     if (!supabase || !user || !teamId) return;
     stopRealtimeSync();
     realtimeChannel = supabase
-      .channel(`events-live-${user.id}-${teamId}`)
+      .channel(`pairc-live-${user.id}-${teamId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `team_id=eq.${teamId}` }, (payload) => {
+        const changedId = payload.new?.id ?? payload.old?.id;
+        if (changedId && pendingMatchSync.has(changedId)) return;
+        scheduleRealtimeSync();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'events', filter: `team_id=eq.${teamId}` }, (payload) => {
         const changedId = payload.new?.id ?? payload.old?.id;
         if (changedId && pendingSync.has(changedId)) return;
@@ -926,12 +1115,13 @@
   function updateCurrentMatchSetup(nextTeam, nextOpponent, nextMatchDate) {
     const previousKey = `${matchDate}|${norm(team)}|${norm(opponent)}`;
     const nextKey = `${nextMatchDate}|${norm(nextTeam)}|${norm(nextOpponent)}`;
+    let nextActiveMatch = null;
 
     // Update the active match record if one exists
     if (activeMatchId) {
       matches = matches.map((m) =>
         m.id === activeMatchId
-          ? updateMatchFields(m, { team: nextTeam, opponent: nextOpponent, match_date: nextMatchDate })
+          ? (nextActiveMatch = updateMatchFields(m, { team: nextTeam, opponent: nextOpponent, match_date: nextMatchDate }))
           : m
       );
     }
@@ -968,6 +1158,12 @@
       }
       showNotice('success', `Updated match setup for ${currentMatchIds.size} existing event(s).`, 5000);
     }
+
+    if (nextActiveMatch) {
+      upsertMatchToSupabase(nextActiveMatch);
+    }
+
+    return nextActiveMatch;
   }
 
   function commitSetupModal() {
@@ -1014,16 +1210,14 @@
 
   function validate() {
     if (!activeMatchId) {
-      if (matches.length > 0) {
-        matchPickerOpen = true;
-        return 'Select a match before recording events.';
-      }
-      openSetupModal();
-      return 'Create a match before recording events.';
+      openMatchPicker({ startInCreateMode: matches.length === 0 });
+      return matches.length > 0
+        ? 'Select a match before recording events.'
+        : 'Create a match before recording events.';
     }
     if (!team.trim() || !opponent.trim()) {
-      openSetupModal();
-      return 'Set up the match (team and opponent) before logging events.';
+      openMatchPicker();
+      return 'Complete the match details before logging events.';
     }
     if (supabaseConfigured && user && !teamId) {
       return 'Your account has no team assigned. Ask your admin to finish onboarding before recording events.';
@@ -1244,24 +1438,33 @@
   }
 
   function switchActiveMatch(id) {
-    if (id === activeMatchId) { matchPickerOpen = false; return; }
+    if (id === activeMatchId) { closeMatchPicker(); return; }
     if (hasUnsaved) {
       askConfirm(
         'You have an unsaved event draft. Discard it and switch match?',
-        () => { resetCaptureDraft(); doSwitchMatch(id); matchPickerOpen = false; },
+        () => { resetCaptureDraft(); doSwitchMatch(id); closeMatchPicker(); },
         'Discard and switch'
       );
       return;
     }
     doSwitchMatch(id);
-    matchPickerOpen = false;
+    closeMatchPicker();
   }
 
   function createAndSelectMatch({ team: t, opponent: o, match_date: d }) {
     if (!t || !o) { showNotice('error', 'Team and opponent are required.'); return; }
-    const m = createMatch({ team: t, opponent: o, match_date: d || matchDate, team_id: teamId, created_by: user?.id ?? null });
+    const match_date = d || matchDate;
+    const desiredKey = matchIdentityKey({ team: t, opponent: o, match_date });
+    const existing = matches.find((match) => matchIdentityKey(match) === desiredKey);
+    if (existing) {
+      switchActiveMatch(existing.id);
+      showNotice('success', `Selected existing match: ${existing.team} v ${existing.opponent}.`, 5000);
+      return;
+    }
+    const m = createMatch({ team: t, opponent: o, match_date, team_id: teamId, created_by: user?.id ?? null });
     matches = [m, ...matches];
     switchActiveMatch(m.id);
+    upsertMatchToSupabase(m);
   }
 
   function editActiveMatch({ team: t, opponent: o, match_date: d }) {
@@ -1269,17 +1472,40 @@
     if (!t || !o) { showNotice('error', 'Team and opponent are required.'); return; }
     const d2 = d || matchDate;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d2)) { showNotice('error', 'Match date must be YYYY-MM-DD.'); return; }
-    updateCurrentMatchSetup(t.trim(), o.trim(), d2);
-    syncSetupDraftFromMatch();
-    matchPickerOpen = false;
+    const nextTeam = t.trim();
+    const nextOpponent = o.trim();
+    const unchanged = nextTeam === team && nextOpponent === opponent && d2 === matchDate;
+    if (unchanged) {
+      closeMatchPicker();
+      return;
+    }
+
+    const applyEdit = () => {
+      updateCurrentMatchSetup(nextTeam, nextOpponent, d2);
+      syncSetupDraftFromMatch();
+      closeMatchPicker();
+    };
+
+    if (currentMatchEvents.length > 0) {
+      askConfirm(
+        `Update this match and refresh team, opponent, and date on ${currentMatchEvents.length} attached event(s)? This keeps exports and match history aligned.`,
+        applyEdit,
+        'Update match'
+      );
+      return;
+    }
+
+    applyEdit();
   }
 
   function closeActiveMatch() {
-    if (!activeMatchId) return;
+    if (!activeMatchId || !activeMatch) return;
     askConfirm(
       'Close this match? It will become read-only until reopened.',
       () => {
-        matches = matches.map((m) => m.id === activeMatchId ? closeMatch(m) : m);
+        const nextClosedMatch = closeMatch(activeMatch);
+        matches = matches.map((m) => m.id === activeMatchId ? nextClosedMatch : m);
+        upsertMatchToSupabase(nextClosedMatch);
         showNotice('success', 'Match closed. All captures are now locked.');
       },
       'Close match'
@@ -1287,8 +1513,10 @@
   }
 
   function reopenActiveMatch() {
-    if (!activeMatchId) return;
-    matches = matches.map((m) => m.id === activeMatchId ? reopenMatch(m) : m);
+    if (!activeMatchId || !activeMatch) return;
+    const nextOpenMatch = reopenMatch(activeMatch);
+    matches = matches.map((m) => m.id === activeMatchId ? nextOpenMatch : m);
+    upsertMatchToSupabase(nextOpenMatch);
     showNotice('success', 'Match reopened.');
   }
 
@@ -1386,7 +1614,7 @@
 
   function completeImport(imported, options = {}) {
     if (isMatchClosed) { showNotice('error', 'This match is closed. Reopen it before importing events.'); return; }
-    const { skipSchemaCheck = false, conflictStrategy = null } = options;
+    const { skipSchemaCheck = false, conflictStrategy = null, matchImportSummary = null, nextMatches = null } = options;
     if (!Array.isArray(imported)) throw new Error('Expected a JSON array');
     const REQUIRED = ['id', 'outcome', 'x', 'y'];
     const invalid = imported.filter(e =>
@@ -1400,7 +1628,7 @@
         `${unknownVer.length} record(s) use a newer schema version. Import them anyway?`,
         () => {
           try {
-            completeImport(imported, { skipSchemaCheck: true });
+            completeImport(imported, { skipSchemaCheck: true, matchImportSummary, nextMatches });
           } catch (e) {
             showNotice('error', `Import failed: ${e.message}`, 7000);
           }
@@ -1422,7 +1650,7 @@
         `${importPlan.conflictingCount} existing event(s) have different data in this file. Replace those events with the imported versions, or keep your current versions and import only brand-new events?`,
         () => {
           try {
-            completeImport(imported, { skipSchemaCheck: true, conflictStrategy: 'replace' });
+            completeImport(imported, { skipSchemaCheck: true, conflictStrategy: 'replace', matchImportSummary, nextMatches });
           } catch (e) {
             showNotice('error', `Import failed: ${e.message}`, 7000);
           }
@@ -1431,7 +1659,7 @@
         {
           secondaryAction: () => {
             try {
-              completeImport(imported, { skipSchemaCheck: true, conflictStrategy: 'skip' });
+              completeImport(imported, { skipSchemaCheck: true, conflictStrategy: 'skip', matchImportSummary, nextMatches });
             } catch (e) {
               showNotice('error', `Import failed: ${e.message}`, 7000);
             }
@@ -1444,14 +1672,17 @@
 
     const { events: mergedEvents, upsertEvents, plan } = mergeImportedEvents(events, normalizedImported, conflictStrategy || 'skip');
     if (upsertEvents.length === 0) {
+      if (nextMatches) matches = nextMatches;
       const duplicateMessage = plan.conflictingCount > 0
         ? `${plan.conflictingCount} conflicting duplicate(s) were kept as current data.`
         : `${plan.duplicateCount} duplicate(s) matched existing data.`;
-      showNotice('success', `No new events imported. ${duplicateMessage}`, 7000);
+      const matchNote = describeMatchImportSummary(matchImportSummary);
+      showNotice('success', `No new events imported. ${duplicateMessage}${matchNote ? ` ${matchNote}` : ''}`, 7000);
       return;
     }
 
     undoStack = [...undoStack.slice(-9), [...events]];
+    if (nextMatches) matches = nextMatches;
     events = applyDerivedScoreDisplays(mergedEvents);
     persistLocal();
     if (upsertEvents.length > 0) {
@@ -1465,7 +1696,8 @@
     const identicalNote = plan.identicalCount > 0
       ? ` ${plan.identicalCount} identical duplicate(s) skipped.`
       : '';
-    showNotice('success', `Imported ${plan.newEvents.length} new event(s).${actionNote}${identicalNote}`, 7000);
+    const matchNote = describeMatchImportSummary(matchImportSummary);
+    showNotice('success', `Imported ${plan.newEvents.length} new event(s).${actionNote}${identicalNote}${matchNote ? ` ${matchNote}` : ''}`, 7000);
   }
 
   function switchTab(nextTab) {
@@ -1488,17 +1720,15 @@
         const text = await file.text();
         const parsed = JSON.parse(text);
         const { eventArray, importedMatches } = extractImportedEvents(parsed);
+        const mergedMatchImport = mergeImportedMatches(matches, importedMatches, eventArray, {
+          teamId,
+          userId: user?.id ?? null,
+        });
 
-        // Merge imported match records (preserve existing, add new by id)
-        if (importedMatches.length > 0) {
-          const existingIds = new Set(matches.map((m) => m.id));
-          const newMatches = importedMatches.filter((m) => !existingIds.has(m.id));
-          if (newMatches.length > 0) {
-            matches = [...matches, ...newMatches];
-          }
-        }
-
-        completeImport(eventArray);
+        completeImport(mergedMatchImport.events, {
+          matchImportSummary: mergedMatchImport.summary,
+          nextMatches: mergedMatchImport.matches,
+        });
       } catch (e) {
         showNotice('error', `Import failed: ${e.message}`, 7000);
       }
@@ -1931,14 +2161,16 @@
   <!-- Match picker overlay (available on all tabs) -->
   {#if matchPickerOpen}
     <div class="modal-backdrop" role="presentation"
-      on:click={() => matchPickerOpen = false}
-      on:keydown={(e) => e.key === 'Escape' && (matchPickerOpen = false)}>
+      on:click={closeMatchPicker}
+      on:keydown={(e) => e.key === 'Escape' && closeMatchPicker()}>
       <div role="presentation" on:click|stopPropagation on:keydown|stopPropagation>
         <MatchPicker
           {matches}
           {activeMatchId}
           {isMatchClosed}
-          on:close={() => matchPickerOpen = false}
+          activeEventCount={currentMatchEvents.length}
+          startInCreateMode={matchPickerStartInCreateMode}
+          on:close={closeMatchPicker}
           on:select={(e) => switchActiveMatch(e.detail)}
           on:create={(e) => createAndSelectMatch(e.detail)}
           on:edit={(e) => editActiveMatch(e.detail)}
@@ -1951,13 +2183,13 @@
 
   <!-- ══ CAPTURE TAB ══ -->
   {#if activeTab === 'capture'}
-  <button class="match-ctx-bar" on:click={() => matchPickerOpen = true}>
+  <button class="match-ctx-bar" on:click={() => openMatchPicker({ startInCreateMode: matches.length === 0 })}>
     {#if team || opponent}
       {team || '—'} vs {opponent || '—'}{matchDate ? ' · ' + matchDate : ''}
       {#if isMatchClosed}<span class="ctx-closed">Closed</span>{/if}
       <span class="ctx-edit">✎</span>
     {:else}
-      Tap to set up match →
+      {matchContextPrompt}
     {/if}
   </button>
 

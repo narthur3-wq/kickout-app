@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { extractImportedEvents, mergeImportedEvents, planImportMerge } from './importMerge.js';
+import {
+  describeMatchImportSummary,
+  extractImportedEvents,
+  mergeImportedEvents,
+  mergeImportedMatches,
+  planImportMerge,
+} from './importMerge.js';
 
 function event(id, overrides = {}) {
   return {
@@ -122,5 +128,69 @@ describe('importMerge', () => {
     expect(merged.events.find((item) => item.id === '1')?.opponent).toBe('Crokes');
     expect(merged.events.find((item) => item.id === '2')?.opponent).toBe('Vincents');
     expect(merged.upsertEvents.map((item) => item.id)).toEqual(['2']);
+  });
+
+  it('links imported matches with different ids when they represent the same logical fixture', () => {
+    const existingMatches = [
+      {
+        id: 'local-match',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        match_date: '2026-03-25',
+        status: 'open',
+        created_at: '2026-03-25T10:00:00.000Z',
+        updated_at: '2026-03-25T10:00:00.000Z',
+      },
+    ];
+    const importedMatches = [
+      {
+        id: 'imported-match',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        match_date: '2026-03-25',
+      },
+    ];
+    const importedEvents = [
+      event('42', { match_id: 'imported-match', match_date: '2026-03-25', opponent: 'Crokes' }),
+    ];
+
+    const merged = mergeImportedMatches(existingMatches, importedMatches, importedEvents);
+
+    expect(merged.matches).toHaveLength(1);
+    expect(merged.events[0].match_id).toBe('local-match');
+    expect(merged.summary.linkedCount).toBe(1);
+  });
+
+  it('creates a match from legacy event-only imports when no explicit match exists', () => {
+    const importedEvents = [
+      event('legacy-1', { match_date: '2026-04-01', opponent: 'Na Fianna' }),
+      event('legacy-2', { match_date: '2026-04-01', opponent: 'Na Fianna' }),
+    ];
+
+    const merged = mergeImportedMatches([], [], importedEvents, {
+      teamId: 'team-1',
+      userId: 'user-1',
+    });
+
+    expect(merged.matches).toHaveLength(1);
+    expect(merged.summary.createdFromEventsCount).toBe(1);
+    expect(merged.events[0].match_id).toBeTruthy();
+    expect(merged.events[0].match_id).toBe(merged.events[1].match_id);
+    expect(merged.matches[0].team_id).toBe('team-1');
+    expect(merged.matches[0].created_by).toBe('user-1');
+  });
+
+  it('describes imported match changes for user-facing notices', () => {
+    const description = describeMatchImportSummary({
+      addedCount: 1,
+      linkedCount: 2,
+      createdFromEventsCount: 3,
+      sameIdConflictCount: 4,
+    });
+
+    expect(description).toContain('Added 1 new match record');
+    expect(description).toContain('Linked 2 imported match record');
+    expect(description).toContain('Created 3 match record');
+    expect(description).toContain('4 imported match record');
   });
 });

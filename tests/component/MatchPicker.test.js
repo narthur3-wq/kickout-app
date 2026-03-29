@@ -70,13 +70,13 @@ describe('MatchPicker', () => {
         matches: [],
         activeMatchId: null,
         isMatchClosed: false,
+        startInCreateMode: true,
       },
       events: {
         create: onCreate,
       },
     });
 
-    await user.click(screen.getByRole('button', { name: /\+ New match/i }));
     await user.type(screen.getByLabelText('Team'), 'Clontarf');
     await user.type(screen.getByLabelText('Opponent'), 'Na Fianna');
     await user.clear(screen.getByLabelText('Date'));
@@ -101,6 +101,7 @@ describe('MatchPicker', () => {
         matches: [makeMatch({ id: 'open-1', opponent: 'Crokes' })],
         activeMatchId: 'open-1',
         isMatchClosed: false,
+        activeEventCount: 3,
       },
       events: {
         edit: onEdit,
@@ -108,9 +109,10 @@ describe('MatchPicker', () => {
     });
 
     await user.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.getByText(/refresh the team, opponent, and date on 3 attached events/i)).toBeInTheDocument();
     await user.clear(screen.getByLabelText('Opponent'));
     await user.type(screen.getByLabelText('Opponent'), 'St Vincents');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.click(screen.getByRole('button', { name: 'Update match' }));
 
     expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({
       detail: expect.objectContaining({
@@ -118,6 +120,20 @@ describe('MatchPicker', () => {
         opponent: 'St Vincents',
       }),
     }));
+  });
+
+  it('opens directly in create mode when requested', () => {
+    render(MatchPicker, {
+      props: {
+        matches: [],
+        activeMatchId: null,
+        isMatchClosed: false,
+        startInCreateMode: true,
+      },
+    });
+
+    expect(screen.getByText('New match')).toBeInTheDocument();
+    expect(screen.getByLabelText('Team')).toBeInTheDocument();
   });
 
   it('dispatches close and reopen actions for the active match', async () => {
