@@ -7,6 +7,9 @@ A mobile-first progressive web app for live GAA match analysis. An analyst captu
 - [User Guide](documentation/user-guide.md) - how to use the app during a match
 - [Technical Spec](documentation/technical-spec.md) - architecture, data model, coordinate system, build and deploy
 - [CTO Briefing](documentation/cto-briefing.md) - product overview, tech rationale, scaling considerations
+- [Product Positioning](documentation/product-positioning.md) - what Pairc is, and what it is not
+- [Visual Language](documentation/visual-language.md) - how pitch maps encode team, result, and special annotations
+- [Multi-Analyst Setup](documentation/multi-analyst-setup.md) - recommended setup for two analysts on one match
 
 ## Quick Start
 

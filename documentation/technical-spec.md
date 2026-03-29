@@ -1,233 +1,255 @@
-# Páirc — Technical Specification
+# Pairc - Technical Specification
 
-**Version:** 1.1
-**Date:** March 2026
-**Stack:** Svelte 5 · Vite 7 · Supabase · JavaScript
+## Overview
 
----
+Pairc is a Svelte 5 progressive web app for live GAA match analysis. It is an offline-first client application with optional Supabase auth and sync.
 
-## 1. Overview
+The current product focus is:
 
-Páirc is a progressive web app (PWA) for live GAA match analysis. A single analyst captures events during a match — kickouts, shots, and turnovers — by tapping a pitch diagram. The app derives analytics in real time and produces a shareable digest.
+- live capture
+- live analyst interpretation
+- coach-facing match summaries
 
----
+It is not intended to be a full club operations platform.
 
-## 2. Architecture
+## Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  Browser (PWA)                                           │
-│                                                          │
-│  App.svelte ─── state + derived analytics                │
-│      │                                                   │
-│      ├── CaptureForm.svelte  (event input)               │
-│      ├── Pitch.svelte        (SVG pitch + click/kb nav)  │
-│      ├── AnalyticsPanel.svelte (stats, charts)           │
-│      ├── DigestPanel.svelte  (shareable match summary)   │
-│      ├── EventsTable.svelte  (searchable event log)      │
-│      └── Login.svelte        (Supabase Auth)             │
-│                                                          │
-│  localStorage ── ko_events, ko_meta, ko_sync_queue       │
-└─────────────────────────────┬───────────────────────────┘
-                              │ HTTPS / supabase-js
-                    ┌─────────▼─────────┐
-                    │  Supabase          │
-                    │  Auth (email/pw)   │
-                    │  Postgres: events  │
-                    └───────────────────┘
-```
+High-level shape:
 
-### Key design decisions
+- `src/App.svelte`
+  - app shell
+  - auth/session handling
+  - match setup and capture state
+  - sync orchestration
+  - tab routing
+- `src/lib/CaptureForm.svelte`
+  - event form UI
+- `src/lib/Pitch.svelte`
+  - pitch rendering and capture interaction
+- `src/lib/AnalyticsPanel.svelte`
+  - Kickouts / Shots / Turnovers analysis
+- `src/lib/LivePanel.svelte`
+  - analyst-first live read
+- `src/lib/DigestPanel.svelte`
+  - coach-facing summary and image export
+- `src/lib/EventsTable.svelte`
+  - event log, search, edit support
+- `src/lib/AdminPanel.svelte`
+  - lightweight admin/onboarding operations
 
-| Decision | Rationale |
-|---|---|
-| Offline-first (localStorage primary) | Reliable at pitchside where connectivity is poor |
-| Sync queue | Failed Supabase writes are retried automatically on reconnect |
-| Derived score | Score is computed from Shot events (Goals×3 + Points), never entered manually |
-| Normalised coordinates | y=0 always means own goal end, regardless of which physical end the team defends — ensures correct analytics for home vs away |
-| Auto-flip on H2 | Switching to H2 period automatically mirrors `ourGoalAtTop` so pitch orientation stays correct without operator action |
+Supporting helper modules include:
 
----
+- `analyticsHelpers.js`
+- `appShellHelpers.js`
+- `captureDraft.js`
+- `eventRecord.js`
+- `importMerge.js`
+- `liveInsights.js`
+- `score.js`
+- `storageScope.js`
+- `supabase.js`
+- `thresholds.js`
 
-## 3. Data Model
+## Data model
 
-### Event object (stored in `ko_events` and Supabase `events` table)
+Core event fields:
 
-All coordinates are stored flat — no nested objects.
+- `id`
+- `schema_version`
+- `created_at`
+- `match_date`
+- `team`
+- `opponent`
+- `event_type`
+- `direction`
+- `period`
+- `clock`
+- `contest_type`
+- `outcome`
+- `break_outcome`
+- `restart_reason`
+- `shot_type`
+- `target_player`
+- `turnover_lost_player`
+- `turnover_won_player`
+- `x`, `y`
+- `x_m`, `y_m`
+- `pickup_x`, `pickup_y`
+- `pickup_x_m`, `pickup_y_m`
+- `break_displacement_m`
+- `score_us`, `score_them`
+- `flag`
+- `ko_sequence`
+- `team_id`
+- `updated_at`
 
-| Field | Type | Description |
-|---|---|---|
-| `id` | string (UUID) | Unique event identifier |
-| `schema_version` | number | Always `1` — allows future migrations |
-| `created_at` | ISO string | Client timestamp of capture |
-| `match_date` | `YYYY-MM-DD` | Date of match |
-| `team` | string | Our team name |
-| `opponent` | string | Opponent name |
-| `event_type` | `kickout` \| `shot` \| `turnover` | Type of match event |
-| `direction` | `ours` \| `theirs` | Whose kickout/possession |
-| `period` | `H1` \| `H2` \| `ET` | Match period |
-| `clock` | string | Match clock at event (`mm:ss`) |
-| `contest_type` | `clean` \| `break` \| `foul` \| `out` | How ball was contested |
-| `outcome` | string | Result (Retained/Lost/Score/Wide/Goal/Point/Foul/Out/Won) |
-| `break_outcome` | `won` \| `lost` \| `neutral` | Result of contested ball |
-| `restart_reason` | `Score` \| `Wide` \| `Foul` \| `Out` \| `null` | What caused this kickout |
-| `target_player` | string | Jersey number of target player (1–15 or custom) |
-| `x` | number | Normalised side position (0 = top touchline, 1 = bottom) |
-| `y` | number | Normalised depth, **always 0 = own goal end** (see §4) |
-| `x_m` | number | Side position in metres (0–90) |
-| `y_m` | number | Depth in metres from own goal (0–145) |
-| `depth_from_own_goal_m` | number | Convenience alias for `y_m` |
-| `side_band` | `Left` \| `Centre` \| `Right` | Thirds across pitch width |
-| `depth_band` | `Short` \| `Medium` \| `Long` \| `Very Long` | Depth bracket (0–20 / 20–45 / 45–65 / 65+) |
-| `zone_code` | string | Combined zone e.g. `C-M` (Centre-Medium) |
-| `our_goal_at_top` | boolean | Pitch orientation at time of capture |
-| `pickup_x` | number \| null | Break contest: pickup side (normalised) |
-| `pickup_y` | number \| null | Break contest: pickup depth (normalised, own-goal-normalised) |
-| `pickup_x_m` | number \| null | Pickup side in metres |
-| `pickup_y_m` | number \| null | Pickup depth in metres |
-| `break_displacement_m` | number \| null | Distance between landing and pickup (metres) |
-| `score_us` | string | Derived score at time of event (`G-P` format) |
-| `score_them` | string | Opponent derived score at time of event |
-| `flag` | boolean | Flagged for review |
-| `ko_sequence` | integer | Sequential number within match |
+Canonical schema source:
 
-### Supabase table schema
+- [`supabase/schema.sql`](../supabase/schema.sql)
+- newer changes in [`supabase/migrations`](../supabase/migrations)
 
-See [`supabase/schema.sql`](../supabase/schema.sql) for the canonical definition. Key columns:
+## Match identity
 
-```sql
-create table if not exists events (
-  id                    text primary key,
-  schema_version        integer not null default 1,
-  created_at            timestamptz not null default now(),
-  event_type            text not null default 'kickout',
-  direction             text not null default 'ours',
-  contest_type          text not null,
-  outcome               text not null,
-  restart_reason        text,
-  x                     numeric not null,
-  y                     numeric not null,
-  pickup_x              numeric,
-  pickup_y              numeric,
-  score_us              text,
-  score_them            text,
-  flag                  boolean default false,
-  -- ... full list in supabase/schema.sql
-);
-```
+The app determines the current match from:
 
----
+- `match_date`
+- normalized `team`
+- normalized `opponent`
 
-## 4. Coordinate System
+That key is used to decide:
 
-The pitch SVG renders at **145 × 90** units (length × width). Stored coordinates are normalised `[0, 1]`:
+- which events belong to the current match
+- which scoreline to show in the shell
+- what data feeds `Live` and `Digest`
 
-- **x** = side position: 0 = top touchline, 1 = bottom touchline
-- **y** = depth: **always 0 = own goal end**, regardless of which physical end that is
+This makes setup changes operationally important. Changing those values changes the current match context.
 
-### Normalisation at save time
+## Coordinate system
 
-```js
-const normY     = ourGoalAtTop ? landing.y : 1 - landing.y;
-const normPickY = ourGoalAtTop ? pickup.y  : 1 - pickup.y;
-```
+The pitch is rendered at GAA proportions and stores normalized coordinates.
 
-This ensures away match events display correctly when overlaid — the "short" end is always the team's own half.
+Conceptually:
 
-### Display conversion
+- one axis stores side position
+- one axis stores depth from our goal end
 
-```js
-const svgX = (o) => (flip ? 1 - o.y : o.y) * W;   // stored y → SVG x
-const svgY = (o) => o.x * H;                        // stored x → SVG y
-```
+The app normalizes depth from our own goal so that analytics remain consistent even when the physical defended end changes.
 
----
+Break kickouts also store:
 
-## 5. Offline Sync
+- landing point
+- pickup point
+- break displacement
 
-1. Every event is saved to `localStorage` immediately on capture.
-2. If Supabase is configured and the user is signed in, the event is also upserted to Supabase.
-3. If the upsert fails (offline, network error), the event `id` is added to `ko_sync_queue` (also persisted to localStorage).
-4. On `online` event (browser connectivity restored), `flushSyncQueue()` retries all pending IDs.
-5. The header shows sync state: `Offline`, `⚠ N pending`, `↻ syncing`, `✓ synced`.
+Turnovers currently store a single location plus named loser/winner players.
 
-> **Note:** The production build includes a service worker via `vite-plugin-pwa`, so the app shell and static assets are precached after first successful load. A network connection is still required for the first visit and for Supabase-backed sync/auth operations.
+## Sync and persistence
 
----
+The app is local-first.
 
-## 6. Analytics Derivations
+Local persistence:
 
-All analytics are computed client-side from the `events` array using Svelte reactive statements (`$:`).
+- match metadata
+- event records
+- pending sync queue
 
-| Stat | Derivation |
-|---|---|
-| Retention % | `RETAINED.has(outcome)` / total. `RETAINED = {Retained, Score, Won}` |
-| Zone stats | Events grouped by `zone_code` — 3 sides × 4 depths = up to 12 zones |
-| Player stats | Events grouped by `target_player`, sorted by volume |
-| Clock trend | Events grouped into 10-minute windows by `clock` field |
-| Restart retention | Events grouped by `restart_reason` (min 3 events to show) |
-| Derived score | Goals × 3 + Points from `event_type=shot` in current match |
-| Opp tendency | Their kickout landing zone distribution + our win rate per zone |
+Cloud sync:
 
----
+- optional
+- Supabase-backed
+- team-scoped when the user has a team assignment
 
-## 7. Pitch SVG
+Current behavior:
 
-File: `src/lib/Pitch.svelte` (TypeScript `<script lang="ts">`)
+- saves are written locally first
+- failed cloud writes are queued
+- queued writes can be retried
+- realtime refresh is used when Supabase is configured
+- first-login migration moves older local-only records into user-scoped storage
 
-Markings rendered at 1:1 GAA regulation dimensions (metres):
+## Team and access model
 
-- Boundary, halfway line
-- 20m, 45m, 65m lines (both ends)
-- Goal small rectangle: 14m wide × 4.5m deep
-- D arc: r=13m, centred on goal line
-- 40m arc: r=40m, centred on goal line
-- Centre circle: r=10m
+Current access shape:
 
-Click → `landed` event (normalised coords).
-Second click on break contest → `picked` event (pickup location).
-Arrow key navigation + Enter/Space for keyboard accessibility.
+- optional Supabase login
+- team-scoped access using `team_id`
+- team-scoped RLS in Supabase
 
----
+Important product constraint:
 
-## 8. Build & Deploy
+- the app can share a match across devices for the same team
+- it does not deduplicate two analysts logging the same event independently
 
-```bash
-npm install
-npm run dev      # Vite dev server
-npm run build    # Build to dist/
-npm run preview  # Preview build
-```
+Operationally, concurrent capture works best when analysts split responsibility by event type.
 
-### Vercel deployment
+## Capture behavior
 
-- `vite.config.js`: `base: '/'`
-- `vercel.json`: SPA rewrite — all routes → `index.html`
-- Push to `main` triggers Vercel auto-deploy
+Kickouts:
 
-### GitHub Pages (docs/)
+- team
+- period
+- contest
+- outcome
+- optional restart reason
+- optional target player
+- location
+- optional pickup location for break contests
 
-The `docs/` directory contains the static build for GitHub Pages. This is a secondary deployment target; Vercel is primary.
+Shots:
 
----
+- team
+- period
+- outcome
+- location
+- optional goal-attempt annotation for `Wide` and `Blocked`
 
-## 9. Environment Variables
+Turnovers:
 
-| Variable | Purpose |
-|---|---|
-| `VITE_SUPABASE_URL` | Supabase project URL |
-| `VITE_SUPABASE_ANON_KEY` | Supabase publishable anon key |
+- team
+- period
+- outcome
+- location
+- `Lost by`
+- `Won by`
 
-If neither is set, Supabase is disabled and the app runs fully offline in localStorage-only mode. Set in `.env.local` for development; in Vercel project settings for production.
+## Live and Digest
 
----
+`Live` and `Digest` both operate on the current match and current phase scope.
 
-## 10. Known Limitations & Future Work
+`Live` is the operational analyst screen.
 
-| Item | Notes |
-|---|---|
-| No per-user data isolation | RLS is enabled. All authenticated users share one data view. Add a `user_id` column and per-user policies for multi-team use. |
-| First load still needs network | The app shell is cached after initial load, but first install/visit still requires connectivity. |
-| No push sync | Changes on another device only appear after manual refresh or re-login. |
-| No video integration | Clip timestamping not yet implemented. |
-| Single-analyst model | No concurrent capture from multiple devices for the same match. |
+`Digest` is the coach-facing summary layer.
+
+Both consume shared derived logic from:
+
+- `liveInsights.js`
+- `thresholds.js`
+
+## Analytics visual model
+
+Base grammar:
+
+- position = where the event happened
+- shape = which team the event belongs to
+- color = result
+- ring = special annotation only where needed
+
+Shots intentionally carry one extra layer of detail compared with kickouts and turnovers.
+
+See [`visual-language.md`](./visual-language.md) for the current visual rules.
+
+## Deployment
+
+Primary deployment target:
+
+- Vercel
+
+PWA handling:
+
+- `vite-plugin-pwa`
+- generated `manifest.webmanifest`
+- generated service worker
+
+The repo does **not** rely on a committed `docs/` folder for deployment.
+
+## Testing
+
+Current quality gate:
+
+- lint
+- unit/component coverage
+- Playwright end-to-end flows
+- production build
+
+The highest-risk areas remain:
+
+- `App.svelte` app-shell behavior
+- analytics branch combinations
+- real multi-device signed-in sync behavior
+
+## Current limitations
+
+- the app is still primarily a specialist match-day tool, not a full season platform
+- concurrent analysts can still duplicate events if they log the same stream
+- some of the heavier shell responsibilities are still concentrated in `App.svelte`
+- first install still requires network even though ongoing use is resilient offline

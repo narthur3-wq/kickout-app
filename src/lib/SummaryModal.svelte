@@ -1,7 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   export let summaryStats = null;
-  export let title = 'Kickout Summary';
+  export let title = 'Summary';
   export let subtitle = '';
   const dispatch = createEventDispatcher();
 

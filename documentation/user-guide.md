@@ -1,163 +1,226 @@
-# Páirc — User Guide
+# Pairc - User Guide
 
-**GAA Match Analyst · Live Event Capture**
+## What Pairc is
 
----
+Pairc is a match-day GAA analyst tool. It is built for one job: capture key events quickly during a game, read the match live, and hand a coach a usable summary at the right moment.
 
-## What is Páirc?
+It supports three event types:
 
-Páirc is a phone-friendly app for capturing and analysing GAA match events in real time. During a match you tap a pitch diagram to record where kickouts land, where shots come from, and where turnovers happen. The app instantly shows you retention rates, player targeting patterns, zone tendencies, and a shareable post-match digest — all without needing a spreadsheet.
+- Kickouts
+- Shots
+- Turnovers
 
----
+From those events it builds:
 
-## Getting Started
+- live analyst reads in `Live`
+- a coach-facing summary in `Digest`
+- detailed review in `Kickouts`, `Shots`, `Turnovers`, and `Events`
 
-### First-time setup
+## Before throw-in
 
-1. Open the app in your browser (works on iPhone, Android, desktop).
-2. Tap **Add to Home Screen** from your browser menu for the best experience (full-screen, no address bar).
-3. Sign in if prompted. If Supabase is configured for your deployment, an account is required to access the app.
-4. In the **Capture** tab, open **Match Setup** and enter:
-   - **Our Team** name
-   - **Opponent** name
-   - **Date** (defaults to today)
-   - **Our goal end** — which end of the pitch does your team defend in H1? Tap ⬆ Top or ⬇ Bottom.
+Start in `Capture` and set the current match:
 
-> **Tip:** Match setup is saved between sessions. You only need to change it when the opponent or date changes.
+- Team
+- Opponent
+- Match date
 
----
+The app uses those three fields to decide what the current match is.
 
-## Recording Events
+Set the first-half orientation correctly:
 
-### The Capture tab
+- `Our goal: left/right end`
+- `Attacking: left/right`
 
-The screen is split into two panels:
-- **Left/top:** the event form (type, outcome, player, etc.)
-- **Right/bottom:** the pitch diagram — tap here to place the event
+If the pitch is reversed, use `Swap ends` beside the pitch.
 
-### Step-by-step for a kickout
+Important:
 
-1. **Type** — select `Kickout`
-2. **Direction** — `Ours` (your team kicks out) or `Theirs` (opponent kicks out)
-3. **Period** — `H1`, `H2`, or `ET` (matches the current period of the game)
-4. **Contest** — how the ball was contested:
-   - `Clean` — one team catches cleanly
-   - `Break` — contested ball, breaks loose
-   - `Foul` — foul conceded
-   - `Out` — ball goes out of play before being contested
-5. **Outcome** — what happened:
-   - `Retained` / `Lost` — possession result
-   - `Score` — direct score from kickout
-   - `Wide` / `Foul` / `Out` — turnover variants
-6. **Restart After** *(optional)* — what caused this kickout: Score / Wide / Foul / Out
-7. **Target Player** *(optional)* — jersey number of the intended target
-8. **Tap the pitch** to set the landing location. A white dot appears.
-   - For a `Break` contest, a second tap sets the pickup location (where the loose ball was gathered).
+- the app does **not** auto-flip ends at half-time
+- when you change period, the timer pauses and the app reminds you to use `Swap ends` if teams changed direction
 
-Tap **Save** (or press Enter) to record the event. A brief flash confirms it saved.
+## Capture workflow
 
-### Shots and Turnovers
+The `Capture` screen is the live logging surface.
 
-Follow the same flow but select `Shot` or `Turnover` as the Type. The relevant outcome options update automatically.
+The left panel contains the event form:
 
----
+- `Type`
+- `Team`
+- `Period`
+- event-specific controls
 
-## The Pitch Diagram
+The right panel contains the pitch. Tap the pitch to place the event location.
 
-- The green pitch shows your half (your goal at the top or bottom depending on your setup).
-- **White dot** = landing/event location.
-- **Dashed line + smaller dot** = pickup location (break contests only).
-- Past events appear as coloured dots/shapes. Colours indicate outcome:
-  - Blue = Score/Point
-  - Green = Retained/Won
-  - Purple = Goal
-  - Red = Lost
-  - Amber = Wide
-  - Orange = Blocked
-  - Slate = Saved
-  - Pink = Foul
+### Kickouts
 
-**Keyboard navigation:** use Arrow keys to move the crosshair, then press Enter or Space to confirm.
+For a kickout, record:
 
----
+- which team the event belongs to
+- period
+- contest type
+- outcome
+- restart reason if relevant
+- target player if known
 
-## Header Controls
+Tap the pitch to set the landing point.
 
-| Control | What it does |
-|---|---|
-| **H1 / H2 / ET / All** pills | Filter the analytics view to show only events from that period. Does not affect capture — events are always saved with the period selected in the form. |
-| **End ⇄** button | Manually swap which goal end is "ours" on the pitch. Normally you only need this if the auto-flip at half-time didn't trigger correctly. |
-| **Screen lock** 🔆/🔅 | Keep the screen on during the match so it doesn't auto-lock. Tap again to release. |
-| **Sync chip** | Shows connectivity and sync status (Offline / ⚠ pending / ✓ synced). |
+If the contest is `break`, the app becomes a two-step flow:
 
-> **Half-time:** When you switch the Period in the form to `H2`, the pitch automatically flips so your goal end stays correct. You do not need to tap **End ⇄** manually at half-time.
+1. tap the landing point
+2. tap the pickup point
 
----
+The `Clear points` button resets the pitch markers and the break-step state.
 
-## Undoing and Editing
+### Shots
 
-- **Undo** — tap the Undo button to remove the last saved event. You will be asked to confirm.
-- **Edit** — in the **Events** tab, tap any event row to load it back into the form. The Save button becomes **Update**. Tap it to overwrite the event.
+For shots, record:
 
----
+- team
+- period
+- outcome
 
-## Analytics Tabs
+For `Wide` and `Blocked`, the form also asks whether it was a goal attempt.
 
-After capturing some events, switch between:
+Then tap the pitch to place the shot location.
 
-| Tab | Shows |
-|---|---|
-| **Kickouts** | Retention %, zone breakdown, player targets, clock trend, restart breakdown |
-| **Shots** | Shot outcomes and locations |
-| **Turnovers** | Turnover locations and outcomes |
-| **Digest** | Full match summary — suitable for sharing |
-| **Events** | Raw event log with edit capability |
+### Turnovers
 
-Analytics automatically filter to the event type of the current tab.
+Turnovers use a single pitch tap for the turnover location.
 
-Use the **H1 / H2 / ET / All** pills in the header to narrow down to a specific period.
+They also record who lost and won the turnover:
 
----
+- `Lost by`
+- `Won by`
 
-## Digest & Sharing
+This is the current turnover capture model. Turnovers do not use a kickout-style landing/pickup flow.
 
-The **Digest** tab shows a formatted match summary including:
-- Final score (derived from recorded shots)
-- Kickout retention % for both teams
-- Zone heatmap
-- Top targeted players
-- Opposition kickout tendencies (where they kick and our win rate per zone)
+## Team and direction
 
-Tap **Share** to:
-- On mobile: share the digest as a PNG image via your phone's share sheet (WhatsApp, Messages, etc.)
-- On desktop: download the image as a PNG file
+`Team` means which side the event belongs to.
 
----
+It does **not** mean attacking direction.
 
-## Working Offline
+Attacking direction is shown above the pitch:
 
-Páirc keeps working if connectivity drops during a match. Events save to your device immediately, and when connectivity returns any unsynced events are automatically uploaded to the cloud (if you are signed in).
+- `Our goal: ...`
+- `Attacking: ...`
 
-The sync status chip in the header shows:
-- **● Offline** — no internet connection
-- **⚠ 3** — 3 events waiting to sync
-- **↻** — currently syncing
-- **✓** — all events synced
+`Swap ends` only changes the pitch orientation. It does not change which team the event belongs to.
 
----
+## Timer and period
 
-## Tips for Live Use
+The timer is optional. It writes the event clock into the capture record.
 
-- Set up the match (team, opponent, date, goal end) **before** the throw-in, not during.
-- Use **Add to Home Screen** so the app opens full-screen without browser chrome.
-- Enable **Screen lock** (🔆) so the phone doesn't lock mid-match.
-- Period auto-flips at H2 — you don't need to do anything at half-time.
-- If you make a mistake, tap **Undo** immediately — it's one tap.
-- Flag an event with ⚑ if you're unsure and want to review it later.
-- You can review and correct events in the **Events** tab after the match.
+Key rules:
 
----
+- `Play` starts the timer
+- `Paused` means the timer is not running
+- changing period pauses the timer
+- changing period does not flip the pitch automatically
 
-## Exporting Data
+## Live and Digest
 
-In the **Events** tab, tap **Export JSON** to download all events as a JSON file. This is your backup and can be reimported if needed.
+`Live` is the analyst screen.
+
+It is designed to answer:
+
+- what is happening now?
+- who is on top?
+- what pattern is developing?
+- what should we look at next?
+
+`Digest` is the coach-facing screen.
+
+It is designed to answer:
+
+- what is the short read of the match?
+- what is the main threat?
+- what is the best opportunity?
+- what actions should the coach take into the next phase?
+
+## Detailed analysis tabs
+
+### Kickouts
+
+Use this when you want detailed kickout review:
+
+- dot map
+- heatmap
+- landing vs pickup overlays
+- zone tables
+- clock trends
+- player and restart breakdowns
+
+### Shots
+
+Use this for shot location and result review.
+
+The shot map carries more detail than the other maps, because shots need to show:
+
+- team
+- result
+- goal-attempt annotation where relevant
+
+### Turnovers
+
+Use this for turnover location review and win/loss patterning.
+
+## Phase filtering
+
+The header pills `H1 / H2 / ET / All` control the phase shown in the non-capture views.
+
+That affects:
+
+- `Live`
+- `Digest`
+- `Kickouts`
+- `Shots`
+- `Turnovers`
+
+The `Period` control inside the capture form is separate. That sets the period written onto the event being saved.
+
+## Events, edit, import, and export
+
+`Events` is the match log.
+
+From there you can:
+
+- search
+- inspect saved records
+- load an event back into the form for editing
+- export JSON
+- import JSON
+
+JSON export is the main backup path.
+
+If cloud sync is unavailable, events are still saved locally first.
+
+## Sync states
+
+The app uses local-first persistence.
+
+What the sync indicators mean:
+
+- local save succeeded immediately
+- queued/pending means the event is safe on the device but not yet synced to Supabase
+- synced means cloud save caught up
+- blocked means the device has local data but cloud writes are failing and need attention
+
+If you see a retry banner, the data is normally still safe locally unless the app explicitly says the save itself failed.
+
+## Recommended live workflow
+
+For one analyst:
+
+- use `Capture` during play
+- check `Live` at stoppages
+- use `Digest` for a coach handoff
+
+For two analysts on the same match:
+
+- Analyst 1: Kickouts
+- Analyst 2: Shots and Turnovers
+
+Do not have both analysts logging the same event stream live, or you will create duplicates.
+
+See [`multi-analyst-setup.md`](./multi-analyst-setup.md) for the recommended shared-match setup.

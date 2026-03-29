@@ -1,6 +1,5 @@
 <script>
   import Pitch from './lib/Pitch.svelte';
-  import Heatmap from './lib/Heatmap.svelte';
   import Login from './lib/Login.svelte';
   import SummaryModal from './lib/SummaryModal.svelte';
   import EventsTable from './lib/EventsTable.svelte';
@@ -9,6 +8,16 @@
   import LivePanel from './lib/LivePanel.svelte';
   import CaptureForm from './lib/CaptureForm.svelte';
   import AdminPanel from './lib/AdminPanel.svelte';
+  import {
+    analyticsMarkerFill,
+    analyticsMarkerRing,
+    analyticsMarkerShape,
+    buildCurrentMatchScore,
+    defaultMatchDate,
+    eventYearOf,
+    matchKeyOf,
+    normText,
+  } from './lib/appShellHelpers.js';
   import { buildDraftSignature, isSetupDraftDirty } from './lib/captureDraft.js';
   import { normalizeEventRecord } from './lib/eventRecord.js';
   import { mergeImportedEvents, planImportMerge } from './lib/importMerge.js';
@@ -152,7 +161,7 @@
   const currentYear = today.getFullYear();
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  const norm = s => (s ?? '').trim().toLowerCase();
+  const norm = normText;
   const toMetersX = nx => nx * WIDTH_M;
   const toMetersY = ny => ny * LENGTH_M;
   const sideBand  = nx => nx < 1/3 ? 'Left' : (nx < 2/3 ? 'Centre' : 'Right');
@@ -160,55 +169,13 @@
   const depthBandFromMeters = d => d < 20 ? 'Short' : (d < 45 ? 'Medium' : (d < 65 ? 'Long' : 'Very Long'));
   const zoneCode = (nx, ny) => `${sideBand(nx)[0]}-${depthBandFromMeters(depthMetersFromOwnGoal(ny))[0]}`;
   const breakDispM = (x1,y1,x2,y2) => Math.hypot((x2-x1)*WIDTH_M, (y2-y1)*LENGTH_M);
-  const defaultMatchDate = () => new Date().toISOString().slice(0,10);
-  const scoreOutcomeOf = (event) => String(event?.outcome || '').trim().toLowerCase();
   let draftPristineSignature = '';
 
-  function analyticsMarkerShape(event) {
-    return String(event?.direction || 'ours').toLowerCase() === 'theirs' ? 'square' : 'circle';
-  }
-
-  function analyticsMarkerFill(event) {
-    const type = String(event?.event_type || 'kickout').toLowerCase();
-    const outcome = scoreOutcomeOf(event);
-
-    if (type === 'shot') {
-      switch (outcome) {
-        case 'goal':    return '#15803d';
-        case 'point':   return '#0f766e';
-        case 'wide':    return '#f59e0b';
-        case 'blocked': return '#ea580c';
-        case 'saved':   return '#64748b';
-        default:        return '#94a3b8';
-      }
-    }
-
-    if (type === 'turnover') {
-      if (outcome === 'won') return '#16a34a';
-      if (outcome === 'lost') return '#dc2626';
-      return '#d97706';
-    }
-
-    if (outcome === 'retained' || outcome === 'won' || outcome === 'score') return '#16a34a';
-    if (outcome === 'lost') return '#dc2626';
-    return '#d97706';
-  }
-
-  function analyticsMarkerRing(event) {
-    const type = String(event?.event_type || 'kickout').toLowerCase();
-    if (type === 'kickout' && event?.target_player) return 'target';
-    if (type === 'shot' && String(event?.shot_type || '').toLowerCase() === 'goal') return 'goal-attempt';
-    return null;
-  }
-
   // YTD: compare year strings to avoid UTC-vs-local timezone edge cases
-  const eventYear = e => (e.match_date || (e.created_at||'').slice(0,10)).slice(0,4);
+  const eventYear = eventYearOf;
 
   // match key helper
-  const matchKey = e => {
-    const md = e.match_date || (e.created_at||'').slice(0,10);
-    return `${md}|${norm(e.team)}|${norm(e.opponent)}`;
-  };
+  const matchKey = matchKeyOf;
 
   function markDraftPristine(snapshot = null) {
     draftPristineSignature = buildDraftSignature(snapshot ?? {
@@ -1391,14 +1358,7 @@
   // ── Derived match score from tracked shots ────────────────────────────────
   $: currentMatchScore = (() => {
     const currentKey = `${matchDate}|${norm(team)}|${norm(opponent)}`;
-    const shots = events.filter(e => matchKey(e) === currentKey && e.event_type === 'shot');
-    const calc = (dir) => {
-      const s = shots.filter(e => (e.direction || 'ours') === dir);
-      const goals  = s.filter(e => scoreOutcomeOf(e) === 'goal').length;
-      const points = s.filter(e => scoreOutcomeOf(e) === 'point').length;
-      return { goals, points, str: `${goals}-${points}` };
-    };
-    return { us: calc('ours'), them: calc('theirs'), hasShots: shots.length > 0 };
+    return buildCurrentMatchScore(events, currentKey);
   })();
 
   $: selectedTeamLabel = direction === 'ours' ? (team || 'Ours') : (opponent || 'Theirs');
