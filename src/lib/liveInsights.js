@@ -34,11 +34,12 @@ function norm(value) {
 }
 
 function eventType(event) {
-  return event?.event_type || 'kickout';
+  return String(event?.event_type || 'kickout').trim().toLowerCase() || 'kickout';
 }
 
 function direction(event) {
-  return event?.direction || 'ours';
+  const value = String(event?.direction || 'ours').trim().toLowerCase() || 'ours';
+  return value === 'theirs' ? 'theirs' : 'ours';
 }
 
 function pronoun(side) {

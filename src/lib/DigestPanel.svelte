@@ -11,6 +11,15 @@
   let sharing = false;
   let shareFeedback = null;
 
+  function eventTypeOf(event) {
+    return String(event?.event_type || 'kickout').trim().toLowerCase() || 'kickout';
+  }
+
+  function directionOf(event) {
+    const value = String(event?.direction || 'ours').trim().toLowerCase() || 'ours';
+    return value === 'theirs' ? 'theirs' : 'ours';
+  }
+
   function scoreStat(evs) {
     const goals = evs.filter((event) => String(event.outcome || '').toLowerCase() === 'goal').length;
     const points = evs.filter((event) => String(event.outcome || '').toLowerCase() === 'point').length;
@@ -24,12 +33,12 @@
   }
 
   $: insights = buildLiveInsights(events);
-  $: ourScores = scoreStat(events.filter((event) => (event.event_type || 'kickout') === 'shot' && (event.direction || 'ours') === 'ours'));
-  $: theirScores = scoreStat(events.filter((event) => (event.event_type || 'kickout') === 'shot' && (event.direction || 'ours') === 'theirs'));
-  $: ourKickouts = koStat(events.filter((event) => (event.event_type || 'kickout') === 'kickout' && (event.direction || 'ours') === 'ours'));
-  $: theirKickouts = koStat(events.filter((event) => (event.event_type || 'kickout') === 'kickout' && (event.direction || 'ours') === 'theirs'));
-  $: ourTurnovers = koStat(events.filter((event) => event.event_type === 'turnover' && (event.direction || 'ours') === 'ours'));
-  $: theirTurnovers = koStat(events.filter((event) => event.event_type === 'turnover' && (event.direction || 'ours') === 'theirs'));
+  $: ourScores = scoreStat(events.filter((event) => eventTypeOf(event) === 'shot' && directionOf(event) === 'ours'));
+  $: theirScores = scoreStat(events.filter((event) => eventTypeOf(event) === 'shot' && directionOf(event) === 'theirs'));
+  $: ourKickouts = koStat(events.filter((event) => eventTypeOf(event) === 'kickout' && directionOf(event) === 'ours'));
+  $: theirKickouts = koStat(events.filter((event) => eventTypeOf(event) === 'kickout' && directionOf(event) === 'theirs'));
+  $: ourTurnovers = koStat(events.filter((event) => eventTypeOf(event) === 'turnover' && directionOf(event) === 'ours'));
+  $: theirTurnovers = koStat(events.filter((event) => eventTypeOf(event) === 'turnover' && directionOf(event) === 'theirs'));
   $: turnoverNet = ourTurnovers.won - theirTurnovers.won;
   $: hasTurnovers = ourTurnovers.total + theirTurnovers.total > 0;
   $: scoreMargin = ourScores.total - theirScores.total;

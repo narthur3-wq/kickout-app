@@ -10,6 +10,15 @@
   const dispatch = createEventDispatcher();
   const POSITIVE_KO = new Set(['retained', 'score', 'won']);
 
+  function eventTypeOf(event) {
+    return String(event?.event_type || 'kickout').trim().toLowerCase() || 'kickout';
+  }
+
+  function directionOf(event) {
+    const value = String(event?.direction || 'ours').trim().toLowerCase() || 'ours';
+    return value === 'theirs' ? 'theirs' : 'ours';
+  }
+
   function koStat(evs) {
     const total = evs.length;
     const won = evs.filter((event) => POSITIVE_KO.has(String(event.outcome || '').toLowerCase())).length;
@@ -23,10 +32,10 @@
   }
 
   $: insights = buildLiveInsights(events);
-  $: ourKickouts = events.filter((event) => (event.event_type || 'kickout') === 'kickout' && (event.direction || 'ours') === 'ours');
-  $: theirKickouts = events.filter((event) => (event.event_type || 'kickout') === 'kickout' && (event.direction || 'ours') === 'theirs');
-  $: ourScores = scoreStat(events.filter((event) => (event.event_type || 'kickout') === 'shot' && (event.direction || 'ours') === 'ours'));
-  $: theirScores = scoreStat(events.filter((event) => (event.event_type || 'kickout') === 'shot' && (event.direction || 'ours') === 'theirs'));
+  $: ourKickouts = events.filter((event) => eventTypeOf(event) === 'kickout' && directionOf(event) === 'ours');
+  $: theirKickouts = events.filter((event) => eventTypeOf(event) === 'kickout' && directionOf(event) === 'theirs');
+  $: ourScores = scoreStat(events.filter((event) => eventTypeOf(event) === 'shot' && directionOf(event) === 'ours'));
+  $: theirScores = scoreStat(events.filter((event) => eventTypeOf(event) === 'shot' && directionOf(event) === 'theirs'));
   $: ourKickoutStat = koStat(ourKickouts);
   $: theirKickoutStat = koStat(theirKickouts);
   $: scoreMargin = ourScores.total - theirScores.total;
