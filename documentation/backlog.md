@@ -320,6 +320,59 @@ Remaining from independent review and code audit. Fixed items have been removed.
 
 ---
 
+### P1 — Must fix (blocking correctness)
+
+**B-38 — Cross-match edit corruption from global Events log**
+Priority: must
+Status: done
+
+Editing an event from the global Events log could silently reassign it to the currently active match because `buildEvent` used `match_id: activeMatchId` unconditionally. Fixed: when `editingId` is set, `buildEvent` now preserves the original `match_id` from the event being edited (`events.find(r => r.id === editingId)?.match_id ?? activeMatchId`).
+Files: `src/App.svelte`
+
+---
+
+### P2 — Should fix before wider go-live (continued)
+
+**B-39 — Restart-context analytics miss legacy 'Point' and 'Goal' reasons**
+Priority: should
+Status: done
+
+`restartStats` only recognised `['Score','Wide','Foul','Out']` but the shipped simulated fixture and older imported data also use `'Point'` and `'Goal'` as `restart_reason` values. Those events silently dropped from the restart breakdown. Fixed: expanded `REASONS` to `['Score','Wide','Foul','Out','Point','Goal']`.
+File: `src/App.svelte`
+
+---
+
+**B-40 — Turnover net undercounts lost turnovers**
+Priority: should
+Status: done
+
+`turnoverNet` was computed as `ourTurnovers.won - theirTurnovers.won`, which ignored events logged as `ours / Lost`. `koStat` now also counts `lost` outcomes; net formula updated to `(ourTurnovers.won - ourTurnovers.lost) - (theirTurnovers.won - theirTurnovers.lost)`.
+File: `src/lib/DigestPanel.svelte`
+
+---
+
+### P3 — Should during beta (continued)
+
+**B-41 — Digest renders player labels as ##11**
+Priority: should
+Status: done
+
+`liveInsights.js` already prefixes player labels with `#` (e.g. `#11`). The Digest template additionally prepended a literal `#`, producing `##11`. Removed the hardcoded `#` from the Main Threat card in `DigestPanel.svelte`.
+File: `src/lib/DigestPanel.svelte`
+
+---
+
+**B-42 — Events table score cell shows 0-1-0-0**
+Priority: should
+Status: done
+
+`score_us` is stored as a formatted `goals-points` string (e.g. `"0-1"`). The score cell concatenated it with another `-` separator producing `0-1-0-0`. Fixed: separator changed to ` / ` so the cell now renders `0-1 / 0-0`.
+File: `src/lib/EventsTable.svelte`
+
+---
+
+---
+
 ### P2 — Should fix before wider go-live
 
 **B-19 — Zone tables minimum-sample UX**

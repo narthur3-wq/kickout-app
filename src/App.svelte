@@ -433,10 +433,10 @@
   }
 
   function normalizeMatchForStorage(match) {
-    return normalizeMatchRecord(match, {
-      teamIdFallback: teamId,
-      userIdFallback: user?.id ?? null,
-    });
+    return normalizeMatchRecord(
+      { ...match, team_id: teamId ?? match?.team_id },
+      { teamIdFallback: teamId, userIdFallback: user?.id ?? null },
+    );
   }
 
   function normalizeMatchState(nextMatches = matches, nextEvents = events, preferredMatchId = activeMatchId) {
@@ -853,7 +853,7 @@
     }
   }
   async function flushSyncQueue() {
-    if (!supabase || !user || (!pendingSync.size && !pendingMatchSync.size) || !isOnline) return;
+    if (!supabase || !user || !teamId || (!pendingSync.size && !pendingMatchSync.size) || !isOnline) return;
     for (const [id] of [...pendingMatchSync]) {
       const match = matches.find((item) => item.id === id);
       if (!match) {
@@ -1474,7 +1474,7 @@
 
     return normalizeEventForStorage({
       id:           editingId ?? crypto.randomUUID(),
-      match_id:     activeMatchId ?? null,
+      match_id:     editingId ? (events.find(r => r.id === editingId)?.match_id ?? activeMatchId) : (activeMatchId ?? null),
       created_at:   originalCreatedAt,
       team_id:      teamId,
       match_date:   matchDate,
@@ -2206,7 +2206,7 @@
 
   // ── Restart-context stats ─────────────────────────────────────────────────
   $: restartStats = (() => {
-    const REASONS = ['Score','Wide','Foul','Out'];
+    const REASONS = ['Score','Wide','Foul','Out','Point','Goal'];
     return REASONS.map(r => {
       const evs = vizEvents.filter(e => e.restart_reason === r);
       if (evs.length < 3) return null;

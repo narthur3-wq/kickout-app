@@ -29,7 +29,8 @@
   function koStat(evs) {
     const total = evs.length;
     const won = evs.filter((event) => POSITIVE_KO.has(String(event.outcome || '').toLowerCase())).length;
-    return { total, won, pct: total ? Math.round((100 * won) / total) : null };
+    const lost = evs.filter((event) => String(event.outcome || '').toLowerCase() === 'lost').length;
+    return { total, won, lost, pct: total ? Math.round((100 * won) / total) : null };
   }
 
   $: insights = buildLiveInsights(events);
@@ -39,7 +40,7 @@
   $: theirKickouts = koStat(events.filter((event) => eventTypeOf(event) === 'kickout' && directionOf(event) === 'theirs'));
   $: ourTurnovers = koStat(events.filter((event) => eventTypeOf(event) === 'turnover' && directionOf(event) === 'ours'));
   $: theirTurnovers = koStat(events.filter((event) => eventTypeOf(event) === 'turnover' && directionOf(event) === 'theirs'));
-  $: turnoverNet = ourTurnovers.won - theirTurnovers.won;
+  $: turnoverNet = (ourTurnovers.won - ourTurnovers.lost) - (theirTurnovers.won - theirTurnovers.lost);
   $: hasTurnovers = ourTurnovers.total + theirTurnovers.total > 0;
   $: scoreMargin = ourScores.total - theirScores.total;
 
@@ -162,10 +163,10 @@
         <div class="eyebrow">Main Threat</div>
         <p class="copy strong">{insights.threat.line}</p>
         {#if insights.threat.mainThreat}
-          <p class="detail"><strong>#{insights.threat.mainThreat.label}</strong>: {insights.threat.mainThreat.points} pts from {insights.threat.mainThreat.chances} chances.</p>
+          <p class="detail"><strong>{insights.threat.mainThreat.label}</strong>: {insights.threat.mainThreat.points} pts from {insights.threat.mainThreat.chances} chances.</p>
         {/if}
         {#if insights.threat.secondaryThreat}
-          <p class="detail">Also: #{insights.threat.secondaryThreat.label} — {insights.threat.secondaryThreat.points} pts.</p>
+          <p class="detail">Also: {insights.threat.secondaryThreat.label} — {insights.threat.secondaryThreat.points} pts.</p>
         {/if}
         {#if insights.threat.channelThreat}
           <p class="detail threat-side">Danger side: {insights.threat.channelThreat.label}.</p>

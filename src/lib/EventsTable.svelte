@@ -220,7 +220,7 @@
             <td class="center mono">{event.zone_code || '-'}</td>
             <td class="num">{event.depth_from_own_goal_m?.toFixed?.(0) ?? '-'}</td>
             <td>{event.opponent || '-'}</td>
-            <td class="mono">{event.score_us ? `${event.score_us}-${event.score_them ?? '?'}` : '-'}</td>
+            <td class="mono">{event.score_us ? `${event.score_us} / ${event.score_them ?? '?'}` : '-'}</td>
             <td class="players-cell">{turnoverPlayersLabel(event)}</td>
             <td class="center">{event.flag ? 'Flag' : ''}</td>
             <td class="actions">
