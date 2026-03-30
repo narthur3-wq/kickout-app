@@ -99,4 +99,71 @@ describe('buildScoreSnapshots', () => {
     expect(snapshots.get('match-a-score')).toMatchObject({ us: 0, them: 0, margin: 0, usDisplay: '0-0', themDisplay: '0-0' })
     expect(snapshots.get('match-b-ko')).toMatchObject({ us: 0, them: 0, margin: 0, usDisplay: '0-0', themDisplay: '0-0' })
   })
+
+  it('isolates two matches with the same date, team, and opponent when they have distinct match_ids', () => {
+    // This was the silent bleed bug: same logical key but different match records
+    // (e.g. a replayed fixture) were scored as one match before the match_id fix.
+    const snapshots = buildScoreSnapshots([
+      {
+        id: 'match-a-goal',
+        match_id: 'match-a',
+        match_date: '2026-04-05',
+        team: 'Clontarf',
+        opponent: 'Vincents',
+        ko_sequence: 1,
+        created_at: '2026-04-05T10:00:00.000Z',
+        event_type: 'shot',
+        outcome: 'Goal',
+        direction: 'ours',
+      },
+      {
+        id: 'match-b-point',
+        match_id: 'match-b',
+        match_date: '2026-04-05',
+        team: 'Clontarf',
+        opponent: 'Vincents',
+        ko_sequence: 1,
+        created_at: '2026-04-05T14:00:00.000Z',
+        event_type: 'shot',
+        outcome: 'Point',
+        direction: 'theirs',
+      },
+    ])
+
+    // Each match starts at 0-0; the goal from match-a must not bleed into match-b.
+    expect(snapshots.get('match-a-goal')).toMatchObject({ us: 0, them: 0, usDisplay: '0-0', themDisplay: '0-0' })
+    expect(snapshots.get('match-b-point')).toMatchObject({ us: 0, them: 0, usDisplay: '0-0', themDisplay: '0-0' })
+  })
+
+  it('falls back to logical key grouping for events without a match_id', () => {
+    // Legacy events (pre-match-entity migration) have no match_id.
+    // They should still be grouped and scored correctly by date|team|opponent.
+    const snapshots = buildScoreSnapshots([
+      {
+        id: 'legacy-point',
+        match_date: '2026-03-10',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        ko_sequence: 1,
+        created_at: '2026-03-10T10:00:00.000Z',
+        event_type: 'shot',
+        outcome: 'Point',
+        direction: 'ours',
+      },
+      {
+        id: 'legacy-ko',
+        match_date: '2026-03-10',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        ko_sequence: 2,
+        created_at: '2026-03-10T10:01:00.000Z',
+        event_type: 'kickout',
+        outcome: 'Retained',
+        direction: 'ours',
+      },
+    ])
+
+    expect(snapshots.get('legacy-point')).toMatchObject({ us: 0, them: 0, usDisplay: '0-0', themDisplay: '0-0' })
+    expect(snapshots.get('legacy-ko')).toMatchObject({ us: 1, them: 0, usDisplay: '0-1', themDisplay: '0-0' })
+  })
 })

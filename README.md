@@ -10,6 +10,7 @@ A mobile-first progressive web app for live GAA match analysis. An analyst captu
 - [Product Positioning](documentation/product-positioning.md) - what Pairc is, and what it is not
 - [Visual Language](documentation/visual-language.md) - how pitch maps encode team, result, and special annotations
 - [Multi-Analyst Setup](documentation/multi-analyst-setup.md) - recommended setup for two analysts on one match
+- [Release Checklist](documentation/release-checklist.md) - merge gate, smoke path, docs, and operational checks
 
 ## Quick Start
 
@@ -35,7 +36,19 @@ If neither Supabase variable is set, Supabase is disabled and all data persists 
 
 ### Database setup
 
-If using Supabase, run [`supabase/schema.sql`](supabase/schema.sql) once in your project's SQL editor, then apply any newer SQL files from [`supabase/migrations`](supabase/migrations).
+**Fresh project:** run [`supabase/schema.sql`](supabase/schema.sql) once in your project's SQL editor. It includes all schema and indexes up to date — no migrations need to be applied separately.
+
+**Existing project (upgrading):** apply only the migration files newer than your current schema state, in filename order, from [`supabase/migrations`](supabase/migrations). Do not re-run `schema.sql` on an existing database.
+
+Current migrations in order:
+1. `20260322000000_add_rls.sql`
+2. `20260323000000_team_rls.sql`
+3. `20260323010000_team_name_uniqueness.sql`
+4. `20260325000100_allow_null_contest_type.sql`
+5. `20260326000100_add_turnover_players.sql`
+6. `20260329000100_add_matches_table.sql`
+7. `20260329000200_add_event_match_id.sql`
+8. `20260330000100_add_event_indexes.sql` — adds indexes on `events.team_id` and `events.match_id`
 
 ## Admin Onboarding Automation
 

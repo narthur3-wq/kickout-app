@@ -165,4 +165,18 @@ describe('MatchPicker', () => {
     await user.click(screen.getByRole('button', { name: 'Reopen' }));
     expect(onReopenMatch).toHaveBeenCalledTimes(1);
   });
+
+  it('renders incomplete legacy matches with a readable fallback label', () => {
+    render(MatchPicker, {
+      props: {
+        matches: [
+          makeMatch({ id: 'legacy-1', team: '', opponent: '', match_date: '2026-03-23' }),
+        ],
+        activeMatchId: 'legacy-1',
+        isMatchClosed: false,
+      },
+    });
+
+    expect(screen.getAllByText('Untitled match')).toHaveLength(2);
+  });
 });

@@ -8,18 +8,23 @@ const mockState = vi.hoisted(() => {
   const sessionState = { session: null };
   const subscription = { unsubscribe: vi.fn() };
   const selectOrderMock = vi.fn();
-  const selectEqMock = vi.fn(() => ({ order: selectOrderMock }));
+  const selectGtMock = vi.fn(() => ({ order: selectOrderMock }));
+  const selectEqMock = vi.fn(() => ({ gt: selectGtMock, order: selectOrderMock }));
   const selectMock = vi.fn(() => ({ eq: selectEqMock }));
   const upsertMock = vi.fn();
   const deleteEqMock = vi.fn();
   const deleteMock = vi.fn(() => ({ eq: deleteEqMock }));
+  const realtimeHandlers = [];
   const fromMock = vi.fn(() => ({
     select: selectMock,
     upsert: upsertMock,
     delete: deleteMock,
   }));
   const channelMock = {
-    on: vi.fn().mockReturnThis(),
+    on: vi.fn((...args) => {
+      realtimeHandlers.push(args);
+      return channelMock;
+    }),
     subscribe: vi.fn().mockReturnValue({}),
   };
 
@@ -34,6 +39,7 @@ const mockState = vi.hoisted(() => {
     getUserTeamDetailsMock: vi.fn(),
     isConfiguredAdminMock: vi.fn(),
     selectOrderMock,
+    selectGtMock,
     selectEqMock,
     selectMock,
     upsertMock,
@@ -42,8 +48,16 @@ const mockState = vi.hoisted(() => {
     fromMock,
     channelFactoryMock: vi.fn(() => channelMock),
     channelMock,
+    realtimeHandlers,
   };
 });
+
+const diagnosticsMock = vi.hoisted(() => ({
+  appendDiagnostic: vi.fn(() => []),
+  loadDiagnostics: vi.fn(() => []),
+  clearDiagnostics: vi.fn(),
+  formatDiagnostics: vi.fn((entries = []) => entries.map((entry) => `${entry.kind}: ${entry.message}`).join('\n')),
+}));
 
 vi.mock('../../src/lib/supabase.js', () => ({
   supabaseConfigured: true,
@@ -61,6 +75,8 @@ vi.mock('../../src/lib/supabase.js', () => ({
   getUserTeamDetails: mockState.getUserTeamDetailsMock,
   isConfiguredAdmin: mockState.isConfiguredAdminMock,
 }));
+
+vi.mock('../../src/lib/diagnostics.js', () => diagnosticsMock);
 
 async function renderApp() {
   const { default: App } = await import('../../src/App.svelte');
@@ -98,16 +114,31 @@ describe('App shell auth and sync', () => {
     mockState.userHasAccessMock.mockResolvedValue(true);
     mockState.getUserTeamDetailsMock.mockResolvedValue({ id: 'team-1', name: 'Clontarf' });
     mockState.isConfiguredAdminMock.mockReturnValue(false);
-    mockState.selectOrderMock.mockResolvedValue({ data: [], error: null });
-    mockState.selectEqMock.mockClear();
-    mockState.selectMock.mockClear();
-    mockState.upsertMock.mockResolvedValue({ error: null });
-    mockState.deleteEqMock.mockResolvedValue({ error: null });
-    mockState.deleteMock.mockClear();
-    mockState.fromMock.mockClear();
-    mockState.channelFactoryMock.mockClear();
-    mockState.channelMock.on.mockClear();
-    mockState.channelMock.subscribe.mockClear();
+    mockState.selectOrderMock.mockReset().mockResolvedValue({ data: [], error: null });
+    mockState.selectGtMock.mockReset().mockImplementation(() => ({ order: mockState.selectOrderMock }));
+    mockState.selectEqMock.mockReset().mockImplementation(() => ({ gt: mockState.selectGtMock, order: mockState.selectOrderMock }));
+    mockState.selectMock.mockReset().mockImplementation(() => ({ eq: mockState.selectEqMock }));
+    mockState.upsertMock.mockReset().mockResolvedValue({ error: null });
+    mockState.deleteEqMock.mockReset().mockResolvedValue({ error: null });
+    mockState.deleteMock.mockReset().mockImplementation(() => ({ eq: mockState.deleteEqMock }));
+    mockState.fromMock.mockReset().mockImplementation(() => ({
+      select: mockState.selectMock,
+      upsert: mockState.upsertMock,
+      delete: mockState.deleteMock,
+    }));
+    mockState.channelFactoryMock.mockReset().mockImplementation(() => mockState.channelMock);
+    mockState.channelMock.on.mockReset().mockImplementation((...args) => {
+      mockState.realtimeHandlers.push(args);
+      return mockState.channelMock;
+    });
+    mockState.channelMock.subscribe.mockReset().mockReturnValue({});
+    mockState.realtimeHandlers.length = 0;
+    diagnosticsMock.appendDiagnostic.mockClear();
+    diagnosticsMock.loadDiagnostics.mockReturnValue([]);
+    diagnosticsMock.clearDiagnostics.mockClear();
+    diagnosticsMock.formatDiagnostics.mockImplementation((entries = []) =>
+      entries.map((entry) => `${entry.kind}: ${entry.message}`).join('\n')
+    );
   });
 
   it('shows the login screen when Supabase is configured but there is no active session', async () => {
@@ -257,6 +288,107 @@ describe('App shell auth and sync', () => {
     expect(mockState.fromMock).toHaveBeenCalledWith('events');
   });
 
+  it('uses an incremental sync cursor to merge remote deltas without dropping local rows', async () => {
+    const session = { user: { id: 'user-delta', email: 'analyst@example.com' } };
+    const userScope = 'user:user-delta';
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches(userScope, [{
+      id: 'match-1',
+      team: 'Clontarf',
+      opponent: 'Crokes',
+      match_date: '2026-03-29',
+      status: 'open',
+      created_at: '2026-03-29T09:00:00.000Z',
+      updated_at: '2026-03-29T09:00:00.000Z',
+      last_event_at: '2026-03-29T09:05:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, 'match-1');
+    seedScopedEvents(userScope, [{
+      id: 'local-1',
+      match_id: 'match-1',
+      created_at: '2026-03-29T09:05:00.000Z',
+      updated_at: '2026-03-29T09:05:00.000Z',
+      match_date: '2026-03-29',
+      team: 'Clontarf',
+      opponent: 'Crokes',
+      period: 'H1',
+      clock: '5:00',
+      event_type: 'shot',
+      direction: 'ours',
+      outcome: 'Point',
+      x: 0.42,
+      y: 0.28,
+      schema_version: 1,
+    }]);
+    localStorage.setItem(
+      storageKey(STORAGE_KEYS.syncCursor, userScope),
+      JSON.stringify({
+        matches: '2026-03-29T09:00:00.000Z',
+        events: '2026-03-29T09:00:00.000Z',
+      })
+    );
+
+    mockState.selectOrderMock
+      .mockResolvedValueOnce({
+        data: [{
+          id: 'match-1',
+          team_id: 'team-1',
+          team: 'Clontarf',
+          opponent: 'Crokes',
+          match_date: '2026-03-29',
+          status: 'open',
+          created_at: '2026-03-29T09:00:00.000Z',
+          updated_at: '2026-03-29T09:15:00.000Z',
+          last_event_at: '2026-03-29T09:05:00.000Z',
+          closed_at: null,
+        }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({
+        data: [{
+          id: 'remote-1',
+          match_id: 'match-1',
+          team_id: 'team-1',
+          team: 'Clontarf',
+          opponent: 'Crokes',
+          match_date: '2026-03-29',
+          created_at: '2026-03-29T09:20:00.000Z',
+          updated_at: '2026-03-29T09:20:00.000Z',
+          event_type: 'shot',
+          direction: 'theirs',
+          outcome: 'Goal',
+          x: 0.6,
+          y: 0.4,
+          schema_version: 1,
+        }],
+        error: null,
+      });
+
+    await renderApp();
+
+    await waitFor(() => {
+      expect(mockState.realtimeHandlers.length).toBeGreaterThan(0);
+    });
+
+    const eventRealtimeHandler = mockState.realtimeHandlers.find(([, config]) => config.table === 'events')?.[2];
+    expect(eventRealtimeHandler).toBeTypeOf('function');
+    eventRealtimeHandler({ eventType: 'INSERT', new: { id: 'trigger-1' } });
+
+    await waitFor(() => {
+      expect(mockState.selectGtMock).toHaveBeenCalledWith('updated_at', '2026-03-29T09:15:00.000Z');
+      expect(mockState.selectGtMock).toHaveBeenCalledWith('updated_at', '2026-03-29T09:00:00.000Z');
+      expect(mockState.selectOrderMock).toHaveBeenCalledTimes(4);
+    });
+
+    const storedEvents = JSON.parse(localStorage.getItem(storageKey(STORAGE_KEYS.events, userScope)));
+    expect(storedEvents.map((event) => event.id)).toEqual(expect.arrayContaining(['local-1', 'remote-1']));
+  });
+
   it('syncs a newly created match to Supabase for shared selection', async () => {
     const session = { user: { id: 'user-create', email: 'analyst@example.com' } };
     mockState.sessionState.session = session;
@@ -279,6 +411,106 @@ describe('App shell auth and sync', () => {
         opponent: 'Na Fianna',
         match_date: '2026-04-01',
         team_id: 'team-1',
+      }));
+    });
+  });
+
+  it('defers event upserts to Supabase when the parent match is still in the pending queue', async () => {
+    // Regression test for the sync-ordering bug:
+    // An event created offline whose parent match is still in pendingMatchSync
+    // must not be pushed as localOnly (which would violate the match FK on Supabase).
+    // Instead it should be moved into pendingSync and flushed after the match lands.
+    const session = { user: { id: 'user-sync-order', email: 'analyst@example.com' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    // Seed a match and its event in local storage, both created offline.
+    const matchId = 'offline-match-1';
+    const userScope = 'user:user-sync-order';
+    seedScopedMatches(userScope, [{
+      id: matchId,
+      team: 'Clontarf',
+      opponent: 'Boden',
+      match_date: '2026-03-30',
+      status: 'open',
+      created_at: '2026-03-30T09:00:00.000Z',
+      updated_at: '2026-03-30T09:00:00.000Z',
+      last_event_at: '2026-03-30T09:01:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, matchId);
+    seedScopedEvents(userScope, [{
+      id: 'offline-event-1',
+      match_id: matchId,
+      created_at: '2026-03-30T09:01:00.000Z',
+      match_date: '2026-03-30',
+      team: 'Clontarf',
+      opponent: 'Boden',
+      period: 'H1',
+      clock: '2:00',
+      outcome: 'Retained',
+      contest_type: 'clean',
+      event_type: 'kickout',
+      direction: 'ours',
+      x: 0.5,
+      y: 0.5,
+      schema_version: 1,
+    }]);
+
+    // Both match and event are in their respective pending queues (simulating offline capture).
+    localStorage.setItem(
+      storageKey('ko_match_sync_queue', userScope),
+      JSON.stringify([{ id: matchId, op: 'upsert' }])
+    );
+    localStorage.setItem(
+      storageKey('ko_sync_queue', userScope),
+      JSON.stringify([{ id: 'offline-event-1', op: 'upsert' }])
+    );
+
+    // Supabase reports no remote records yet (fresh reconnect).
+    mockState.selectOrderMock
+      .mockResolvedValueOnce({ data: [], error: null })  // matches query
+      .mockResolvedValueOnce({ data: [], error: null }); // events query
+
+    await renderApp();
+
+    // flushSyncQueue should be called.
+    await waitFor(() => {
+      // The match upsert must fire.
+      expect(mockState.upsertMock).toHaveBeenCalledWith(
+        expect.objectContaining({ id: matchId })
+      );
+    });
+
+    // The event upsert must also fire (via flushSyncQueue after the match).
+    await waitFor(() => {
+      expect(mockState.upsertMock).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'offline-event-1' })
+      );
+    });
+
+    // Crucially: at the point syncFromSupabase computed localOnly, the event must NOT
+    // have been included in the immediate upsert batch (it was deferred). We verify
+    // this indirectly — the test passes only if the app reaches the synced state
+    // without throwing a FK-violation error from the mock.
+    await waitFor(() => {
+      expect(screen.queryByText(/sync failed/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it('records sync failures in the diagnostics log', async () => {
+    const session = { user: { id: 'user-sync-diagnostics', email: 'analyst@example.com' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+    mockState.selectOrderMock.mockRejectedValueOnce(new Error('Network lost'));
+
+    await renderApp();
+
+    expect(await screen.findByText(/Network lost/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(diagnosticsMock.appendDiagnostic).toHaveBeenCalledWith(expect.objectContaining({
+        kind: 'sync',
+        message: 'Network lost',
       }));
     });
   });

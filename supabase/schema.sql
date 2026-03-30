@@ -11,6 +11,7 @@
 --   supabase/migrations/20260326000100_add_turnover_players.sql
 --   supabase/migrations/20260329000100_add_matches_table.sql
 --   supabase/migrations/20260329000200_add_event_match_id.sql
+--   supabase/migrations/20260330000100_add_event_indexes.sql
 -- ============================================================
 
 -- Teams
@@ -48,6 +49,13 @@ create table if not exists matches (
 
 create index if not exists matches_team_updated_idx
   on matches (team_id, updated_at desc);
+
+-- Indexes on events used by every team-scoped query and by RLS policy evaluation.
+create index if not exists events_team_id_idx
+  on events (team_id);
+
+create index if not exists events_match_id_idx
+  on events (match_id);
 
 -- Events
 create table if not exists events (

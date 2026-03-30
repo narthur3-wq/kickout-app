@@ -24,7 +24,7 @@ Start in `Capture` and set the current match:
 - Opponent
 - Match date
 
-The app uses those three fields to decide what the current match is.
+The app stores that setup on the active match record and uses that as the current match. For older pre-migration records, it can still fall back to the legacy team/opponent/date key.
 
 Set the first-half orientation correctly:
 
@@ -181,7 +181,7 @@ The `Period` control inside the capture form is separate. That sets the period w
 
 ## Events, edit, import, and export
 
-`Events` is the match log.
+`Events` is the full event log for the current storage scope.
 
 From there you can:
 
@@ -192,6 +192,8 @@ From there you can:
 - import JSON
 
 JSON export is the main backup path.
+
+`Events` is broader than the default active-match views. It is meant for review, search, and export, not just the currently selected match.
 
 If cloud sync is unavailable, events are still saved locally first.
 

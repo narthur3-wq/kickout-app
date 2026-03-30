@@ -71,6 +71,9 @@ export async function userHasAccess() {
     if (error) return false;
     return Array.isArray(data) && data.length > 0;
   } catch {
-    return false;
+    // Network error — fail open so a transient connectivity blip (e.g., mobile signal
+    // drop mid-match) does not sign the user out. The next successful check will deny
+    // access if the user has genuinely been removed from allowed_users.
+    return true;
   }
 }

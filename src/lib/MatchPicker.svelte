@@ -16,6 +16,16 @@
   let draftOpponent = '';
   let draftDate = defaultMatchDate();
 
+  function formatMatchLabel(match) {
+    const team = String(match?.team ?? '').trim();
+    const opponent = String(match?.opponent ?? '').trim();
+
+    if (team && opponent) return `${team} v ${opponent}`;
+    if (team) return `${team} v Unknown opponent`;
+    if (opponent) return `Unknown team v ${opponent}`;
+    return 'Untitled match';
+  }
+
   $: openMatches = matches
     .filter((m) => m.status === 'open')
     .sort((a, b) => (b.last_event_at || b.created_at || '').localeCompare(a.last_event_at || a.created_at || ''));
@@ -74,7 +84,7 @@
       <div class="current-match">
         <div class="current-match-info">
           <span class="current-label">Current</span>
-          <span class="current-name">{activeMatch.team} v {activeMatch.opponent}</span>
+          <span class="current-name">{formatMatchLabel(activeMatch)}</span>
           <span class="current-date">{activeMatch.match_date}</span>
           {#if isMatchClosed}
             <span class="status-badge closed">Closed</span>
@@ -105,7 +115,7 @@
           class="match-row {m.id === activeMatchId ? 'active' : ''}"
           on:click={() => dispatch('select', m.id)}
         >
-          <span class="row-name">{m.team} v {m.opponent}</span>
+          <span class="row-name">{formatMatchLabel(m)}</span>
           <span class="row-meta">{m.match_date}</span>
         </button>
       {/each}
@@ -119,7 +129,7 @@
           class="match-row closed-row {m.id === activeMatchId ? 'active' : ''}"
           on:click={() => dispatch('select', m.id)}
         >
-          <span class="row-name">{m.team} v {m.opponent}</span>
+          <span class="row-name">{formatMatchLabel(m)}</span>
           <span class="row-meta">{m.match_date} · Closed</span>
         </button>
       {/each}

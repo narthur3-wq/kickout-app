@@ -1,8 +1,12 @@
 <script>
+  import { createEventDispatcher } from 'svelte';
   import { supabase } from './supabase.js';
+  import { appendDiagnostic } from './diagnostics.js';
 
   export let user = null;
   export let teamName = null;
+
+  const dispatch = createEventDispatcher();
 
   let email = '';
   let teamMode = 'current'; // 'current' | 'named'
@@ -60,6 +64,17 @@
       if (teamMode === 'named') newTeamName = '';
     } catch (err) {
       error = err?.message || 'Onboarding failed.';
+      appendDiagnostic({
+        kind: 'onboarding',
+        message: error,
+        details: {
+          email: cleanedEmail,
+          teamMode,
+          teamName: teamMode === 'named' ? cleanedTeamName : null,
+          authMode,
+        },
+      });
+      dispatch('diagnostic');
     } finally {
       loading = false;
     }

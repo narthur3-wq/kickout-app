@@ -8,6 +8,7 @@ import {
   loadActiveMatchId,
   loadMatches,
   migrateEventsToMatches,
+  normalizeMatchSnapshot,
   reopenMatch,
   saveActiveMatchId,
   saveMatches,
@@ -193,20 +194,24 @@ describe('clearMatchStorage', () => {
     const storage = makeStorage({
       ko_matches: '[{"id":"x"}]',
       ko_active_match_id: 'x',
+      ko_sync_cursor: '{"matches":"x","events":"y"}',
     });
     clearMatchStorage(LOCAL_STORAGE_SCOPE, { storage });
     expect(storage._data.has('ko_matches')).toBe(false);
     expect(storage._data.has('ko_active_match_id')).toBe(false);
+    expect(storage._data.has('ko_sync_cursor')).toBe(false);
   });
 
   it('uses scoped keys', () => {
     const storage = makeStorage({
       'ko_matches:user:abc': '[{"id":"x"}]',
       'ko_active_match_id:user:abc': 'x',
+      'ko_sync_cursor:user:abc': '{"matches":"x","events":"y"}',
     });
     clearMatchStorage('user:abc', { storage });
     expect(storage._data.has('ko_matches:user:abc')).toBe(false);
     expect(storage._data.has('ko_active_match_id:user:abc')).toBe(false);
+    expect(storage._data.has('ko_sync_cursor:user:abc')).toBe(false);
   });
 });
 
@@ -324,5 +329,51 @@ describe('migrateEventsToMatches', () => {
     expect(storage._data.has('ko_matches:user:abc')).toBe(true);
     expect(storage._data.has('ko_active_match_id:user:abc')).toBe(true);
     expect(storage._data.has('ko_matches')).toBe(false);
+  });
+});
+
+describe('normalizeMatchSnapshot', () => {
+  it('collapses duplicate matches by logical identity and rewrites event match_ids', () => {
+    const matches = [
+      {
+        id: 'match-a',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        match_date: '2026-03-25',
+        status: 'closed',
+        created_at: '2026-03-25T10:00:00Z',
+        updated_at: '2026-03-25T10:00:00Z',
+      },
+      {
+        id: 'match-b',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        match_date: '2026-03-25',
+        status: 'open',
+        created_at: '2026-03-25T11:00:00Z',
+        updated_at: '2026-03-25T11:00:00Z',
+      },
+      {
+        id: 'match-c',
+        team: 'Clontarf',
+        opponent: 'Vincents',
+        match_date: '2026-03-22',
+        status: 'open',
+        created_at: '2026-03-22T10:00:00Z',
+        updated_at: '2026-03-22T10:00:00Z',
+      },
+    ];
+    const events = [
+      { id: 'e1', match_id: 'match-b', outcome: 'Retained', x: 0.5, y: 0.5 },
+      { id: 'e2', match_id: 'match-c', outcome: 'Lost', x: 0.3, y: 0.3 },
+    ];
+
+    const result = normalizeMatchSnapshot(matches, events, 'match-a');
+
+    expect(result.matches).toHaveLength(2);
+    expect(result.matches.find((match) => match.team === 'Clontarf' && match.opponent === 'Crokes')?.id).toBe('match-a');
+    expect(result.events.find((event) => event.id === 'e1')?.match_id).toBe('match-a');
+    expect(result.events.find((event) => event.id === 'e2')?.match_id).toBe('match-c');
+    expect(result.activeMatchId).toBe('match-a');
   });
 });

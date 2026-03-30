@@ -29,6 +29,12 @@
     planImportMerge,
   } from './lib/importMerge.js';
   import {
+    appendDiagnostic,
+    clearDiagnostics,
+    formatDiagnostics,
+    loadDiagnostics,
+  } from './lib/diagnostics.js';
+  import {
     LOCAL_STORAGE_SCOPE,
     STORAGE_KEYS,
     parsePendingSyncEntries,
@@ -50,6 +56,7 @@
     matchIdentityKey,
     migrateEventsToMatches,
     normalizeMatchRecord,
+    normalizeMatchSnapshot,
     reopenMatch,
     saveActiveMatchId,
     saveMatches,
@@ -58,6 +65,12 @@
   } from './lib/matchStore.js';
   import { buildScoreSnapshots } from './lib/score.js';
   import { buildKickoutClockTrend } from './lib/analyticsHelpers.js';
+  import {
+    advanceSyncCursor,
+    loadSyncCursor,
+    mergeRowsById,
+    saveSyncCursor,
+  } from './lib/syncState.js';
   import { onMount, tick } from 'svelte';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
@@ -107,11 +120,14 @@
   let pitchError = false;
   let notice = null;
   let noticeTimer = null;
+  let diagnostics = loadDiagnostics();
   let confirmState = null;
   let activeTab = 'capture';
   let savedFlash = false;
   let pendingSync = new SvelteMap(); // id -> 'upsert' | 'delete'
   let pendingMatchSync = new SvelteMap(); // id -> 'upsert'
+  let syncCursor = loadSyncCursor();
+  let forceFullSync = false;
   let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
   let syncMessage = '';
   let metaReady = false;
@@ -321,6 +337,8 @@
     pendingMatchSync = new SvelteMap();
     syncStatus = '';
     syncMessage = '';
+    syncCursor = { matches: null, events: null };
+    forceFullSync = false;
     backupReminder = false;
     showSummary = false;
     accountOpen = false;
@@ -419,6 +437,18 @@
     });
   }
 
+  function normalizeMatchState(nextMatches = matches, nextEvents = events, preferredMatchId = activeMatchId) {
+    const normalized = normalizeMatchSnapshot(nextMatches, nextEvents, preferredMatchId, {
+      teamIdFallback: teamId,
+      userIdFallback: user?.id ?? null,
+    });
+    return {
+      matches: normalized.matches,
+      events: applyDerivedScoreDisplays(normalized.events),
+      activeMatchId: resolveActiveMatchId(normalized.matches, normalized.activeMatchId),
+    };
+  }
+
   function persistMatches() {
     if (!storageScope) return;
     try {
@@ -427,14 +457,23 @@
     } catch {}
   }
 
+  function persistSyncCursor(nextCursor = syncCursor) {
+    if (!storageScope) return;
+    syncCursor = nextCursor;
+    saveSyncCursor(nextCursor, storageScope, { storage: localStorage });
+  }
+
   function loadMatchesFromStorage(scope = storageScope) {
     const storedMatches = loadMatches(scope, { storage: localStorage });
     const storedActiveId = loadActiveMatchId(scope, { storage: localStorage });
 
     if (storedMatches.length > 0) {
-      matches = storedMatches;
-      activeMatchId = resolveActiveMatchId(storedMatches, storedActiveId);
-      syncShellMatchContext(storedMatches.find((match) => match.id === activeMatchId) ?? null);
+      const normalized = normalizeMatchState(storedMatches, events, storedActiveId);
+      matches = normalized.matches;
+      events = normalized.events;
+      activeMatchId = normalized.activeMatchId;
+      syncShellMatchContext(matches.find((match) => match.id === activeMatchId) ?? null);
+      persistLocal();
       return;
     }
 
@@ -445,13 +484,12 @@
         teamId,
         userId: user?.id ?? null,
       });
-      if (result.migrated) {
-        events = applyDerivedScoreDisplays(result.updatedEvents);
-        persistLocal();
-      }
-      matches = result.matches;
-      activeMatchId = resolveActiveMatchId(result.matches, result.activeMatchId);
-      syncShellMatchContext(result.matches.find((match) => match.id === activeMatchId) ?? null);
+      const normalized = normalizeMatchState(result.matches, result.updatedEvents, result.activeMatchId);
+      matches = normalized.matches;
+      events = normalized.events;
+      activeMatchId = normalized.activeMatchId;
+      syncShellMatchContext(matches.find((match) => match.id === activeMatchId) ?? null);
+      persistLocal();
     }
   }
 
@@ -465,6 +503,7 @@
       loadPendingMatchSync(scope);
       loadMatchesFromStorage(scope);
     }
+    forceFullSync = true;
     syncSetupDraftFromMatch();
     markDraftPristine();
     metaReady = true;
@@ -484,14 +523,19 @@
         for (const match of localMatches) {
           mergedMatchesById[match.id] = match;
         }
-        saveMatches(Object.values(mergedMatchesById), nextScope, { storage: localStorage });
+        const userActiveMatchId = loadActiveMatchId(nextScope, { storage: localStorage });
+        const normalized = normalizeMatchSnapshot(
+          Object.values(mergedMatchesById),
+          [],
+          userActiveMatchId || localActiveMatchId,
+          {
+            teamIdFallback: teamId,
+            userIdFallback: user?.id ?? null,
+          }
+        );
+        saveMatches(normalized.matches, nextScope, { storage: localStorage });
+        saveActiveMatchId(normalized.activeMatchId, nextScope, { storage: localStorage });
         clearMatchStorage(LOCAL_STORAGE_SCOPE, { storage: localStorage });
-      }
-
-      const userActiveMatchId = loadActiveMatchId(nextScope, { storage: localStorage });
-      if (!userActiveMatchId && localActiveMatchId) {
-        saveActiveMatchId(localActiveMatchId, nextScope, { storage: localStorage });
-        saveActiveMatchId(null, LOCAL_STORAGE_SCOPE, { storage: localStorage });
       }
 
       const localMatchSyncKey = storageKey(STORAGE_KEYS.matchSync, LOCAL_STORAGE_SCOPE);
@@ -512,6 +556,9 @@
       return result.migrated ? result : null;
     } catch (error) {
       console.error('Local data migration failed', error);
+      recordDiagnostic('storage', 'Local data migration failed', {
+        error: error?.message || String(error),
+      });
       showNotice('error', 'We could not move older local data into your signed-in storage automatically.');
       return null;
     }
@@ -527,6 +574,7 @@
       onCorrupt: () => console.warn('ko_meta corrupt in localStorage'),
     });
     ({ team, opponent, matchDate, period, ourGoalAtTop } = parseStoredMeta(meta, defaultMatchDate()));
+    syncCursor = loadSyncCursor(scope, { storage: localStorage });
     syncSetupDraftFromMatch();
     markDraftPristine();
   }
@@ -546,10 +594,16 @@
       })));
     } catch (e) {
       if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+        recordDiagnostic('storage', 'localStorage quota exceeded', {
+          error: e?.message || String(e),
+        });
         showNotice('error', 'Storage full. Export your JSON backup and clear old events before continuing.', 8000);
         backupReminder = true;
       } else {
         console.error('localStorage write failed', e);
+        recordDiagnostic('storage', 'localStorage write failed', {
+          error: e?.message || String(e),
+        });
       }
     }
   }
@@ -568,6 +622,9 @@
       })));
     } catch (e) {
       console.error('localStorage meta write failed', e);
+      recordDiagnostic('storage', 'localStorage meta write failed', {
+        error: e?.message || String(e),
+      });
     }
   }
 
@@ -677,6 +734,7 @@
   function setSyncError(message) {
     syncStatus = 'error';
     syncMessage = message;
+    recordDiagnostic('sync', message);
   }
   function clearSyncMessage() {
     syncMessage = '';
@@ -690,6 +748,69 @@
         noticeTimer = null;
       }, timeout);
     }
+  }
+  function recordDiagnostic(kind, message, details = {}) {
+    diagnostics = appendDiagnostic({
+      kind,
+      message,
+      details,
+      context: {
+        storageScope,
+        userEmail: user?.email ?? null,
+        team: team || null,
+        opponent: opponent || null,
+        matchDate,
+        activeMatchId,
+        activeTab,
+        syncStatus,
+        syncMessage,
+        isOnline,
+        pendingSyncCount: pendingSync.size,
+        pendingMatchSyncCount: pendingMatchSync.size,
+      },
+    });
+  }
+  function buildSupportReport() {
+    const currentDiagnostics = loadDiagnostics();
+    diagnostics = currentDiagnostics;
+    const activeMatchLabel = activeMatch
+      ? `${activeMatch.team || 'Unknown team'} vs ${activeMatch.opponent || 'Unknown opponent'} (${activeMatch.match_date || 'unknown date'}) [${activeMatch.id}]`
+      : 'none';
+    const lines = [
+      `Captured: ${new Date().toISOString()}`,
+      `User: ${user?.email || 'anonymous'}`,
+      `Storage scope: ${storageScope || 'none'}`,
+      `Team: ${team || 'none'}`,
+      `Opponent: ${opponent || 'none'}`,
+      `Match date: ${matchDate || 'none'}`,
+      `Active match: ${activeMatchLabel}`,
+      `Tab: ${activeTab}`,
+      `Sync status: ${syncStatus || 'idle'}`,
+      `Sync message: ${syncMessage || 'none'}`,
+      `Pending event queue: ${pendingSync.size}`,
+      `Pending match queue: ${pendingMatchSync.size}`,
+      `Online: ${isOnline ? 'yes' : 'no'}`,
+      '',
+      'Recent diagnostics:',
+      formatDiagnostics(currentDiagnostics),
+    ];
+    return lines.join('\n');
+  }
+  async function copyDiagnosticsSummary() {
+    const text = buildSupportReport();
+    try {
+      if (!globalThis.navigator?.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await globalThis.navigator.clipboard.writeText(text);
+      showNotice('success', 'Diagnostics copied to clipboard.', 4000);
+    } catch (error) {
+      recordDiagnostic('support', 'Failed to copy diagnostics summary', { error: error?.message || String(error) });
+      showNotice('error', 'Could not copy diagnostics to clipboard.', 5000);
+    }
+  }
+  function clearDiagnosticsLog() {
+    clearDiagnostics();
+    diagnostics = [];
+    showNotice('success', 'Diagnostics log cleared.', 4000);
   }
   function askConfirm(message, action, confirmLabel = 'Confirm', options = {}) {
     confirmState = {
@@ -781,22 +902,48 @@
     syncStatus = 'syncing';
     clearSyncMessage();
     try {
-      const { data: matchData, error: matchError } = await supabase
-        .from('matches')
-        .select('*')
-        .eq('team_id', teamId)
-        .order('updated_at', { ascending: false });
-      if (matchError) throw matchError;
+      const useFullRefresh = forceFullSync || !syncCursor.matches || !syncCursor.events;
+      let remoteMatchRows = [];
+      let remoteEventRows = [];
 
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .eq('team_id', teamId)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+      if (useFullRefresh) {
+        const { data: matchData, error: matchError } = await supabase
+          .from('matches')
+          .select('*')
+          .eq('team_id', teamId)
+          .order('updated_at', { ascending: true });
+        if (matchError) throw matchError;
 
-      let remoteMatches = (matchData || []).map(normalizeMatchForStorage);
-      let remoteEvents = (data || []).map(normalizeEventForStorage);
+        const { data, error } = await supabase
+          .from('events')
+          .select('*')
+          .eq('team_id', teamId)
+          .order('updated_at', { ascending: true });
+        if (error) throw error;
+
+        remoteMatchRows = matchData || [];
+        remoteEventRows = data || [];
+      } else {
+        let matchQuery = supabase.from('matches').select('*').eq('team_id', teamId);
+        if (syncCursor.matches) {
+          matchQuery = matchQuery.gt('updated_at', syncCursor.matches);
+        }
+        const { data: matchData, error: matchError } = await matchQuery.order('updated_at', { ascending: true });
+        if (matchError) throw matchError;
+
+        let eventQuery = supabase.from('events').select('*').eq('team_id', teamId);
+        if (syncCursor.events) {
+          eventQuery = eventQuery.gt('updated_at', syncCursor.events);
+        }
+        const { data, error } = await eventQuery.order('updated_at', { ascending: true });
+        if (error) throw error;
+
+        remoteMatchRows = matchData || [];
+        remoteEventRows = data || [];
+      }
+
+      let remoteMatches = remoteMatchRows.map(normalizeMatchForStorage);
+      let remoteEvents = remoteEventRows.map(normalizeEventForStorage);
       let remoteBackfill = null;
 
       if (remoteMatches.length === 0 && remoteEvents.length > 0) {
@@ -808,17 +955,20 @@
         remoteEvents = remoteBackfill.events.map(normalizeEventForStorage);
       }
 
+      if (useFullRefresh) {
+        const localState = normalizeMatchState(matches, events, activeMatchId);
+        const localMatchesState = localState.matches;
+        const localEventsState = localState.events;
+        const localActiveMatchId = localState.activeMatchId;
       const remoteMatchIds = new Set(remoteMatches.map((match) => match.id));
-      const localOnlyMatches = matches
+      const localOnlyMatches = localMatchesState
         .filter((match) => !remoteMatchIds.has(match.id) && !pendingMatchSync.has(match.id))
         .map(normalizeMatchForStorage);
       const remoteFilteredMatches = remoteMatches.filter((match) => !pendingMatchSync.has(match.id));
-      const pendingLocalMatches = matches
+      const pendingLocalMatches = localMatchesState
         .filter((match) => pendingMatchSync.get(match.id) === 'upsert')
         .map(normalizeMatchForStorage);
-      matches = [...remoteFilteredMatches, ...localOnlyMatches, ...pendingLocalMatches];
-      activeMatchId = resolveActiveMatchId(matches, activeMatchId);
-      syncShellMatchContext(matches.find((match) => match.id === activeMatchId) ?? null);
+      const nextMatches = [...remoteFilteredMatches, ...localOnlyMatches, ...pendingLocalMatches];
 
       if (remoteBackfill?.matches?.length) {
         const { error: matchBackfillError } = await supabase.from('matches').upsert(remoteBackfill.matches.map(normalizeMatchForStorage));
@@ -845,10 +995,27 @@
       // Any event currently queued (pending upsert or delete) is authoritative locally —
       // do not overwrite it with the remote version, and do not re-add locally deleted events.
       const remoteIds = new Set(remoteEvents.map(e => e.id));
-      const localOnly = events.filter(e => !remoteIds.has(e.id) && !pendingSync.has(e.id)).map(normalizeEventForStorage);
+
+      // Split unsynced local events into two groups:
+      //   localOnly        — safe to push now; parent match is already on Supabase.
+      //   localOnlyDeferred — parent match is still in pendingMatchSync (not yet remote).
+      //                       Pushing these now would violate the match FK. Move them into
+      //                       pendingSync so flushSyncQueue handles them after the match lands.
+      const localOnlyRaw = localEventsState.filter(e => !remoteIds.has(e.id) && !pendingSync.has(e.id));
+      const localOnlyDeferred = localOnlyRaw.filter(e => e.match_id && pendingMatchSync.has(e.match_id));
+      for (const ev of localOnlyDeferred) queuePendingSync(ev.id, 'upsert');
+      const localOnly = localOnlyRaw
+        .filter(e => !(e.match_id && pendingMatchSync.has(e.match_id)))
+        .map(normalizeEventForStorage);
+
       const remoteFiltered = remoteEvents.filter(e => !pendingSync.has(e.id));
-      const pendingLocal = events.filter(e => pendingSync.get(e.id) === 'upsert').map(normalizeEventForStorage);
-      events = applyDerivedScoreDisplays([...remoteFiltered, ...localOnly, ...pendingLocal]);
+      // Compute pendingLocal after the deferral so deferred events are included in the merged view.
+      const pendingLocal = localEventsState.filter(e => pendingSync.get(e.id) === 'upsert').map(normalizeEventForStorage);
+      const normalized = normalizeMatchState(nextMatches, [...remoteFiltered, ...localOnly, ...pendingLocal], localActiveMatchId);
+      matches = normalized.matches;
+      events = normalized.events;
+      activeMatchId = normalized.activeMatchId;
+      syncShellMatchContext(matches.find((match) => match.id === activeMatchId) ?? null);
       // Push local-only events up to Supabase. If this fails, keep those
       // records queued locally so the UI does not imply they are safely synced.
       if (localOnly.length > 0) {
@@ -861,6 +1028,39 @@
       persistLocal();
       await flushSyncQueue();
       refreshSyncStateFromQueues();
+      } else {
+        const pendingMatchIds = new Set([...pendingMatchSync.keys()]);
+        const pendingEventIds = new Set([...pendingSync.keys()]);
+
+        if (remoteBackfill?.matches?.length) {
+          const { error: matchBackfillError } = await supabase.from('matches').upsert(remoteBackfill.matches.map(normalizeMatchForStorage));
+          if (matchBackfillError) {
+            for (const match of remoteBackfill.matches) queuePendingMatchSync(match.id);
+            throw matchBackfillError;
+          }
+          const { error: eventBackfillError } = await supabase.from('events').upsert(remoteBackfill.events.map(normalizeEventForStorage));
+          if (eventBackfillError) {
+            for (const event of remoteBackfill.events) queuePendingSync(event.id, 'upsert');
+            throw eventBackfillError;
+          }
+        }
+
+        const mergedMatches = mergeRowsById(matches, remoteMatches, { pendingIds: pendingMatchIds });
+        const mergedEvents = mergeRowsById(events, remoteEvents, { pendingIds: pendingEventIds });
+        const normalized = normalizeMatchState(mergedMatches, mergedEvents, activeMatchId);
+        matches = normalized.matches;
+        events = normalized.events;
+        activeMatchId = normalized.activeMatchId;
+        syncShellMatchContext(matches.find((match) => match.id === activeMatchId) ?? null);
+        persistLocal();
+        await flushSyncQueue();
+        refreshSyncStateFromQueues();
+      }
+      persistSyncCursor(advanceSyncCursor(syncCursor, {
+        matches: remoteMatchRows,
+        events: remoteEventRows,
+      }));
+      forceFullSync = false;
     } catch (e) {
       console.error('Sync failed', e);
       setSyncError(e?.message || 'Sync failed.');
@@ -934,11 +1134,13 @@
       .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `team_id=eq.${teamId}` }, (payload) => {
         const changedId = payload.new?.id ?? payload.old?.id;
         if (changedId && pendingMatchSync.has(changedId)) return;
+        if (payload.eventType === 'DELETE') forceFullSync = true;
         scheduleRealtimeSync();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'events', filter: `team_id=eq.${teamId}` }, (payload) => {
         const changedId = payload.new?.id ?? payload.old?.id;
         if (changedId && pendingSync.has(changedId)) return;
+        if (payload.eventType === 'DELETE') forceFullSync = true;
         scheduleRealtimeSync();
       })
       .subscribe();
@@ -957,6 +1159,7 @@
 
     const handleOnline = () => {
       isOnline = true;
+      forceFullSync = true;
       flushSyncQueue();
       scheduleRealtimeSync();
     };
@@ -1802,7 +2005,7 @@
   // ── Derived match score from tracked shots ────────────────────────────────
   $: currentMatchScore = (() => {
     const currentKey = `${matchDate}|${norm(team)}|${norm(opponent)}`;
-    return buildCurrentMatchScore(events, currentKey);
+    return buildCurrentMatchScore(events, currentKey, activeMatchId);
   })();
 
   $: selectedTeamLabel = direction === 'ours' ? (team || 'Ours') : (opponent || 'Theirs');
@@ -2104,6 +2307,18 @@
             <div class="account-dropdown">
               <p class="account-email">{user.email}</p>
               <button class="account-signout" on:click={() => { accountOpen = false; signOut(); }}>Sign out</button>
+              <div class="account-diagnostics">
+                <div class="account-diagnostics-label">Diagnostics</div>
+                <p class="account-diagnostics-copy">
+                  {diagnostics.length > 0
+                    ? `${diagnostics.length} issue${diagnostics.length === 1 ? '' : 's'} saved locally.`
+                    : 'No issues recorded yet.'}
+                </p>
+                <div class="account-diagnostics-actions">
+                  <button class="account-diagnostics-btn" on:click={copyDiagnosticsSummary}>Copy summary</button>
+                  <button class="account-diagnostics-btn" on:click={clearDiagnosticsLog} disabled={diagnostics.length === 0}>Clear log</button>
+                </div>
+              </div>
             </div>
           {/if}
         </div>
@@ -2442,7 +2657,7 @@
   </div>
   {:else}
   <div class="full-panel">
-    <AdminPanel {user} {teamName} />
+    <AdminPanel {user} {teamName} on:diagnostic={() => diagnostics = loadDiagnostics()} />
   </div>
   {/if}
   {/if}
@@ -2550,7 +2765,7 @@
   .account-dropdown {
     position: absolute; right: 0; top: calc(100% + 6px);
     background: #fff; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.18);
-    padding: 10px 14px; min-width: 180px; z-index: 200;
+    padding: 10px 14px; min-width: 220px; max-width: 280px; z-index: 200;
   }
   .account-email { font-size: 11px; color: #6b7280; margin: 0 0 8px; word-break: break-all; }
   .account-signout {
@@ -2558,6 +2773,51 @@
     font-size: 13px; color: #111; padding: 4px 0; font-family: inherit;
   }
   .account-signout:hover { color: #e11d48; }
+  .account-diagnostics {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e5e7eb;
+  }
+  .account-diagnostics-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9ca3af;
+    margin-bottom: 4px;
+  }
+  .account-diagnostics-copy {
+    margin: 0 0 8px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #374151;
+  }
+  .account-diagnostics-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .account-diagnostics-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+    color: #111827;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .account-diagnostics-btn:hover:not(:disabled) {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+  }
+  .account-diagnostics-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
   .icon-btn {
     background: none; border: none; cursor: pointer; font-size: 14px;
     padding: 5px 6px; border-radius: 6px; color: rgba(255,255,255,0.55); transition: all 0.15s;

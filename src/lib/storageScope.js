@@ -5,6 +5,7 @@ export const STORAGE_KEYS = {
   meta: 'ko_meta',
   sync: 'ko_sync_queue',
   matchSync: 'ko_match_sync_queue',
+  syncCursor: 'ko_sync_cursor',
 };
 
 export function storageScopeForUser(nextUser, supabaseConfigured) {
