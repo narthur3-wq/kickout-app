@@ -193,20 +193,24 @@ describe('clearMatchStorage', () => {
     const storage = makeStorage({
       ko_matches: '[{"id":"x"}]',
       ko_active_match_id: 'x',
+      ko_sync_cursor: '{"matches":"x","events":"y"}',
     });
     clearMatchStorage(LOCAL_STORAGE_SCOPE, { storage });
     expect(storage._data.has('ko_matches')).toBe(false);
     expect(storage._data.has('ko_active_match_id')).toBe(false);
+    expect(storage._data.has('ko_sync_cursor')).toBe(false);
   });
 
   it('uses scoped keys', () => {
     const storage = makeStorage({
       'ko_matches:user:abc': '[{"id":"x"}]',
       'ko_active_match_id:user:abc': 'x',
+      'ko_sync_cursor:user:abc': '{"matches":"x","events":"y"}',
     });
     clearMatchStorage('user:abc', { storage });
     expect(storage._data.has('ko_matches:user:abc')).toBe(false);
     expect(storage._data.has('ko_active_match_id:user:abc')).toBe(false);
+    expect(storage._data.has('ko_sync_cursor:user:abc')).toBe(false);
   });
 });
 

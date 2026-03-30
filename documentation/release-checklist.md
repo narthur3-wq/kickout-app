@@ -34,6 +34,5 @@ Use this as the PR description checklist before merging a production-ready chang
 
 ## Still Open
 
-- [ ] Incremental sync instead of full-history refetch
 - [ ] Split the biggest parts of `src/App.svelte`
 - [ ] Add durable remote monitoring if this app starts handling more than a small trusted team

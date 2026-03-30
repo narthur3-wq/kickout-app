@@ -155,6 +155,8 @@ Current behavior:
 - failed cloud writes are queued
 - queued writes can be retried
 - realtime refresh is used when Supabase is configured
+- sync uses a stored `updated_at` cursor per storage scope to fetch deltas after the first full reconciliation
+- reconnects and destructive realtime events force a full refresh so the local view can be reconciled safely
 - first-login migration moves older local-only records into user-scoped storage
 
 Sync ordering guarantee:

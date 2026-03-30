@@ -8,18 +8,23 @@ const mockState = vi.hoisted(() => {
   const sessionState = { session: null };
   const subscription = { unsubscribe: vi.fn() };
   const selectOrderMock = vi.fn();
-  const selectEqMock = vi.fn(() => ({ order: selectOrderMock }));
+  const selectGtMock = vi.fn(() => ({ order: selectOrderMock }));
+  const selectEqMock = vi.fn(() => ({ gt: selectGtMock, order: selectOrderMock }));
   const selectMock = vi.fn(() => ({ eq: selectEqMock }));
   const upsertMock = vi.fn();
   const deleteEqMock = vi.fn();
   const deleteMock = vi.fn(() => ({ eq: deleteEqMock }));
+  const realtimeHandlers = [];
   const fromMock = vi.fn(() => ({
     select: selectMock,
     upsert: upsertMock,
     delete: deleteMock,
   }));
   const channelMock = {
-    on: vi.fn().mockReturnThis(),
+    on: vi.fn((...args) => {
+      realtimeHandlers.push(args);
+      return channelMock;
+    }),
     subscribe: vi.fn().mockReturnValue({}),
   };
 
@@ -34,6 +39,7 @@ const mockState = vi.hoisted(() => {
     getUserTeamDetailsMock: vi.fn(),
     isConfiguredAdminMock: vi.fn(),
     selectOrderMock,
+    selectGtMock,
     selectEqMock,
     selectMock,
     upsertMock,
@@ -42,6 +48,7 @@ const mockState = vi.hoisted(() => {
     fromMock,
     channelFactoryMock: vi.fn(() => channelMock),
     channelMock,
+    realtimeHandlers,
   };
 });
 
@@ -107,16 +114,25 @@ describe('App shell auth and sync', () => {
     mockState.userHasAccessMock.mockResolvedValue(true);
     mockState.getUserTeamDetailsMock.mockResolvedValue({ id: 'team-1', name: 'Clontarf' });
     mockState.isConfiguredAdminMock.mockReturnValue(false);
-    mockState.selectOrderMock.mockResolvedValue({ data: [], error: null });
-    mockState.selectEqMock.mockClear();
-    mockState.selectMock.mockClear();
-    mockState.upsertMock.mockResolvedValue({ error: null });
-    mockState.deleteEqMock.mockResolvedValue({ error: null });
-    mockState.deleteMock.mockClear();
-    mockState.fromMock.mockClear();
-    mockState.channelFactoryMock.mockClear();
-    mockState.channelMock.on.mockClear();
-    mockState.channelMock.subscribe.mockClear();
+    mockState.selectOrderMock.mockReset().mockResolvedValue({ data: [], error: null });
+    mockState.selectGtMock.mockReset().mockImplementation(() => ({ order: mockState.selectOrderMock }));
+    mockState.selectEqMock.mockReset().mockImplementation(() => ({ gt: mockState.selectGtMock, order: mockState.selectOrderMock }));
+    mockState.selectMock.mockReset().mockImplementation(() => ({ eq: mockState.selectEqMock }));
+    mockState.upsertMock.mockReset().mockResolvedValue({ error: null });
+    mockState.deleteEqMock.mockReset().mockResolvedValue({ error: null });
+    mockState.deleteMock.mockReset().mockImplementation(() => ({ eq: mockState.deleteEqMock }));
+    mockState.fromMock.mockReset().mockImplementation(() => ({
+      select: mockState.selectMock,
+      upsert: mockState.upsertMock,
+      delete: mockState.deleteMock,
+    }));
+    mockState.channelFactoryMock.mockReset().mockImplementation(() => mockState.channelMock);
+    mockState.channelMock.on.mockReset().mockImplementation((...args) => {
+      mockState.realtimeHandlers.push(args);
+      return mockState.channelMock;
+    });
+    mockState.channelMock.subscribe.mockReset().mockReturnValue({});
+    mockState.realtimeHandlers.length = 0;
     diagnosticsMock.appendDiagnostic.mockClear();
     diagnosticsMock.loadDiagnostics.mockReturnValue([]);
     diagnosticsMock.clearDiagnostics.mockClear();
@@ -270,6 +286,107 @@ describe('App shell auth and sync', () => {
     expect(await screen.findByRole('button', { name: /Clontarf vs Kilmacud Crokes/i })).toBeInTheDocument();
     expect(mockState.fromMock).toHaveBeenCalledWith('matches');
     expect(mockState.fromMock).toHaveBeenCalledWith('events');
+  });
+
+  it('uses an incremental sync cursor to merge remote deltas without dropping local rows', async () => {
+    const session = { user: { id: 'user-delta', email: 'analyst@example.com' } };
+    const userScope = 'user:user-delta';
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches(userScope, [{
+      id: 'match-1',
+      team: 'Clontarf',
+      opponent: 'Crokes',
+      match_date: '2026-03-29',
+      status: 'open',
+      created_at: '2026-03-29T09:00:00.000Z',
+      updated_at: '2026-03-29T09:00:00.000Z',
+      last_event_at: '2026-03-29T09:05:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, 'match-1');
+    seedScopedEvents(userScope, [{
+      id: 'local-1',
+      match_id: 'match-1',
+      created_at: '2026-03-29T09:05:00.000Z',
+      updated_at: '2026-03-29T09:05:00.000Z',
+      match_date: '2026-03-29',
+      team: 'Clontarf',
+      opponent: 'Crokes',
+      period: 'H1',
+      clock: '5:00',
+      event_type: 'shot',
+      direction: 'ours',
+      outcome: 'Point',
+      x: 0.42,
+      y: 0.28,
+      schema_version: 1,
+    }]);
+    localStorage.setItem(
+      storageKey(STORAGE_KEYS.syncCursor, userScope),
+      JSON.stringify({
+        matches: '2026-03-29T09:00:00.000Z',
+        events: '2026-03-29T09:00:00.000Z',
+      })
+    );
+
+    mockState.selectOrderMock
+      .mockResolvedValueOnce({
+        data: [{
+          id: 'match-1',
+          team_id: 'team-1',
+          team: 'Clontarf',
+          opponent: 'Crokes',
+          match_date: '2026-03-29',
+          status: 'open',
+          created_at: '2026-03-29T09:00:00.000Z',
+          updated_at: '2026-03-29T09:15:00.000Z',
+          last_event_at: '2026-03-29T09:05:00.000Z',
+          closed_at: null,
+        }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({
+        data: [{
+          id: 'remote-1',
+          match_id: 'match-1',
+          team_id: 'team-1',
+          team: 'Clontarf',
+          opponent: 'Crokes',
+          match_date: '2026-03-29',
+          created_at: '2026-03-29T09:20:00.000Z',
+          updated_at: '2026-03-29T09:20:00.000Z',
+          event_type: 'shot',
+          direction: 'theirs',
+          outcome: 'Goal',
+          x: 0.6,
+          y: 0.4,
+          schema_version: 1,
+        }],
+        error: null,
+      });
+
+    await renderApp();
+
+    await waitFor(() => {
+      expect(mockState.realtimeHandlers.length).toBeGreaterThan(0);
+    });
+
+    const eventRealtimeHandler = mockState.realtimeHandlers.find(([, config]) => config.table === 'events')?.[2];
+    expect(eventRealtimeHandler).toBeTypeOf('function');
+    eventRealtimeHandler({ eventType: 'INSERT', new: { id: 'trigger-1' } });
+
+    await waitFor(() => {
+      expect(mockState.selectGtMock).toHaveBeenCalledWith('updated_at', '2026-03-29T09:15:00.000Z');
+      expect(mockState.selectGtMock).toHaveBeenCalledWith('updated_at', '2026-03-29T09:00:00.000Z');
+      expect(mockState.selectOrderMock).toHaveBeenCalledTimes(4);
+    });
+
+    const storedEvents = JSON.parse(localStorage.getItem(storageKey(STORAGE_KEYS.events, userScope)));
+    expect(storedEvents.map((event) => event.id)).toEqual(expect.arrayContaining(['local-1', 'remote-1']));
   });
 
   it('syncs a newly created match to Supabase for shared selection', async () => {

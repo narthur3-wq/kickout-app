@@ -1,4 +1,4 @@
-import { storageKey } from './storageScope.js';
+import { STORAGE_KEYS, storageKey } from './storageScope.js';
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
 export const MATCH_KEYS = {
@@ -155,7 +155,7 @@ export function saveActiveMatchId(id, scope, options = {}) {
 
 export function clearMatchStorage(scope, options = {}) {
   const { storage = globalThis.localStorage } = options;
-  for (const baseKey of Object.values(MATCH_KEYS)) {
+  for (const baseKey of [...Object.values(MATCH_KEYS), STORAGE_KEYS.syncCursor]) {
     const key = storageKey(baseKey, scope);
     if (key && storage) {
       try { storage.removeItem(key); } catch {}

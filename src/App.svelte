@@ -64,6 +64,12 @@
   } from './lib/matchStore.js';
   import { buildScoreSnapshots } from './lib/score.js';
   import { buildKickoutClockTrend } from './lib/analyticsHelpers.js';
+  import {
+    advanceSyncCursor,
+    loadSyncCursor,
+    mergeRowsById,
+    saveSyncCursor,
+  } from './lib/syncState.js';
   import { onMount, tick } from 'svelte';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
@@ -119,6 +125,8 @@
   let savedFlash = false;
   let pendingSync = new SvelteMap(); // id -> 'upsert' | 'delete'
   let pendingMatchSync = new SvelteMap(); // id -> 'upsert'
+  let syncCursor = loadSyncCursor();
+  let forceFullSync = false;
   let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
   let syncMessage = '';
   let metaReady = false;
@@ -328,6 +336,8 @@
     pendingMatchSync = new SvelteMap();
     syncStatus = '';
     syncMessage = '';
+    syncCursor = { matches: null, events: null };
+    forceFullSync = false;
     backupReminder = false;
     showSummary = false;
     accountOpen = false;
@@ -434,6 +444,12 @@
     } catch {}
   }
 
+  function persistSyncCursor(nextCursor = syncCursor) {
+    if (!storageScope) return;
+    syncCursor = nextCursor;
+    saveSyncCursor(nextCursor, storageScope, { storage: localStorage });
+  }
+
   function loadMatchesFromStorage(scope = storageScope) {
     const storedMatches = loadMatches(scope, { storage: localStorage });
     const storedActiveId = loadActiveMatchId(scope, { storage: localStorage });
@@ -472,6 +488,7 @@
       loadPendingMatchSync(scope);
       loadMatchesFromStorage(scope);
     }
+    forceFullSync = true;
     syncSetupDraftFromMatch();
     markDraftPristine();
     metaReady = true;
@@ -537,6 +554,7 @@
       onCorrupt: () => console.warn('ko_meta corrupt in localStorage'),
     });
     ({ team, opponent, matchDate, period, ourGoalAtTop } = parseStoredMeta(meta, defaultMatchDate()));
+    syncCursor = loadSyncCursor(scope, { storage: localStorage });
     syncSetupDraftFromMatch();
     markDraftPristine();
   }
@@ -864,22 +882,48 @@
     syncStatus = 'syncing';
     clearSyncMessage();
     try {
-      const { data: matchData, error: matchError } = await supabase
-        .from('matches')
-        .select('*')
-        .eq('team_id', teamId)
-        .order('updated_at', { ascending: false });
-      if (matchError) throw matchError;
+      const useFullRefresh = forceFullSync || !syncCursor.matches || !syncCursor.events;
+      let remoteMatchRows = [];
+      let remoteEventRows = [];
 
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .eq('team_id', teamId)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+      if (useFullRefresh) {
+        const { data: matchData, error: matchError } = await supabase
+          .from('matches')
+          .select('*')
+          .eq('team_id', teamId)
+          .order('updated_at', { ascending: true });
+        if (matchError) throw matchError;
 
-      let remoteMatches = (matchData || []).map(normalizeMatchForStorage);
-      let remoteEvents = (data || []).map(normalizeEventForStorage);
+        const { data, error } = await supabase
+          .from('events')
+          .select('*')
+          .eq('team_id', teamId)
+          .order('updated_at', { ascending: true });
+        if (error) throw error;
+
+        remoteMatchRows = matchData || [];
+        remoteEventRows = data || [];
+      } else {
+        let matchQuery = supabase.from('matches').select('*').eq('team_id', teamId);
+        if (syncCursor.matches) {
+          matchQuery = matchQuery.gt('updated_at', syncCursor.matches);
+        }
+        const { data: matchData, error: matchError } = await matchQuery.order('updated_at', { ascending: true });
+        if (matchError) throw matchError;
+
+        let eventQuery = supabase.from('events').select('*').eq('team_id', teamId);
+        if (syncCursor.events) {
+          eventQuery = eventQuery.gt('updated_at', syncCursor.events);
+        }
+        const { data, error } = await eventQuery.order('updated_at', { ascending: true });
+        if (error) throw error;
+
+        remoteMatchRows = matchData || [];
+        remoteEventRows = data || [];
+      }
+
+      let remoteMatches = remoteMatchRows.map(normalizeMatchForStorage);
+      let remoteEvents = remoteEventRows.map(normalizeEventForStorage);
       let remoteBackfill = null;
 
       if (remoteMatches.length === 0 && remoteEvents.length > 0) {
@@ -891,6 +935,7 @@
         remoteEvents = remoteBackfill.events.map(normalizeEventForStorage);
       }
 
+      if (useFullRefresh) {
       const remoteMatchIds = new Set(remoteMatches.map((match) => match.id));
       const localOnlyMatches = matches
         .filter((match) => !remoteMatchIds.has(match.id) && !pendingMatchSync.has(match.id))
@@ -957,6 +1002,38 @@
       persistLocal();
       await flushSyncQueue();
       refreshSyncStateFromQueues();
+      } else {
+        const pendingMatchIds = new Set([...pendingMatchSync.keys()]);
+        const pendingEventIds = new Set([...pendingSync.keys()]);
+
+        if (remoteBackfill?.matches?.length) {
+          const { error: matchBackfillError } = await supabase.from('matches').upsert(remoteBackfill.matches.map(normalizeMatchForStorage));
+          if (matchBackfillError) {
+            for (const match of remoteBackfill.matches) queuePendingMatchSync(match.id);
+            throw matchBackfillError;
+          }
+          const { error: eventBackfillError } = await supabase.from('events').upsert(remoteBackfill.events.map(normalizeEventForStorage));
+          if (eventBackfillError) {
+            for (const event of remoteBackfill.events) queuePendingSync(event.id, 'upsert');
+            throw eventBackfillError;
+          }
+        }
+
+        matches = mergeRowsById(matches, remoteMatches, { pendingIds: pendingMatchIds });
+        events = applyDerivedScoreDisplays(
+          mergeRowsById(events, remoteEvents, { pendingIds: pendingEventIds })
+        );
+        activeMatchId = resolveActiveMatchId(matches, activeMatchId);
+        syncShellMatchContext(matches.find((match) => match.id === activeMatchId) ?? null);
+        persistLocal();
+        await flushSyncQueue();
+        refreshSyncStateFromQueues();
+      }
+      persistSyncCursor(advanceSyncCursor(syncCursor, {
+        matches: remoteMatchRows,
+        events: remoteEventRows,
+      }));
+      forceFullSync = false;
     } catch (e) {
       console.error('Sync failed', e);
       setSyncError(e?.message || 'Sync failed.');
@@ -1030,11 +1107,13 @@
       .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `team_id=eq.${teamId}` }, (payload) => {
         const changedId = payload.new?.id ?? payload.old?.id;
         if (changedId && pendingMatchSync.has(changedId)) return;
+        if (payload.eventType === 'DELETE') forceFullSync = true;
         scheduleRealtimeSync();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'events', filter: `team_id=eq.${teamId}` }, (payload) => {
         const changedId = payload.new?.id ?? payload.old?.id;
         if (changedId && pendingSync.has(changedId)) return;
+        if (payload.eventType === 'DELETE') forceFullSync = true;
         scheduleRealtimeSync();
       })
       .subscribe();
@@ -1053,6 +1132,7 @@
 
     const handleOnline = () => {
       isOnline = true;
+      forceFullSync = true;
       flushSyncQueue();
       scheduleRealtimeSync();
     };
