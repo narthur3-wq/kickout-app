@@ -56,6 +56,7 @@
     matchIdentityKey,
     migrateEventsToMatches,
     normalizeMatchRecord,
+    normalizeMatchSnapshot,
     reopenMatch,
     saveActiveMatchId,
     saveMatches,
@@ -436,6 +437,18 @@
     });
   }
 
+  function normalizeMatchState(nextMatches = matches, nextEvents = events, preferredMatchId = activeMatchId) {
+    const normalized = normalizeMatchSnapshot(nextMatches, nextEvents, preferredMatchId, {
+      teamIdFallback: teamId,
+      userIdFallback: user?.id ?? null,
+    });
+    return {
+      matches: normalized.matches,
+      events: applyDerivedScoreDisplays(normalized.events),
+      activeMatchId: resolveActiveMatchId(normalized.matches, normalized.activeMatchId),
+    };
+  }
+
   function persistMatches() {
     if (!storageScope) return;
     try {
@@ -455,9 +468,12 @@
     const storedActiveId = loadActiveMatchId(scope, { storage: localStorage });
 
     if (storedMatches.length > 0) {
-      matches = storedMatches;
-      activeMatchId = resolveActiveMatchId(storedMatches, storedActiveId);
-      syncShellMatchContext(storedMatches.find((match) => match.id === activeMatchId) ?? null);
+      const normalized = normalizeMatchState(storedMatches, events, storedActiveId);
+      matches = normalized.matches;
+      events = normalized.events;
+      activeMatchId = normalized.activeMatchId;
+      syncShellMatchContext(matches.find((match) => match.id === activeMatchId) ?? null);
+      persistLocal();
       return;
     }
 
@@ -468,13 +484,12 @@
         teamId,
         userId: user?.id ?? null,
       });
-      if (result.migrated) {
-        events = applyDerivedScoreDisplays(result.updatedEvents);
-        persistLocal();
-      }
-      matches = result.matches;
-      activeMatchId = resolveActiveMatchId(result.matches, result.activeMatchId);
-      syncShellMatchContext(result.matches.find((match) => match.id === activeMatchId) ?? null);
+      const normalized = normalizeMatchState(result.matches, result.updatedEvents, result.activeMatchId);
+      matches = normalized.matches;
+      events = normalized.events;
+      activeMatchId = normalized.activeMatchId;
+      syncShellMatchContext(matches.find((match) => match.id === activeMatchId) ?? null);
+      persistLocal();
     }
   }
 
@@ -508,14 +523,19 @@
         for (const match of localMatches) {
           mergedMatchesById[match.id] = match;
         }
-        saveMatches(Object.values(mergedMatchesById), nextScope, { storage: localStorage });
+        const userActiveMatchId = loadActiveMatchId(nextScope, { storage: localStorage });
+        const normalized = normalizeMatchSnapshot(
+          Object.values(mergedMatchesById),
+          [],
+          userActiveMatchId || localActiveMatchId,
+          {
+            teamIdFallback: teamId,
+            userIdFallback: user?.id ?? null,
+          }
+        );
+        saveMatches(normalized.matches, nextScope, { storage: localStorage });
+        saveActiveMatchId(normalized.activeMatchId, nextScope, { storage: localStorage });
         clearMatchStorage(LOCAL_STORAGE_SCOPE, { storage: localStorage });
-      }
-
-      const userActiveMatchId = loadActiveMatchId(nextScope, { storage: localStorage });
-      if (!userActiveMatchId && localActiveMatchId) {
-        saveActiveMatchId(localActiveMatchId, nextScope, { storage: localStorage });
-        saveActiveMatchId(null, LOCAL_STORAGE_SCOPE, { storage: localStorage });
       }
 
       const localMatchSyncKey = storageKey(STORAGE_KEYS.matchSync, LOCAL_STORAGE_SCOPE);
@@ -936,17 +956,19 @@
       }
 
       if (useFullRefresh) {
+        const localState = normalizeMatchState(matches, events, activeMatchId);
+        const localMatchesState = localState.matches;
+        const localEventsState = localState.events;
+        const localActiveMatchId = localState.activeMatchId;
       const remoteMatchIds = new Set(remoteMatches.map((match) => match.id));
-      const localOnlyMatches = matches
+      const localOnlyMatches = localMatchesState
         .filter((match) => !remoteMatchIds.has(match.id) && !pendingMatchSync.has(match.id))
         .map(normalizeMatchForStorage);
       const remoteFilteredMatches = remoteMatches.filter((match) => !pendingMatchSync.has(match.id));
-      const pendingLocalMatches = matches
+      const pendingLocalMatches = localMatchesState
         .filter((match) => pendingMatchSync.get(match.id) === 'upsert')
         .map(normalizeMatchForStorage);
-      matches = [...remoteFilteredMatches, ...localOnlyMatches, ...pendingLocalMatches];
-      activeMatchId = resolveActiveMatchId(matches, activeMatchId);
-      syncShellMatchContext(matches.find((match) => match.id === activeMatchId) ?? null);
+      const nextMatches = [...remoteFilteredMatches, ...localOnlyMatches, ...pendingLocalMatches];
 
       if (remoteBackfill?.matches?.length) {
         const { error: matchBackfillError } = await supabase.from('matches').upsert(remoteBackfill.matches.map(normalizeMatchForStorage));
@@ -979,7 +1001,7 @@
       //   localOnlyDeferred — parent match is still in pendingMatchSync (not yet remote).
       //                       Pushing these now would violate the match FK. Move them into
       //                       pendingSync so flushSyncQueue handles them after the match lands.
-      const localOnlyRaw = events.filter(e => !remoteIds.has(e.id) && !pendingSync.has(e.id));
+      const localOnlyRaw = localEventsState.filter(e => !remoteIds.has(e.id) && !pendingSync.has(e.id));
       const localOnlyDeferred = localOnlyRaw.filter(e => e.match_id && pendingMatchSync.has(e.match_id));
       for (const ev of localOnlyDeferred) queuePendingSync(ev.id, 'upsert');
       const localOnly = localOnlyRaw
@@ -988,8 +1010,12 @@
 
       const remoteFiltered = remoteEvents.filter(e => !pendingSync.has(e.id));
       // Compute pendingLocal after the deferral so deferred events are included in the merged view.
-      const pendingLocal = events.filter(e => pendingSync.get(e.id) === 'upsert').map(normalizeEventForStorage);
-      events = applyDerivedScoreDisplays([...remoteFiltered, ...localOnly, ...pendingLocal]);
+      const pendingLocal = localEventsState.filter(e => pendingSync.get(e.id) === 'upsert').map(normalizeEventForStorage);
+      const normalized = normalizeMatchState(nextMatches, [...remoteFiltered, ...localOnly, ...pendingLocal], localActiveMatchId);
+      matches = normalized.matches;
+      events = normalized.events;
+      activeMatchId = normalized.activeMatchId;
+      syncShellMatchContext(matches.find((match) => match.id === activeMatchId) ?? null);
       // Push local-only events up to Supabase. If this fails, keep those
       // records queued locally so the UI does not imply they are safely synced.
       if (localOnly.length > 0) {
@@ -1019,11 +1045,12 @@
           }
         }
 
-        matches = mergeRowsById(matches, remoteMatches, { pendingIds: pendingMatchIds });
-        events = applyDerivedScoreDisplays(
-          mergeRowsById(events, remoteEvents, { pendingIds: pendingEventIds })
-        );
-        activeMatchId = resolveActiveMatchId(matches, activeMatchId);
+        const mergedMatches = mergeRowsById(matches, remoteMatches, { pendingIds: pendingMatchIds });
+        const mergedEvents = mergeRowsById(events, remoteEvents, { pendingIds: pendingEventIds });
+        const normalized = normalizeMatchState(mergedMatches, mergedEvents, activeMatchId);
+        matches = normalized.matches;
+        events = normalized.events;
+        activeMatchId = normalized.activeMatchId;
         syncShellMatchContext(matches.find((match) => match.id === activeMatchId) ?? null);
         persistLocal();
         await flushSyncQueue();

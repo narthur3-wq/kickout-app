@@ -251,3 +251,78 @@ export function migrateEventsToMatches(events, scope, options = {}) {
 
   return { migrated: true, matches, updatedEvents, activeMatchId };
 }
+
+function matchSortValue(match) {
+  return match?.last_event_at || match?.updated_at || match?.created_at || '';
+}
+
+function preferMatch(candidate, incumbent, preferredId = null) {
+  if (!incumbent) return true;
+  if (candidate.id === preferredId && incumbent.id !== preferredId) return true;
+  if (incumbent.id === preferredId && candidate.id !== preferredId) return false;
+
+  const candidateOpen = candidate.status !== 'closed';
+  const incumbentOpen = incumbent.status !== 'closed';
+  if (candidateOpen !== incumbentOpen) return candidateOpen;
+
+  const candidateTime = matchSortValue(candidate);
+  const incumbentTime = matchSortValue(incumbent);
+  if (candidateTime !== incumbentTime) return candidateTime > incumbentTime;
+
+  return false;
+}
+
+/**
+ * Collapses duplicate match rows that share the same logical identity and
+ * rewrites event match_id references to the surviving canonical row.
+ */
+export function normalizeMatchSnapshot(matches = [], events = [], activeMatchId = null, options = {}) {
+  const { teamIdFallback = null, userIdFallback = null } = options;
+  const canonicalByKey = new Map();
+  const idsByKey = new Map();
+  const keyOrder = [];
+  const idToCanonicalId = new Map();
+
+  for (const rawMatch of matches) {
+    const match = normalizeMatchRecord(rawMatch, { teamIdFallback, userIdFallback });
+    if (!match?.id) continue;
+
+    const key = matchIdentityKey(match);
+    const current = canonicalByKey.get(key);
+    if (!current) {
+      canonicalByKey.set(key, match);
+      keyOrder.push(key);
+      idsByKey.set(key, new Set([match.id]));
+      idToCanonicalId.set(match.id, match.id);
+      continue;
+    }
+
+    const ids = idsByKey.get(key) ?? new Set([current.id]);
+    ids.add(match.id);
+    idsByKey.set(key, ids);
+
+    if (preferMatch(match, current, activeMatchId)) {
+      canonicalByKey.set(key, match);
+      for (const id of ids) {
+        idToCanonicalId.set(id, match.id);
+      }
+    } else {
+      idToCanonicalId.set(match.id, current.id);
+    }
+  }
+
+  const normalizedMatches = keyOrder.map((key) => canonicalByKey.get(key)).filter(Boolean);
+  const normalizedEvents = events.map((event) => {
+    if (!event?.match_id) return event;
+    const canonicalId = idToCanonicalId.get(event.match_id);
+    if (!canonicalId || canonicalId === event.match_id) return event;
+    return { ...event, match_id: canonicalId };
+  });
+  const nextActiveMatchId = activeMatchId ? (idToCanonicalId.get(activeMatchId) || activeMatchId) : activeMatchId;
+
+  return {
+    matches: normalizedMatches,
+    events: normalizedEvents,
+    activeMatchId: nextActiveMatchId,
+  };
+}
