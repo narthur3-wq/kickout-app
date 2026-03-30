@@ -56,8 +56,17 @@ export function analyticsMarkerRing(event) {
   return null;
 }
 
-export function buildCurrentMatchScore(events, currentKey) {
-  const shots = events.filter((event) => matchKeyOf(event) === currentKey && event.event_type === 'shot');
+export function buildCurrentMatchScore(events, currentKey, activeMatchId = null) {
+  const shots = events.filter((event) => {
+    if (event.event_type !== 'shot') return false;
+    // When an explicit match is active, use match_id as the primary filter and
+    // fall back to the logical key only for legacy events that pre-date the
+    // match entity model.
+    if (activeMatchId) {
+      return event.match_id === activeMatchId || (!event.match_id && matchKeyOf(event) === currentKey);
+    }
+    return matchKeyOf(event) === currentKey;
+  });
   const calc = (direction) => {
     const filtered = shots.filter((event) => (event.direction || 'ours') === direction);
     const goals = filtered.filter((event) => scoreOutcomeOf(event) === 'goal').length;

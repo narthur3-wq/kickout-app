@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { invokeMock } = vi.hoisted(() => ({
   invokeMock: vi.fn(),
 }));
+const { appendDiagnosticMock } = vi.hoisted(() => ({
+  appendDiagnosticMock: vi.fn(),
+}));
 
 vi.mock('../../src/lib/supabase.js', () => ({
   supabase: {
@@ -14,11 +17,16 @@ vi.mock('../../src/lib/supabase.js', () => ({
   },
 }));
 
+vi.mock('../../src/lib/diagnostics.js', () => ({
+  appendDiagnostic: appendDiagnosticMock,
+}));
+
 import AdminPanel from '../../src/lib/AdminPanel.svelte';
 
 describe('AdminPanel', () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    appendDiagnosticMock.mockReset();
   });
 
   it('validates the password flow before calling the function', async () => {
@@ -81,5 +89,32 @@ describe('AdminPanel', () => {
     await user.click(screen.getByRole('button', { name: /Show advanced email invite option/i }));
 
     expect(screen.getByRole('button', { name: 'Email invite' })).toBeInTheDocument();
+  });
+
+  it('records onboarding failures in the diagnostics log', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockRejectedValue(new Error('Edge function unavailable'));
+
+    render(AdminPanel, {
+      props: {
+        user: { email: 'admin@example.com' },
+        teamName: 'Clontarf',
+      },
+    });
+
+    await user.type(screen.getByPlaceholderText('analyst@example.com'), 'analyst@example.com');
+    await user.type(screen.getByPlaceholderText('Minimum 8 characters'), 'temporary123');
+    await user.click(screen.getByRole('button', { name: /Onboard user/i }));
+
+    expect(await screen.findByText(/Edge function unavailable/i)).toBeInTheDocument();
+    expect(appendDiagnosticMock).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'onboarding',
+      message: 'Edge function unavailable',
+      details: expect.objectContaining({
+        email: 'analyst@example.com',
+        teamMode: 'current',
+        authMode: 'password',
+      }),
+    }));
   });
 });

@@ -57,6 +57,7 @@ Core event fields:
 - `id`
 - `schema_version`
 - `created_at`
+- `match_id` (links to the parent match entity; absent on legacy pre-migration events)
 - `match_date`
 - `team`
 - `opponent`
@@ -90,19 +91,28 @@ Canonical schema source:
 
 ## Match identity
 
-The app determines the current match from:
+The app uses an explicit match entity model. Each match has a unique `id` (UUID) stored in a `matches` record.
 
-- `match_date`
-- normalized `team`
-- normalized `opponent`
+Canonical identity:
 
-That key is used to decide:
+- `matches.id` is the authoritative match identifier
+- events are linked via `events.match_id`
+- match records carry `team`, `opponent`, `match_date`, `status`, and timestamps
 
-- which events belong to the current match
-- which scoreline to show in the shell
-- what data feeds `Live` and `Digest`
+Fallback identity (legacy and import):
 
-This makes setup changes operationally important. Changing those values changes the current match context.
+- for events that pre-date the match entity model, or for imports from older exports, the app falls back to a logical key: `match_date|team|opponent`
+- this fallback is used only when `match_id` is absent or unresolvable
+
+Match-scoped behaviour:
+
+- the shell scoreline filters by `match_id` when an active match is selected, falling back to the logical key for legacy events without a `match_id`
+- `Live` and `Digest` both scope to `currentMatchEvents`, which uses `match_id` as the primary filter
+- score snapshots group by `match_id` first, then fall back to the logical key for unmigrated events
+- import merging resolves imported match records by ID, then by logical key, then creates new records from event metadata
+- `Events` is the broader event log for the current storage scope; it supports search, edit, import, and export across the stored history rather than only the active match
+
+Setup changes update the active match record and back-fill the new team/opponent/date onto existing events for that match. This keeps the match model consistent across devices.
 
 ## Coordinate system
 
@@ -146,6 +156,11 @@ Current behavior:
 - queued writes can be retried
 - realtime refresh is used when Supabase is configured
 - first-login migration moves older local-only records into user-scoped storage
+
+Sync ordering guarantee:
+
+- event upserts whose parent match is still pending are deferred to the flush queue, not pushed immediately, so that the match FK is always satisfied before the event reaches Supabase
+- `flushSyncQueue` processes matches before events, in line with this ordering guarantee
 
 ## Team and access model
 

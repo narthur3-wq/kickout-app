@@ -29,7 +29,10 @@ export function buildScoreSnapshots(events = []) {
   const byMatch = new Map();
 
   for (const event of events) {
-    const key = matchKeyForScore(event);
+    // Prefer match_id as the grouping key so that same-day replays
+    // (same date + team + opponent but distinct match records) are scored
+    // independently. Fall back to the logical key for legacy events without match_id.
+    const key = event.match_id ?? matchKeyForScore(event);
     if (!byMatch.has(key)) byMatch.set(key, []);
     byMatch.get(key).push(event);
   }

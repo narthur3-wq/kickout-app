@@ -1,11 +1,22 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-function getCorsHeaders(origin: string, allowedOrigin: string) {
-  const allowOrigin = allowedOrigin || origin || '*'
-  return {
-    'Access-Control-Allow-Origin': allowOrigin,
+function getCorsHeaders(_origin: string, allowedOrigin: string) {
+  // When ALLOWED_ORIGIN is configured, use it as the single allowed origin.
+  // When it is NOT configured, do not set an Access-Control-Allow-Origin header at
+  // all — reflecting the caller's origin back (or returning '*') would allow any
+  // website to call this endpoint from a browser. Server-to-server calls (no Origin
+  // header) work fine without the header.
+  //
+  // Note: ALLOWED_ORIGIN being absent does NOT bypass the server-side JWT + admin
+  // email check, which is the authoritative security gate. This CORS restriction
+  // is defence-in-depth only.
+  const headers: Record<string, string> = {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   }
+  if (allowedOrigin) {
+    headers['Access-Control-Allow-Origin'] = allowedOrigin
+  }
+  return headers
 }
 
 function json(body: unknown, status = 200, origin = '', allowedOrigin = '') {

@@ -1,6 +1,6 @@
 # Pairc — Product Backlog
 
-Last updated: 2026-03-29
+Last updated: 2026-03-30
 
 Status key: `open` · `partial` · `deferred` · `done`
 
@@ -137,16 +137,15 @@ When `activeMatch.status === 'closed'`:
 
 ---
 
-**M-07 — Default Live, Digest, and Events to active match**
+**M-07 — Default Live and Digest to active match**
 Priority: must
 Status: done
 
 Once a match is selected, all views default to it:
 - `Live`
 - `Digest`
-- `Events`
 
-Analytics can still allow broader views, but active match is the default.
+`Events` remains the full event log for the current storage scope so search, edit, import, and export can review the complete history. Analytics can still allow broader views, but active match is the default for the analyst-facing summary surfaces.
 
 ---
 
@@ -301,7 +300,7 @@ Status: deferred
 Covers:
 - analyst A creates match, analyst B selects same match
 - close on device A becomes read-only on device B
-- current-match defaulting in Live, Digest, and Events
+- current-match defaulting in Live and Digest, while Events remains the broader log
 
 ---
 

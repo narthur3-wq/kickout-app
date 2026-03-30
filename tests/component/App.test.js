@@ -45,6 +45,13 @@ const mockState = vi.hoisted(() => {
   };
 });
 
+const diagnosticsMock = vi.hoisted(() => ({
+  appendDiagnostic: vi.fn(() => []),
+  loadDiagnostics: vi.fn(() => []),
+  clearDiagnostics: vi.fn(),
+  formatDiagnostics: vi.fn((entries = []) => entries.map((entry) => `${entry.kind}: ${entry.message}`).join('\n')),
+}));
+
 vi.mock('../../src/lib/supabase.js', () => ({
   supabaseConfigured: true,
   supabase: {
@@ -61,6 +68,8 @@ vi.mock('../../src/lib/supabase.js', () => ({
   getUserTeamDetails: mockState.getUserTeamDetailsMock,
   isConfiguredAdmin: mockState.isConfiguredAdminMock,
 }));
+
+vi.mock('../../src/lib/diagnostics.js', () => diagnosticsMock);
 
 async function renderApp() {
   const { default: App } = await import('../../src/App.svelte');
@@ -108,6 +117,12 @@ describe('App shell auth and sync', () => {
     mockState.channelFactoryMock.mockClear();
     mockState.channelMock.on.mockClear();
     mockState.channelMock.subscribe.mockClear();
+    diagnosticsMock.appendDiagnostic.mockClear();
+    diagnosticsMock.loadDiagnostics.mockReturnValue([]);
+    diagnosticsMock.clearDiagnostics.mockClear();
+    diagnosticsMock.formatDiagnostics.mockImplementation((entries = []) =>
+      entries.map((entry) => `${entry.kind}: ${entry.message}`).join('\n')
+    );
   });
 
   it('shows the login screen when Supabase is configured but there is no active session', async () => {
@@ -279,6 +294,106 @@ describe('App shell auth and sync', () => {
         opponent: 'Na Fianna',
         match_date: '2026-04-01',
         team_id: 'team-1',
+      }));
+    });
+  });
+
+  it('defers event upserts to Supabase when the parent match is still in the pending queue', async () => {
+    // Regression test for the sync-ordering bug:
+    // An event created offline whose parent match is still in pendingMatchSync
+    // must not be pushed as localOnly (which would violate the match FK on Supabase).
+    // Instead it should be moved into pendingSync and flushed after the match lands.
+    const session = { user: { id: 'user-sync-order', email: 'analyst@example.com' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    // Seed a match and its event in local storage, both created offline.
+    const matchId = 'offline-match-1';
+    const userScope = 'user:user-sync-order';
+    seedScopedMatches(userScope, [{
+      id: matchId,
+      team: 'Clontarf',
+      opponent: 'Boden',
+      match_date: '2026-03-30',
+      status: 'open',
+      created_at: '2026-03-30T09:00:00.000Z',
+      updated_at: '2026-03-30T09:00:00.000Z',
+      last_event_at: '2026-03-30T09:01:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, matchId);
+    seedScopedEvents(userScope, [{
+      id: 'offline-event-1',
+      match_id: matchId,
+      created_at: '2026-03-30T09:01:00.000Z',
+      match_date: '2026-03-30',
+      team: 'Clontarf',
+      opponent: 'Boden',
+      period: 'H1',
+      clock: '2:00',
+      outcome: 'Retained',
+      contest_type: 'clean',
+      event_type: 'kickout',
+      direction: 'ours',
+      x: 0.5,
+      y: 0.5,
+      schema_version: 1,
+    }]);
+
+    // Both match and event are in their respective pending queues (simulating offline capture).
+    localStorage.setItem(
+      storageKey('ko_match_sync_queue', userScope),
+      JSON.stringify([{ id: matchId, op: 'upsert' }])
+    );
+    localStorage.setItem(
+      storageKey('ko_sync_queue', userScope),
+      JSON.stringify([{ id: 'offline-event-1', op: 'upsert' }])
+    );
+
+    // Supabase reports no remote records yet (fresh reconnect).
+    mockState.selectOrderMock
+      .mockResolvedValueOnce({ data: [], error: null })  // matches query
+      .mockResolvedValueOnce({ data: [], error: null }); // events query
+
+    await renderApp();
+
+    // flushSyncQueue should be called.
+    await waitFor(() => {
+      // The match upsert must fire.
+      expect(mockState.upsertMock).toHaveBeenCalledWith(
+        expect.objectContaining({ id: matchId })
+      );
+    });
+
+    // The event upsert must also fire (via flushSyncQueue after the match).
+    await waitFor(() => {
+      expect(mockState.upsertMock).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'offline-event-1' })
+      );
+    });
+
+    // Crucially: at the point syncFromSupabase computed localOnly, the event must NOT
+    // have been included in the immediate upsert batch (it was deferred). We verify
+    // this indirectly — the test passes only if the app reaches the synced state
+    // without throwing a FK-violation error from the mock.
+    await waitFor(() => {
+      expect(screen.queryByText(/sync failed/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it('records sync failures in the diagnostics log', async () => {
+    const session = { user: { id: 'user-sync-diagnostics', email: 'analyst@example.com' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+    mockState.selectOrderMock.mockRejectedValueOnce(new Error('Network lost'));
+
+    await renderApp();
+
+    expect(await screen.findByText(/Network lost/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(diagnosticsMock.appendDiagnostic).toHaveBeenCalledWith(expect.objectContaining({
+        kind: 'sync',
+        message: 'Network lost',
       }));
     });
   });

@@ -36,6 +36,33 @@ describe('appShellHelpers', () => {
     expect(result.them.str).toBe('0-1');
   });
 
+  it('filters by match_id when activeMatchId is provided, excluding shots from other matches with the same logical key', () => {
+    const currentKey = '2026-04-05|clontarf|vincents';
+    const events = [
+      // Active match — should count.
+      { id: 'a1', match_id: 'active-match', match_date: '2026-04-05', team: 'Clontarf', opponent: 'Vincents', event_type: 'shot', direction: 'ours', outcome: 'goal' },
+      // Different match record, same logical key — must NOT bleed in.
+      { id: 'b1', match_id: 'other-match', match_date: '2026-04-05', team: 'Clontarf', opponent: 'Vincents', event_type: 'shot', direction: 'ours', outcome: 'Point' },
+      // Legacy event (no match_id) for same logical key — included as fallback.
+      { id: 'c1', match_date: '2026-04-05', team: 'Clontarf', opponent: 'Vincents', event_type: 'shot', direction: 'theirs', outcome: 'Point' },
+    ];
+
+    const result = buildCurrentMatchScore(events, currentKey, 'active-match');
+
+    expect(result.us.str).toBe('1-0');  // only the goal from active-match
+    expect(result.them.str).toBe('0-1'); // legacy fallback event counts for theirs
+    expect(result.hasShots).toBe(true);
+  });
+
+  it('falls back to logical key when no activeMatchId is passed', () => {
+    const currentKey = '2026-04-05|clontarf|vincents';
+    const events = [
+      { id: 'x1', match_id: 'some-match', match_date: '2026-04-05', team: 'Clontarf', opponent: 'Vincents', event_type: 'shot', direction: 'ours', outcome: 'Point' },
+    ];
+    const result = buildCurrentMatchScore(events, currentKey);
+    expect(result.us.str).toBe('0-1');
+  });
+
   it('maps marker visuals from event semantics', () => {
     expect(analyticsMarkerShape({ direction: 'ours' })).toBe('circle');
     expect(analyticsMarkerShape({ direction: 'theirs' })).toBe('square');

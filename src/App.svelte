@@ -29,6 +29,12 @@
     planImportMerge,
   } from './lib/importMerge.js';
   import {
+    appendDiagnostic,
+    clearDiagnostics,
+    formatDiagnostics,
+    loadDiagnostics,
+  } from './lib/diagnostics.js';
+  import {
     LOCAL_STORAGE_SCOPE,
     STORAGE_KEYS,
     parsePendingSyncEntries,
@@ -107,6 +113,7 @@
   let pitchError = false;
   let notice = null;
   let noticeTimer = null;
+  let diagnostics = loadDiagnostics();
   let confirmState = null;
   let activeTab = 'capture';
   let savedFlash = false;
@@ -512,6 +519,9 @@
       return result.migrated ? result : null;
     } catch (error) {
       console.error('Local data migration failed', error);
+      recordDiagnostic('storage', 'Local data migration failed', {
+        error: error?.message || String(error),
+      });
       showNotice('error', 'We could not move older local data into your signed-in storage automatically.');
       return null;
     }
@@ -546,10 +556,16 @@
       })));
     } catch (e) {
       if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+        recordDiagnostic('storage', 'localStorage quota exceeded', {
+          error: e?.message || String(e),
+        });
         showNotice('error', 'Storage full. Export your JSON backup and clear old events before continuing.', 8000);
         backupReminder = true;
       } else {
         console.error('localStorage write failed', e);
+        recordDiagnostic('storage', 'localStorage write failed', {
+          error: e?.message || String(e),
+        });
       }
     }
   }
@@ -568,6 +584,9 @@
       })));
     } catch (e) {
       console.error('localStorage meta write failed', e);
+      recordDiagnostic('storage', 'localStorage meta write failed', {
+        error: e?.message || String(e),
+      });
     }
   }
 
@@ -677,6 +696,7 @@
   function setSyncError(message) {
     syncStatus = 'error';
     syncMessage = message;
+    recordDiagnostic('sync', message);
   }
   function clearSyncMessage() {
     syncMessage = '';
@@ -690,6 +710,69 @@
         noticeTimer = null;
       }, timeout);
     }
+  }
+  function recordDiagnostic(kind, message, details = {}) {
+    diagnostics = appendDiagnostic({
+      kind,
+      message,
+      details,
+      context: {
+        storageScope,
+        userEmail: user?.email ?? null,
+        team: team || null,
+        opponent: opponent || null,
+        matchDate,
+        activeMatchId,
+        activeTab,
+        syncStatus,
+        syncMessage,
+        isOnline,
+        pendingSyncCount: pendingSync.size,
+        pendingMatchSyncCount: pendingMatchSync.size,
+      },
+    });
+  }
+  function buildSupportReport() {
+    const currentDiagnostics = loadDiagnostics();
+    diagnostics = currentDiagnostics;
+    const activeMatchLabel = activeMatch
+      ? `${activeMatch.team || 'Unknown team'} vs ${activeMatch.opponent || 'Unknown opponent'} (${activeMatch.match_date || 'unknown date'}) [${activeMatch.id}]`
+      : 'none';
+    const lines = [
+      `Captured: ${new Date().toISOString()}`,
+      `User: ${user?.email || 'anonymous'}`,
+      `Storage scope: ${storageScope || 'none'}`,
+      `Team: ${team || 'none'}`,
+      `Opponent: ${opponent || 'none'}`,
+      `Match date: ${matchDate || 'none'}`,
+      `Active match: ${activeMatchLabel}`,
+      `Tab: ${activeTab}`,
+      `Sync status: ${syncStatus || 'idle'}`,
+      `Sync message: ${syncMessage || 'none'}`,
+      `Pending event queue: ${pendingSync.size}`,
+      `Pending match queue: ${pendingMatchSync.size}`,
+      `Online: ${isOnline ? 'yes' : 'no'}`,
+      '',
+      'Recent diagnostics:',
+      formatDiagnostics(currentDiagnostics),
+    ];
+    return lines.join('\n');
+  }
+  async function copyDiagnosticsSummary() {
+    const text = buildSupportReport();
+    try {
+      if (!globalThis.navigator?.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await globalThis.navigator.clipboard.writeText(text);
+      showNotice('success', 'Diagnostics copied to clipboard.', 4000);
+    } catch (error) {
+      recordDiagnostic('support', 'Failed to copy diagnostics summary', { error: error?.message || String(error) });
+      showNotice('error', 'Could not copy diagnostics to clipboard.', 5000);
+    }
+  }
+  function clearDiagnosticsLog() {
+    clearDiagnostics();
+    diagnostics = [];
+    showNotice('success', 'Diagnostics log cleared.', 4000);
   }
   function askConfirm(message, action, confirmLabel = 'Confirm', options = {}) {
     confirmState = {
@@ -845,8 +928,21 @@
       // Any event currently queued (pending upsert or delete) is authoritative locally —
       // do not overwrite it with the remote version, and do not re-add locally deleted events.
       const remoteIds = new Set(remoteEvents.map(e => e.id));
-      const localOnly = events.filter(e => !remoteIds.has(e.id) && !pendingSync.has(e.id)).map(normalizeEventForStorage);
+
+      // Split unsynced local events into two groups:
+      //   localOnly        — safe to push now; parent match is already on Supabase.
+      //   localOnlyDeferred — parent match is still in pendingMatchSync (not yet remote).
+      //                       Pushing these now would violate the match FK. Move them into
+      //                       pendingSync so flushSyncQueue handles them after the match lands.
+      const localOnlyRaw = events.filter(e => !remoteIds.has(e.id) && !pendingSync.has(e.id));
+      const localOnlyDeferred = localOnlyRaw.filter(e => e.match_id && pendingMatchSync.has(e.match_id));
+      for (const ev of localOnlyDeferred) queuePendingSync(ev.id, 'upsert');
+      const localOnly = localOnlyRaw
+        .filter(e => !(e.match_id && pendingMatchSync.has(e.match_id)))
+        .map(normalizeEventForStorage);
+
       const remoteFiltered = remoteEvents.filter(e => !pendingSync.has(e.id));
+      // Compute pendingLocal after the deferral so deferred events are included in the merged view.
       const pendingLocal = events.filter(e => pendingSync.get(e.id) === 'upsert').map(normalizeEventForStorage);
       events = applyDerivedScoreDisplays([...remoteFiltered, ...localOnly, ...pendingLocal]);
       // Push local-only events up to Supabase. If this fails, keep those
@@ -1802,7 +1898,7 @@
   // ── Derived match score from tracked shots ────────────────────────────────
   $: currentMatchScore = (() => {
     const currentKey = `${matchDate}|${norm(team)}|${norm(opponent)}`;
-    return buildCurrentMatchScore(events, currentKey);
+    return buildCurrentMatchScore(events, currentKey, activeMatchId);
   })();
 
   $: selectedTeamLabel = direction === 'ours' ? (team || 'Ours') : (opponent || 'Theirs');
@@ -2104,6 +2200,18 @@
             <div class="account-dropdown">
               <p class="account-email">{user.email}</p>
               <button class="account-signout" on:click={() => { accountOpen = false; signOut(); }}>Sign out</button>
+              <div class="account-diagnostics">
+                <div class="account-diagnostics-label">Diagnostics</div>
+                <p class="account-diagnostics-copy">
+                  {diagnostics.length > 0
+                    ? `${diagnostics.length} issue${diagnostics.length === 1 ? '' : 's'} saved locally.`
+                    : 'No issues recorded yet.'}
+                </p>
+                <div class="account-diagnostics-actions">
+                  <button class="account-diagnostics-btn" on:click={copyDiagnosticsSummary}>Copy summary</button>
+                  <button class="account-diagnostics-btn" on:click={clearDiagnosticsLog} disabled={diagnostics.length === 0}>Clear log</button>
+                </div>
+              </div>
             </div>
           {/if}
         </div>
@@ -2442,7 +2550,7 @@
   </div>
   {:else}
   <div class="full-panel">
-    <AdminPanel {user} {teamName} />
+    <AdminPanel {user} {teamName} on:diagnostic={() => diagnostics = loadDiagnostics()} />
   </div>
   {/if}
   {/if}
@@ -2550,7 +2658,7 @@
   .account-dropdown {
     position: absolute; right: 0; top: calc(100% + 6px);
     background: #fff; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.18);
-    padding: 10px 14px; min-width: 180px; z-index: 200;
+    padding: 10px 14px; min-width: 220px; max-width: 280px; z-index: 200;
   }
   .account-email { font-size: 11px; color: #6b7280; margin: 0 0 8px; word-break: break-all; }
   .account-signout {
@@ -2558,6 +2666,51 @@
     font-size: 13px; color: #111; padding: 4px 0; font-family: inherit;
   }
   .account-signout:hover { color: #e11d48; }
+  .account-diagnostics {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e5e7eb;
+  }
+  .account-diagnostics-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9ca3af;
+    margin-bottom: 4px;
+  }
+  .account-diagnostics-copy {
+    margin: 0 0 8px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #374151;
+  }
+  .account-diagnostics-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .account-diagnostics-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+    color: #111827;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .account-diagnostics-btn:hover:not(:disabled) {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+  }
+  .account-diagnostics-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
   .icon-btn {
     background: none; border: none; cursor: pointer; font-size: 14px;
     padding: 5px 6px; border-radius: 6px; color: rgba(255,255,255,0.55); transition: all 0.15s;
