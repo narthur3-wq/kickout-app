@@ -174,7 +174,9 @@
   $: matchContextPrompt = matches.length === 0
     ? 'Tap to create your first match →'
     : activeMatchId
-      ? ''
+      ? (team || opponent
+        ? ''
+        : 'Tap to set match details →')
       : 'Tap to select or create a match →';
 
   // Scroll the active tab button into view whenever the tab changes
