@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import AnalyticsPanel from '../../src/lib/AnalyticsPanel.svelte';
@@ -209,5 +209,56 @@ describe('AnalyticsPanel legends', () => {
     expect(screen.getByText('Lost')).toBeInTheDocument();
     expect(screen.queryByText('Goal attempt')).not.toBeInTheDocument();
     expect(screen.queryByText('Blocked')).not.toBeInTheDocument();
+  });
+
+  it('shows target player rankings and score-state bars for kickout analytics', async () => {
+    const user = userEvent.setup();
+    const onFilterPlayer = vi.fn();
+
+    render(AnalyticsPanel, {
+      props: {
+        analyticsEventType: 'kickout',
+        vizEvents: [
+          { id: 'ko-1', event_type: 'kickout', direction: 'ours', outcome: 'Retained', target_player: '8', contest_type: 'break', break_outcome: 'won' },
+          { id: 'ko-2', event_type: 'kickout', direction: 'ours', outcome: 'Lost', target_player: '8', contest_type: 'clean' },
+          { id: 'ko-3', event_type: 'kickout', direction: 'ours', outcome: 'Retained', target_player: '15', contest_type: 'break', break_outcome: 'lost' },
+        ],
+        playerStats: [
+          { key: '8', label: '#8', total: 2, retPct: 50, brTotal: 1, brWonPct: 100 },
+          { key: '15', label: '#15', total: 1, retPct: 100, brTotal: 1, brWonPct: null },
+        ],
+        plyFilter: '8',
+        scoreStateStats: [
+          { bucket: 'Win 1–3', tot: 3, pct: 67 },
+          { bucket: 'Level', tot: 2, pct: null },
+          { bucket: 'Lose 1–3', tot: 3, pct: 50 },
+        ],
+      },
+      events: {
+        filterPlayer: onFilterPlayer,
+      },
+    });
+
+    expect(screen.getByText('Target Players')).toBeInTheDocument();
+    expect(screen.getByText('By Score State')).toBeInTheDocument();
+    expect(screen.getByText('#8')).toBeInTheDocument();
+    expect(screen.getByText('#15')).toBeInTheDocument();
+    expect(screen.getByText('67%', { selector: '.ss-pct' })).toBeInTheDocument();
+    expect(screen.getByText('50%', { selector: '.ss-pct' })).toBeInTheDocument();
+    expect(screen.getByText('—', { selector: '.ss-null' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retention' }));
+    expect(document.querySelectorAll('.player-row')[0]).toHaveTextContent('#15');
+
+    const playerRow = screen.getByText('#8').closest('tr');
+    if (!playerRow) throw new Error('Missing player row');
+    await user.click(playerRow);
+    fireEvent.keyDown(playerRow, { key: 'Enter' });
+
+    expect(onFilterPlayer).toHaveBeenCalledWith(expect.objectContaining({ detail: 'ALL' }));
+    expect(onFilterPlayer).toHaveBeenCalledTimes(2);
+
+    await fireEvent.keyDown(playerRow, { key: 'Escape' });
+    expect(onFilterPlayer).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MATCH_KEYS } from '../../src/lib/matchStore.js';
@@ -101,6 +101,30 @@ function seedScopedActiveMatchId(scope, id) {
   } else {
     localStorage.removeItem(storageKey(MATCH_KEYS.activeMatchId, scope));
   }
+}
+
+function getDeepAnalysisButton(label) {
+  const deepLinks = document.querySelector('.deep-links');
+  if (!deepLinks) throw new Error('Missing deep analysis shortcuts');
+
+  const button = Array.from(deepLinks.querySelectorAll('button')).find(
+    (node) => node.textContent?.trim() === label
+  );
+
+  if (!button) throw new Error(`Missing deep analysis button: ${label}`);
+  return button;
+}
+
+function getCaptureFormButton(label) {
+  const formPanel = document.querySelector('.form-panel');
+  if (!formPanel) throw new Error('Missing capture form panel');
+
+  const button = Array.from(formPanel.querySelectorAll('button')).find(
+    (node) => node.textContent?.trim() === label
+  );
+
+  if (!button) throw new Error(`Missing capture form button: ${label}`);
+  return button;
 }
 
 describe('App shell auth and sync', () => {
@@ -529,5 +553,866 @@ describe('App shell auth and sync', () => {
     expect(screen.getByRole('dialog', { name: /Match picker/i })).toBeInTheDocument();
     expect(screen.getByText('New match')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create' })).toBeInTheDocument();
+  });
+
+  it('opens and closes the kickout summary modal from the analytics tab', async () => {
+    const session = { user: { id: 'user-summary', email: 'analyst@example.com' } };
+    const userScope = 'user:user-summary';
+    const matchId = 'match-summary';
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches(userScope, [{
+      id: matchId,
+      team: 'Clontarf',
+      opponent: 'Crokes',
+      match_date: '2026-03-29',
+      status: 'open',
+      created_at: '2026-03-29T09:00:00.000Z',
+      updated_at: '2026-03-29T09:00:00.000Z',
+      last_event_at: '2026-03-29T09:10:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, matchId);
+    seedScopedEvents(userScope, [
+      {
+        id: 'ko-1',
+        match_id: matchId,
+        created_at: '2026-03-29T09:01:00.000Z',
+        updated_at: '2026-03-29T09:01:00.000Z',
+        match_date: '2026-03-29',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        period: 'H1',
+        clock: '01:00',
+        event_type: 'kickout',
+        direction: 'ours',
+        outcome: 'Retained',
+        contest_type: 'clean',
+        target_player: '8',
+        x: 0.4,
+        y: 0.3,
+        schema_version: 1,
+      },
+      {
+        id: 'ko-2',
+        match_id: matchId,
+        created_at: '2026-03-29T09:08:00.000Z',
+        updated_at: '2026-03-29T09:08:00.000Z',
+        match_date: '2026-03-29',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        period: 'H2',
+        clock: '08:00',
+        event_type: 'kickout',
+        direction: 'ours',
+        outcome: 'Lost',
+        contest_type: 'break',
+        break_outcome: 'won',
+        target_player: '8',
+        x: 0.5,
+        y: 0.5,
+        schema_version: 1,
+      },
+      {
+        id: 'ko-3',
+        match_id: matchId,
+        created_at: '2026-03-29T09:12:00.000Z',
+        updated_at: '2026-03-29T09:12:00.000Z',
+        match_date: '2026-03-29',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        period: 'H2',
+        clock: '12:00',
+        event_type: 'kickout',
+        direction: 'ours',
+        outcome: 'Retained',
+        contest_type: 'break',
+        break_outcome: 'lost',
+        target_player: '15',
+        x: 0.6,
+        y: 0.4,
+        schema_version: 1,
+      },
+    ]);
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Kickouts/i });
+    await user.click(screen.getByRole('button', { name: /Kickouts/i }));
+    await user.click(screen.getByRole('button', { name: /Summary/i }));
+
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Kickout Summary');
+
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    const playerRow = document.querySelector('.player-row');
+    if (!playerRow) throw new Error('Missing player row');
+    await user.click(playerRow);
+    expect(screen.getByText('#8')).toBeInTheDocument();
+  });
+
+  it('switches from live shortcuts into analytics tabs', async () => {
+    const session = { user: { id: 'user-live', email: 'analyst@example.com' } };
+    const userScope = 'user:user-live';
+    const matchId = 'match-live';
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches(userScope, [{
+      id: matchId,
+      team: 'Clontarf',
+      opponent: 'Crokes',
+      match_date: '2026-03-29',
+      status: 'open',
+      created_at: '2026-03-29T09:00:00.000Z',
+      updated_at: '2026-03-29T09:00:00.000Z',
+      last_event_at: '2026-03-29T09:10:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, matchId);
+    seedScopedEvents(userScope, [
+      {
+        id: 'live-ko',
+        match_id: matchId,
+        created_at: '2026-03-29T09:01:00.000Z',
+        updated_at: '2026-03-29T09:01:00.000Z',
+        match_date: '2026-03-29',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        period: 'H1',
+        clock: '01:00',
+        event_type: 'kickout',
+        direction: 'ours',
+        outcome: 'Retained',
+        contest_type: 'break',
+        break_outcome: 'won',
+        target_player: '8',
+        x: 0.4,
+        y: 0.3,
+        schema_version: 1,
+      },
+      {
+        id: 'live-to',
+        match_id: matchId,
+        created_at: '2026-03-29T09:08:00.000Z',
+        updated_at: '2026-03-29T09:08:00.000Z',
+        match_date: '2026-03-29',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        period: 'H1',
+        clock: '08:00',
+        event_type: 'turnover',
+        direction: 'ours',
+        outcome: 'Won',
+        turnover_lost_player: '2',
+        turnover_won_player: '14',
+        x: 0.5,
+        y: 0.5,
+        schema_version: 1,
+      },
+      {
+        id: 'live-to-2',
+        match_id: matchId,
+        created_at: '2026-03-29T09:12:00.000Z',
+        updated_at: '2026-03-29T09:12:00.000Z',
+        match_date: '2026-03-29',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        period: 'H1',
+        clock: '12:00',
+        event_type: 'turnover',
+        direction: 'ours',
+        outcome: 'Lost',
+        turnover_lost_player: '3',
+        turnover_won_player: '15',
+        x: 0.52,
+        y: 0.48,
+        schema_version: 1,
+      },
+      {
+        id: 'live-to-3',
+        match_id: matchId,
+        created_at: '2026-03-29T09:16:00.000Z',
+        updated_at: '2026-03-29T09:16:00.000Z',
+        match_date: '2026-03-29',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        period: 'H1',
+        clock: '16:00',
+        event_type: 'turnover',
+        direction: 'ours',
+        outcome: 'Won',
+        turnover_lost_player: '5',
+        turnover_won_player: '12',
+        x: 0.54,
+        y: 0.46,
+        schema_version: 1,
+      },
+    ]);
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Live/i }));
+    expect(await screen.findByText('Live Match State')).toBeInTheDocument();
+
+    await user.click(getDeepAnalysisButton('Kickouts'));
+    expect(await screen.findByText('Target Players')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^Live$/i }));
+    expect(await screen.findByText('Deep Analysis')).toBeInTheDocument();
+
+    await user.click(getDeepAnalysisButton('Turnovers'));
+    expect(await screen.findByText('Total turnovers')).toBeInTheDocument();
+  });
+
+  it('exports filtered and full event views from the events tab', async () => {
+    const session = { user: { id: 'user-export', email: 'analyst@example.com' } };
+    const userScope = 'user:user-export';
+    const matchId = 'match-export';
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches(userScope, [{
+      id: matchId,
+      team: 'Clontarf',
+      opponent: 'Crokes',
+      match_date: '2026-03-29',
+      status: 'open',
+      created_at: '2026-03-29T09:00:00.000Z',
+      updated_at: '2026-03-29T09:00:00.000Z',
+      last_event_at: '2026-03-29T09:10:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, matchId);
+    seedScopedEvents(userScope, [
+      {
+        id: 'export-1',
+        match_id: matchId,
+        created_at: '2026-03-29T09:01:00.000Z',
+        updated_at: '2026-03-29T09:01:00.000Z',
+        match_date: '2026-03-29',
+        team: 'Clontarf',
+        opponent: 'Vincents',
+        period: 'H1',
+        clock: '01:00',
+        event_type: 'kickout',
+        direction: 'ours',
+        outcome: 'Retained',
+        contest_type: 'clean',
+        x: 0.4,
+        y: 0.3,
+        schema_version: 1,
+      },
+      {
+        id: 'export-2',
+        match_id: matchId,
+        created_at: '2026-03-29T09:08:00.000Z',
+        updated_at: '2026-03-29T09:08:00.000Z',
+        match_date: '2026-03-29',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        period: 'H1',
+        clock: '08:00',
+        event_type: 'kickout',
+        direction: 'ours',
+        outcome: 'Lost',
+        contest_type: 'clean',
+        x: 0.5,
+        y: 0.5,
+        schema_version: 1,
+      },
+    ]);
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Events/i });
+    await user.click(screen.getByRole('button', { name: /Events/i }));
+
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL');
+    const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL');
+    createObjectURLSpy.mockClear();
+    revokeObjectURLSpy.mockClear();
+
+    try {
+      await user.type(screen.getByPlaceholderText(/Search type, opponent, clock, player, zone/i), 'Crokes');
+      expect(await screen.findByRole('button', { name: /Export View/i })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /Export View/i }));
+      await user.click(screen.getByRole('button', { name: /Export All CSV/i }));
+      await user.click(screen.getByRole('button', { name: /Export JSON/i }));
+
+      expect(createObjectURLSpy).toHaveBeenCalledTimes(3);
+      expect(clickSpy).toHaveBeenCalledTimes(3);
+      expect(revokeObjectURLSpy).toHaveBeenCalledTimes(3);
+    } finally {
+      clickSpy.mockRestore();
+      createObjectURLSpy.mockRestore();
+      revokeObjectURLSpy.mockRestore();
+    }
+  });
+
+  it('loads a row into the capture form and deletes rows from the events tab', async () => {
+    const session = { user: { id: 'user-events', email: 'analyst@example.com' } };
+    const userScope = 'user:user-events';
+    const matchId = 'match-events';
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches(userScope, [{
+      id: matchId,
+      team: 'Clontarf',
+      opponent: 'Boden',
+      match_date: '2026-03-29',
+      status: 'open',
+      created_at: '2026-03-29T09:00:00.000Z',
+      updated_at: '2026-03-29T09:00:00.000Z',
+      last_event_at: '2026-03-29T09:10:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, matchId);
+    seedScopedEvents(userScope, [
+      {
+        id: 'event-edit',
+        match_id: matchId,
+        created_at: '2026-03-29T09:01:00.000Z',
+        updated_at: '2026-03-29T09:01:00.000Z',
+        match_date: '2026-03-29',
+        team: 'Clontarf',
+        opponent: 'Boden',
+        period: 'H1',
+        clock: '01:00',
+        event_type: 'kickout',
+        direction: 'ours',
+        outcome: 'Retained',
+        contest_type: 'clean',
+        x: 0.4,
+        y: 0.3,
+        schema_version: 1,
+      },
+      {
+        id: 'event-edit-2',
+        match_id: matchId,
+        created_at: '2026-03-29T09:08:00.000Z',
+        updated_at: '2026-03-29T09:08:00.000Z',
+        match_date: '2026-03-29',
+        team: 'Clontarf',
+        opponent: 'Na Fianna',
+        period: 'H1',
+        clock: '08:00',
+        event_type: 'kickout',
+        direction: 'ours',
+        outcome: 'Lost',
+        contest_type: 'clean',
+        x: 0.5,
+        y: 0.5,
+        schema_version: 1,
+      },
+    ]);
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Events/i });
+    await user.click(screen.getByRole('button', { name: /Events/i }));
+
+    const deleteButtons = screen.getAllByRole('button', { name: 'X' });
+
+    await user.click(deleteButtons[0]);
+
+    const dialog = await screen.findByRole('alertdialog', { name: /Confirm action/i });
+    expect(dialog).toHaveTextContent(/Delete this event\?/i);
+
+    await user.click(screen.getByRole('button', { name: /Cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+
+    expect(await screen.findByText(/Editing event - tap Update when done/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Update Event/i })).toBeInTheDocument();
+  });
+
+  it('shows the break pickup preview after landing and pickup points are set', async () => {
+    const session = { user: { id: 'user-break-preview', email: 'analyst@example.com' } };
+    const userScope = 'user:user-break-preview';
+    const matchId = 'match-break-preview';
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches(userScope, [{
+      id: matchId,
+      team: 'Clontarf',
+      opponent: 'Boden',
+      match_date: '2026-03-29',
+      status: 'open',
+      created_at: '2026-03-29T09:00:00.000Z',
+      updated_at: '2026-03-29T09:00:00.000Z',
+      last_event_at: '2026-03-29T09:10:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, matchId);
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Save Event/i });
+    const pitch = await screen.findByRole('application', { name: /GAA pitch/i });
+
+    await user.click(screen.getByRole('button', { name: /^break$/i }));
+    expect(screen.getByText(/Step 1 — tap pitch for landing point/i)).toBeInTheDocument();
+
+    await fireEvent.keyDown(pitch, { key: 'Enter' });
+    expect(await screen.findByText(/Step 2 — tap pitch for pickup point/i)).toBeInTheDocument();
+
+    await fireEvent.keyDown(pitch, { key: 'Enter' });
+    expect(await screen.findByText(/Pick:/i)).toBeInTheDocument();
+  });
+
+  it('shows and clears the live phase filter banner', async () => {
+    const session = { user: { id: 'user-phase-filter', email: 'analyst@example.com' } };
+    const userScope = 'user:user-phase-filter';
+    const matchId = 'match-phase-filter';
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches(userScope, [{
+      id: matchId,
+      team: 'Clontarf',
+      opponent: 'Crokes',
+      match_date: '2026-03-29',
+      status: 'open',
+      created_at: '2026-03-29T09:00:00.000Z',
+      updated_at: '2026-03-29T09:00:00.000Z',
+      last_event_at: '2026-03-29T09:10:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, matchId);
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Live/i });
+    await user.click(screen.getByRole('button', { name: /^Live$/i }));
+
+    expect(await screen.findByText(/Showing all periods in this view\./i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^H1$/i }));
+    expect(await screen.findByText(/Phase filter active: showing H1 only in Live, Digest, and analytics\./i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Show all/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Show all/i }));
+    expect(await screen.findByText(/Showing all periods in this view\./i)).toBeInTheDocument();
+  });
+
+  it('announces capture period changes from the form controls', async () => {
+    const session = { user: { id: 'user-period-change', email: 'analyst@example.com' } };
+    const userScope = 'user:user-period-change';
+    const matchId = 'match-period-change';
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches(userScope, [{
+      id: matchId,
+      team: 'Clontarf',
+      opponent: 'Crokes',
+      match_date: '2026-03-29',
+      status: 'open',
+      created_at: '2026-03-29T09:00:00.000Z',
+      updated_at: '2026-03-29T09:00:00.000Z',
+      last_event_at: '2026-03-29T09:10:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, matchId);
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Save Event/i });
+    await user.click(getCaptureFormButton('H2'));
+
+    expect(await screen.findByText(/Period set to H2/i)).toBeInTheDocument();
+  });
+
+  it('announces a paused timer when changing periods mid-run', async () => {
+    const session = { user: { id: 'user-period-timer', email: 'analyst@example.com' } };
+    const userScope = 'user:user-period-timer';
+    const matchId = 'match-period-timer';
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches(userScope, [{
+      id: matchId,
+      team: 'Clontarf',
+      opponent: 'Crokes',
+      match_date: '2026-03-29',
+      status: 'open',
+      created_at: '2026-03-29T09:00:00.000Z',
+      updated_at: '2026-03-29T09:00:00.000Z',
+      last_event_at: '2026-03-29T09:10:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, matchId);
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Save Event/i });
+    const timerButton = document.querySelector('.timer-btn');
+    if (!timerButton) throw new Error('Missing capture timer button');
+
+    await user.click(timerButton);
+    expect(await screen.findByText('Running')).toBeInTheDocument();
+
+    await user.click(getCaptureFormButton('ET'));
+    expect(await screen.findByText(/Period set to ET\. Timer paused/i)).toBeInTheDocument();
+  });
+
+  it('dismisses delete-all confirmation without wiping local events', async () => {
+    const session = { user: { id: 'user-delete', email: 'analyst@example.com' } };
+    const userScope = 'user:user-delete';
+    const matchId = 'match-delete';
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches(userScope, [{
+      id: matchId,
+      team: 'Clontarf',
+      opponent: 'Crokes',
+      match_date: '2026-03-29',
+      status: 'open',
+      created_at: '2026-03-29T09:00:00.000Z',
+      updated_at: '2026-03-29T09:00:00.000Z',
+      last_event_at: '2026-03-29T09:10:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, matchId);
+    seedScopedEvents(userScope, [
+      {
+        id: 'del-1',
+        match_id: matchId,
+        created_at: '2026-03-29T09:01:00.000Z',
+        updated_at: '2026-03-29T09:01:00.000Z',
+        match_date: '2026-03-29',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        period: 'H1',
+        clock: '01:00',
+        event_type: 'kickout',
+        direction: 'ours',
+        outcome: 'Retained',
+        contest_type: 'clean',
+        x: 0.4,
+        y: 0.3,
+        schema_version: 1,
+      },
+      {
+        id: 'del-2',
+        match_id: matchId,
+        created_at: '2026-03-29T09:08:00.000Z',
+        updated_at: '2026-03-29T09:08:00.000Z',
+        match_date: '2026-03-29',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        period: 'H1',
+        clock: '08:00',
+        event_type: 'kickout',
+        direction: 'ours',
+        outcome: 'Lost',
+        contest_type: 'clean',
+        x: 0.5,
+        y: 0.5,
+        schema_version: 1,
+      },
+    ]);
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Events/i });
+    await user.click(screen.getByRole('button', { name: /Events/i }));
+    await user.click(screen.getByRole('button', { name: /Delete all/i }));
+
+    const dialog = await screen.findByRole('alertdialog', { name: /Confirm action/i });
+    expect(dialog).toHaveTextContent(/Delete all 2 events from this device/i);
+
+    const backdrop = dialog.parentElement;
+    expect(backdrop).not.toBeNull();
+    await user.click(backdrop);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
+
+    expect(JSON.parse(localStorage.getItem(storageKey(STORAGE_KEYS.events, userScope)))).toHaveLength(2);
+  });
+
+  it('keeps current conflicting imports while adding brand-new rows', async () => {
+    const session = { user: { id: 'user-import', email: 'analyst@example.com' } };
+    const userScope = 'user:user-import';
+    const matchId = 'match-import';
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches(userScope, [{
+      id: matchId,
+      team: 'Clontarf',
+      opponent: 'Boden',
+      match_date: '2026-03-25',
+      status: 'open',
+      created_at: '2026-03-25T09:00:00.000Z',
+      updated_at: '2026-03-25T09:00:00.000Z',
+      last_event_at: '2026-03-25T09:10:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, matchId);
+    seedScopedEvents(userScope, [{
+      id: 'existing-1',
+      match_id: matchId,
+      created_at: '2026-03-25T09:01:00.000Z',
+      updated_at: '2026-03-25T09:01:00.000Z',
+      match_date: '2026-03-25',
+      team: 'Clontarf',
+      opponent: 'Boden',
+      period: 'H1',
+      clock: '01:00',
+      event_type: 'kickout',
+      direction: 'ours',
+      outcome: 'Retained',
+      contest_type: 'clean',
+      x: 0.4,
+      y: 0.3,
+      schema_version: 1,
+    }]);
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Events/i });
+    await user.click(screen.getByRole('button', { name: /Events/i }));
+
+    const originalCreateElement = document.createElement.bind(document);
+    const fakeInput = {
+      type: '',
+      accept: '',
+      files: [],
+      onchange: null,
+      click: vi.fn(),
+    };
+    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tagName, options) => {
+      if (String(tagName).toLowerCase() === 'input') return fakeInput;
+      return originalCreateElement(tagName, options);
+    });
+
+    try {
+      await user.click(screen.getByRole('button', { name: /Import JSON/i }));
+
+      fakeInput.files = [{
+        name: 'import.json',
+        text: async () => JSON.stringify([
+          {
+            id: 'existing-1',
+            match_id: matchId,
+            created_at: '2026-03-25T09:01:00.000Z',
+            updated_at: '2026-03-25T09:01:00.000Z',
+            match_date: '2026-03-25',
+            team: 'Clontarf',
+            opponent: 'Na Fianna',
+            period: 'H1',
+            clock: '01:00',
+            event_type: 'kickout',
+            direction: 'ours',
+            outcome: 'Lost',
+            contest_type: 'clean',
+            x: 0.55,
+            y: 0.35,
+            schema_version: 1,
+          },
+          {
+            id: 'new-2',
+            match_id: matchId,
+            created_at: '2026-03-25T09:05:00.000Z',
+            updated_at: '2026-03-25T09:05:00.000Z',
+            match_date: '2026-03-25',
+            team: 'Clontarf',
+            opponent: 'Vincents',
+            period: 'H1',
+            clock: '02:00',
+            event_type: 'kickout',
+            direction: 'ours',
+            outcome: 'Score',
+            contest_type: 'clean',
+            x: 0.62,
+            y: 0.42,
+            schema_version: 1,
+          },
+        ], null, 2),
+      }];
+
+      if (!fakeInput.onchange) throw new Error('Missing import handler');
+      await fakeInput.onchange();
+
+      const dialog = await screen.findByRole('alertdialog', { name: /Confirm action/i });
+      expect(dialog).toHaveTextContent(/Replace those events with the imported versions/i);
+
+      await user.click(screen.getByRole('button', { name: /Import new only/i }));
+
+      await waitFor(() => {
+        expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+        const storedEvents = JSON.parse(localStorage.getItem(storageKey(STORAGE_KEYS.events, userScope)));
+        expect(storedEvents).toHaveLength(2);
+        expect(storedEvents.find((event) => event.id === 'existing-1')?.opponent).toBe('Boden');
+        expect(storedEvents.find((event) => event.id === 'new-2')?.opponent).toBe('Vincents');
+      });
+
+      expect(screen.getByRole('cell', { name: /Boden/i })).toBeInTheDocument();
+      expect(screen.getByRole('cell', { name: /Vincents/i })).toBeInTheDocument();
+    } finally {
+      createElementSpy.mockRestore();
+    }
+  });
+
+  it('renders the admin tab for configured admins', async () => {
+    const session = { user: { id: 'user-admin', email: 'admin@example.com' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+    mockState.isConfiguredAdminMock.mockReturnValue(true);
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Admin/i });
+    await user.click(screen.getByRole('button', { name: /Admin/i }));
+
+    expect(await screen.findByRole('heading', { name: 'Admin Onboarding' })).toBeInTheDocument();
+  });
+
+  it('shows the digest tab with the current phase label', async () => {
+    const session = { user: { id: 'user-digest', email: 'analyst@example.com' } };
+    const userScope = 'user:user-digest';
+    const matchId = 'match-digest';
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches(userScope, [{
+      id: matchId,
+      team: 'Clontarf',
+      opponent: 'Crokes',
+      match_date: '2026-03-29',
+      status: 'open',
+      created_at: '2026-03-29T09:00:00.000Z',
+      updated_at: '2026-03-29T09:00:00.000Z',
+      last_event_at: '2026-03-29T09:10:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, matchId);
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Digest/i });
+    await user.click(screen.getByRole('button', { name: /Digest/i }));
+
+    expect(screen.getByText(/No events yet for this digest/i)).toBeInTheDocument();
+    expect(screen.getByText(/Match \(all periods\)/i)).toBeInTheDocument();
+  });
+
+  it('shows the backup reminder toast when local storage hits quota', async () => {
+    const session = { user: { id: 'user-backup', email: 'analyst@example.com' } };
+    const userScope = 'user:user-backup';
+    const matchId = 'match-backup';
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches(userScope, [{
+      id: matchId,
+      team: 'Clontarf',
+      opponent: 'Crokes',
+      match_date: '2026-03-29',
+      status: 'open',
+      created_at: '2026-03-29T09:00:00.000Z',
+      updated_at: '2026-03-29T09:00:00.000Z',
+      last_event_at: '2026-03-29T09:10:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, matchId);
+    seedScopedEvents(userScope, [
+      {
+        id: 'backup-1',
+        match_id: matchId,
+        created_at: '2026-03-29T09:01:00.000Z',
+        updated_at: '2026-03-29T09:01:00.000Z',
+        match_date: '2026-03-29',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        period: 'H1',
+        clock: '01:00',
+        event_type: 'kickout',
+        direction: 'ours',
+        outcome: 'Retained',
+        contest_type: 'clean',
+        x: 0.4,
+        y: 0.3,
+        schema_version: 1,
+      },
+      {
+        id: 'backup-2',
+        match_id: matchId,
+        created_at: '2026-03-29T09:08:00.000Z',
+        updated_at: '2026-03-29T09:08:00.000Z',
+        match_date: '2026-03-29',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        period: 'H1',
+        clock: '08:00',
+        event_type: 'kickout',
+        direction: 'ours',
+        outcome: 'Lost',
+        contest_type: 'clean',
+        x: 0.5,
+        y: 0.5,
+        schema_version: 1,
+      },
+    ]);
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Events/i });
+    await user.click(screen.getByRole('button', { name: /Events/i }));
+
+    const originalSetItem = Storage.prototype.setItem;
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function(key, value) {
+      if (String(key) === storageKey(STORAGE_KEYS.events, userScope)) {
+        throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    try {
+      await user.click(screen.getByRole('button', { name: /Delete all/i }));
+
+      const dialog = await screen.findByRole('alertdialog', { name: /Confirm action/i });
+      expect(dialog).toHaveTextContent(/Delete all 2 events from this device/i);
+      await user.click(screen.getByRole('button', { name: /Delete all data/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/back up your data/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Export JSON/i })).toBeInTheDocument();
+        expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      });
+    } finally {
+      setItemSpy.mockRestore();
+    }
   });
 });
