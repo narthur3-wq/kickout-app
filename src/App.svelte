@@ -168,6 +168,11 @@
     else                                analyticsEventType = 'ALL';
   }
 
+  // Default match filter to active match when switching to analytics tabs
+  $: if ((activeTab === 'kickouts' || activeTab === 'shots' || activeTab === 'turnovers') && activeMatch) {
+    matchFilter = matchKey(activeMatch);
+  }
+
   // ── Derived match ─────────────────────────────────────────────────────────
   $: activeMatch = matches.find((m) => m.id === activeMatchId) ?? null;
   $: isMatchClosed = activeMatch?.status === 'closed';
