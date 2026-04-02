@@ -40,11 +40,11 @@
 
   const OUTCOME_MAP = {
     'kickout-ours': ['Retained', 'Lost'],
-    'kickout-theirs': ['Won', 'Lost'],
+    'kickout-theirs': ['Retained', 'Lost'],
     'turnover-ours': ['Won', 'Lost'],
     'turnover-theirs': ['Won', 'Lost'],
-    'shot-ours': ['Goal', 'Point', 'Wide', 'Blocked', 'Saved'],
-    'shot-theirs': ['Goal', 'Point', 'Wide', 'Blocked', 'Saved'],
+    'shot-ours': ['Goal', 'Point', 'Two Point', 'Wide', 'Blocked', 'Dropped short', 'Saved'],
+    'shot-theirs': ['Goal', 'Point', 'Two Point', 'Wide', 'Blocked', 'Dropped short', 'Saved'],
   };
 
   const EVENT_TYPES = ['kickout', 'turnover', 'shot'];
@@ -56,7 +56,7 @@
     outcome = activeOutcomes[0];
   }
 
-  $: if (outcome !== 'Wide' && outcome !== 'Blocked') {
+  $: if (outcome !== 'Wide' && outcome !== 'Blocked' && outcome !== 'Dropped short') {
     shotType = 'point';
   }
 
@@ -157,7 +157,7 @@
     {/each}
   </div>
 
-  {#if eventType === 'shot' && (outcome === 'Wide' || outcome === 'Blocked')}
+  {#if eventType === 'shot' && (outcome === 'Wide' || outcome === 'Blocked' || outcome === 'Dropped short')}
     <div class="shot-type-row">
       <span class="shot-type-label">Goal attempt?</span>
       <div class="shot-type-toggle">
@@ -475,6 +475,11 @@
     border-color: #0891b2;
   }
 
+  .seg-btn.active.outcome-two-point {
+    background: #0284c7;
+    border-color: #0284c7;
+  }
+
   .seg-btn.active.outcome-wide {
     background: #d97706;
     border-color: #d97706;
@@ -483,6 +488,11 @@
   .seg-btn.active.outcome-blocked {
     background: #b45309;
     border-color: #b45309;
+  }
+
+  .seg-btn.active.outcome-dropped-short {
+    background: #ea580c;
+    border-color: #ea580c;
   }
 
   .seg-btn.active.outcome-saved {

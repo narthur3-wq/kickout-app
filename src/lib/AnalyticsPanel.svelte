@@ -850,7 +850,7 @@
     overflow: hidden;
     box-shadow: 0 4px 20px rgba(0,50,0,0.18), 0 1px 6px rgba(0,0,0,0.08);
     aspect-ratio: 145 / 90;
-    width: min(100%, calc(52svh * 145 / 90));
+    width: min(100%, calc(47svh * 145 / 90));
     max-width: 1280px;
   }
   .pitch-viz-legend {

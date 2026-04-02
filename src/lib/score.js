@@ -22,6 +22,7 @@ export function shotPoints(event) {
   const outcome = String(event?.outcome || '').toLowerCase();
   if (outcome === 'goal') return 3;
   if (outcome === 'point') return 1;
+  if (outcome === 'two point' || outcome === 'two-point') return 2;
   return 0;
 }
 
@@ -65,11 +66,11 @@ export function buildScoreSnapshots(events = []) {
       if ((event.direction || 'ours') === 'theirs') {
         them += points;
         if (points === 3) themGoals += 1;
-        else themPoints += 1;
+        else themPoints += points;
       } else {
         us += points;
         if (points === 3) usGoals += 1;
-        else usPoints += 1;
+        else usPoints += points;
       }
     }
   }

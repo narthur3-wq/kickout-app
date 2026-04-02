@@ -1,5 +1,35 @@
 import { STORAGE_KEYS, storageKey } from './storageScope.js';
 
+/**
+ * @typedef {object} MatchRecord
+ * @property {string} id
+ * @property {string | null} team_id
+ * @property {string} team
+ * @property {string} opponent
+ * @property {string} match_date
+ * @property {'open' | 'closed'} status
+ * @property {string} created_at
+ * @property {string} updated_at
+ * @property {string | null} last_event_at
+ * @property {string | null} created_by
+ * @property {string | null} closed_at
+ */
+
+/**
+ * @typedef {object} MatchInput
+ * @property {string=} id
+ * @property {string=} team
+ * @property {string=} opponent
+ * @property {string=} match_date
+ * @property {string | null=} team_id
+ * @property {string | null=} created_by
+ * @property {string=} status
+ * @property {string=} created_at
+ * @property {string=} updated_at
+ * @property {string | null=} last_event_at
+ * @property {string | null=} closed_at
+ */
+
 // ── Storage keys ──────────────────────────────────────────────────────────────
 export const MATCH_KEYS = {
   matches: 'ko_matches',
@@ -33,6 +63,10 @@ export function matchIdentityKey(match) {
 }
 
 // ── Match factory ─────────────────────────────────────────────────────────────
+/**
+ * @param {MatchInput} [input]
+ * @returns {MatchRecord}
+ */
 export function createMatch({
   id,
   team,
@@ -65,6 +99,11 @@ export function createMatch({
   };
 }
 
+/**
+ * @param {MatchInput | null | undefined} match
+ * @param {{ teamIdFallback?: string | null, userIdFallback?: string | null }} [options]
+ * @returns {MatchRecord}
+ */
 export function normalizeMatchRecord(match, { teamIdFallback = null, userIdFallback = null } = {}) {
   return createMatch({
     id: match?.id,
@@ -92,6 +131,11 @@ export function reopenMatch(match) {
   return { ...match, status: 'open', closed_at: null, updated_at: now };
 }
 
+/**
+ * @param {MatchRecord} match
+ * @param {{ team?: string, opponent?: string, match_date?: string }} updates
+ * @returns {MatchRecord}
+ */
 export function updateMatchFields(match, { team, opponent, match_date }) {
   return {
     ...match,
@@ -212,9 +256,11 @@ export function migrateEventsToMatches(events, scope, options = {}) {
 
   const now = new Date().toISOString();
   const keyToMatchId = new Map();
+  /** @type {MatchRecord[]} */
   const matches = [];
 
   for (const [key, group] of groups) {
+    /** @type {MatchRecord} */
     const match = {
       id: crypto.randomUUID(),
       team_id: teamId ?? null,

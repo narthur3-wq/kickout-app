@@ -11,7 +11,9 @@ node_modules
 dist
 dev-dist
 dist-ssr
-docs
+docs/*
+!docs/go-live/
+!docs/go-live/**
 *.local
 artifacts/
 playwright-report/

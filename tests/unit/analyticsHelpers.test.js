@@ -24,22 +24,25 @@ describe('analyticsHelpers', () => {
         undefined,
         { outcome: 'Goal', shot_type: 'goal' },
         { outcome: 'Point', shot_type: 'point' },
+        { outcome: 'Two Point', shot_type: 'point' },
         { outcome: 'Saved', shot_type: 'goal' },
         { outcome: 'Wide', shot_type: 'goal' },
         { outcome: 'Wide', shot_type: 'point' },
         { outcome: 'Blocked' },
+        { outcome: 'Dropped short', shot_type: 'goal' },
+        { outcome: 'Dropped short', shot_type: 'point' },
       ],
       'shot'
     );
 
     expect(summary).toEqual({
-      total: 7,
-      scored: 2,
-      scoredPct: 29,
-      goalAttempts: 3,
+      total: 10,
+      scored: 3,
+      scoredPct: 30,
+      goalAttempts: 4,
       goals: 1,
-      pointAttempts: 3,
-      points: 1,
+      pointAttempts: 5,
+      points: 2,
       small: false,
     });
   });

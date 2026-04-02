@@ -70,6 +70,38 @@ describe('buildScoreSnapshots', () => {
     expect(snapshots.get('ko-3')).toMatchObject({ us: 3, them: 1, margin: 2, usDisplay: '1-0', themDisplay: '0-1' })
   })
 
+  it('counts two-point scores in the running totals and display', () => {
+    const events = [
+      {
+        id: 'shot-1',
+        match_date: '2026-03-26',
+        team: 'Clontarf',
+        opponent: 'Vincents',
+        ko_sequence: 1,
+        created_at: '2026-03-26T10:00:00.000Z',
+        event_type: 'shot',
+        outcome: 'Two Point',
+        direction: 'ours',
+      },
+      {
+        id: 'ko-1',
+        match_date: '2026-03-26',
+        team: 'Clontarf',
+        opponent: 'Vincents',
+        ko_sequence: 2,
+        created_at: '2026-03-26T10:01:00.000Z',
+        event_type: 'kickout',
+        outcome: 'Retained',
+        direction: 'ours',
+      },
+    ]
+
+    const snapshots = buildScoreSnapshots(events)
+
+    expect(snapshots.get('shot-1')).toMatchObject({ us: 0, them: 0, margin: 0, usDisplay: '0-0', themDisplay: '0-0' })
+    expect(snapshots.get('ko-1')).toMatchObject({ us: 2, them: 0, margin: 2, usDisplay: '0-2', themDisplay: '0-0' })
+  })
+
   it('keeps separate matches isolated', () => {
     const snapshots = buildScoreSnapshots([
       {

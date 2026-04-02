@@ -17,12 +17,12 @@ function renderForm(props = {}) {
 }
 
 describe('CaptureForm', () => {
-  it('shows shot-type controls only for wide or blocked shots', async () => {
+  it('shows shot-type controls only for wide, blocked, or dropped short shots', async () => {
     const user = userEvent.setup();
     renderForm();
 
     await user.click(screen.getByRole('button', { name: /shot/i }));
-    await user.click(screen.getByRole('button', { name: 'Wide' }));
+    await user.click(screen.getByRole('button', { name: 'Dropped short' }));
 
     expect(screen.getByText(/Goal attempt\?/i)).toBeInTheDocument();
 

@@ -924,7 +924,7 @@ describe('App shell auth and sync', () => {
     await screen.findByRole('button', { name: /Events/i });
     await user.click(screen.getByRole('button', { name: /Events/i }));
 
-    const deleteButtons = screen.getAllByRole('button', { name: 'X' });
+    const deleteButtons = screen.getAllByRole('button', { name: 'Delete' });
 
     await user.click(deleteButtons[0]);
 

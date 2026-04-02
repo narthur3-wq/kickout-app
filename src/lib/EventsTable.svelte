@@ -176,6 +176,7 @@
     <table aria-label="Events log">
       <thead>
         <tr>
+          <th class="actions-col">Actions</th>
           <th>#</th>
           <th>Date</th>
           <th>Per</th>
@@ -190,7 +191,6 @@
           <th>Score</th>
           <th>Players</th>
           <th>Flag</th>
-          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -209,6 +209,10 @@
 
         {#each filtered as event (event.id)}
           <tr class={editingId === event.id ? 'editing-row' : ''}>
+            <td class="actions">
+              <button type="button" class="act-btn" on:click={() => dispatch('load', event)}>Edit</button>
+              <button type="button" class="act-btn danger" on:click={() => dispatch('delete', event.id)}>Delete</button>
+            </td>
             <td class="num">{event.ko_sequence ?? '-'}</td>
             <td>{event.match_date || (event.created_at || '').slice(0, 10)}</td>
             <td class="center">{event.period}</td>
@@ -223,10 +227,6 @@
             <td class="mono">{event.score_us ? `${event.score_us} / ${event.score_them ?? '?'}` : '-'}</td>
             <td class="players-cell">{turnoverPlayersLabel(event)}</td>
             <td class="center">{event.flag ? 'Flag' : ''}</td>
-            <td class="actions">
-              <button type="button" class="act-btn" on:click={() => dispatch('load', event)}>Edit</button>
-              <button type="button" class="act-btn danger" on:click={() => dispatch('delete', event.id)}>X</button>
-            </td>
           </tr>
         {/each}
       </tbody>
@@ -491,9 +491,14 @@
     line-height: 1.4;
   }
 
+  .actions-col {
+    min-width: 110px;
+  }
+
   .actions {
     display: flex;
     gap: 6px;
+    justify-content: flex-start;
   }
 
   .act-btn {

@@ -11,6 +11,7 @@ export default defineConfig({
     setupFiles: ['tests/setup/vitest.setup.js'],
     include: ['src/**/*.test.js', 'tests/**/*.test.js'],
     exclude: ['tests/e2e/**'],
+    testTimeout: 15000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

@@ -26,17 +26,25 @@ export function buildShotSummary(events = [], analyticsEventType = 'ALL') {
   if (total < 3) return { tooFew: true };
 
   const goals = events.filter((event) => outcomeOf(event) === 'goal').length;
-  const points = events.filter((event) => outcomeOf(event) === 'point').length;
+  const points = events.filter((event) => {
+    const outcome = outcomeOf(event);
+    return outcome === 'point' || outcome === 'two point' || outcome === 'two-point';
+  }).length;
   const scored = goals + points;
 
   const goalAttempts = events.filter((event) => {
     const outcome = outcomeOf(event);
-    return outcome === 'goal' || outcome === 'saved' || ((outcome === 'wide' || outcome === 'blocked') && shotTypeOf(event) === 'goal');
+    return outcome === 'goal'
+      || outcome === 'saved'
+      || ((outcome === 'wide' || outcome === 'blocked' || outcome === 'dropped short') && shotTypeOf(event) === 'goal');
   }).length;
 
   const pointAttempts = events.filter((event) => {
     const outcome = outcomeOf(event);
-    return outcome === 'point' || ((outcome === 'wide' || outcome === 'blocked') && shotTypeOf(event) !== 'goal');
+    return outcome === 'point'
+      || outcome === 'two point'
+      || outcome === 'two-point'
+      || ((outcome === 'wide' || outcome === 'blocked' || outcome === 'dropped short') && shotTypeOf(event) !== 'goal');
   }).length;
 
   return {
@@ -66,18 +74,18 @@ export function buildTurnoverSummary(events = [], analyticsEventType = 'ALL') {
 export function buildKickoutClockTrend(events = [], analyticsEventType = 'ALL') {
   if (analyticsEventType !== 'kickout') return [];
   const windows = [
-    [0, 10, '0-10'],
-    [10, 20, '10-20'],
-    [20, 30, '20-30'],
-    [30, 40, '30-40'],
-    [40, 50, '40-50'],
-    [50, 60, '50-60'],
-    [60, 70, '60-70'],
-    [70, 80, '70-80'],
-    [80, 90, '80-90'],
-    [90, Infinity, '90+'],
+    { lo: 0, hi: 10, label: '0-10' },
+    { lo: 10, hi: 20, label: '10-20' },
+    { lo: 20, hi: 30, label: '20-30' },
+    { lo: 30, hi: 40, label: '30-40' },
+    { lo: 40, hi: 50, label: '40-50' },
+    { lo: 50, hi: 60, label: '50-60' },
+    { lo: 60, hi: 70, label: '60-70' },
+    { lo: 70, hi: 80, label: '70-80' },
+    { lo: 80, hi: 90, label: '80-90' },
+    { lo: 90, hi: Infinity, label: '90+' },
   ];
-  const buckets = windows.map(([lo, hi, label]) => ({ label, lo, hi, tot: 0, ret: 0 }));
+  const buckets = windows.map(({ lo, hi, label }) => ({ label, lo, hi, tot: 0, ret: 0 }));
 
   for (const event of events) {
     if (!event?.clock) continue;

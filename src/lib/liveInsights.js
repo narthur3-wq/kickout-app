@@ -14,7 +14,7 @@ import {
 } from './thresholds.js';
 
 const POSITIVE_KICKOUT_OUTCOMES = new Set(['retained', 'score', 'won']);
-const SCORE_OUTCOMES = new Set(['goal', 'point']);
+const SCORE_OUTCOMES = new Set(['goal', 'point', 'two point', 'two-point']);
 
 const SIDE_LABELS = {
   left: 'left',
@@ -705,15 +705,22 @@ export function buildLiveInsights(events = []) {
   const ordered = sortEvents(events);
   const scoreEvents = ordered
     .filter(isScoreEvent)
-    .map((event) => ({
-      id: event.id,
-      team: direction(event),
-      label: shotPoints(event) === 3 ? 'G' : 'P',
-      points: shotPoints(event),
-      clock: event.clock || '',
-      minute: absoluteMinute(event),
-      event,
-    }));
+    .map((event) => {
+      const points = shotPoints(event);
+      let label = 'P';
+      if (points === 3) label = 'G';
+      else if (points === 2) label = '2P';
+
+      return {
+        id: event.id,
+        team: direction(event),
+        label,
+        points,
+        clock: event.clock || '',
+        minute: absoluteMinute(event),
+        event,
+      };
+    });
   const kickoutEvents = ordered
     .filter((event) => eventType(event) === 'kickout')
     .map((event) => ({

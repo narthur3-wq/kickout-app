@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "lint": "eslint . --ignore-pattern coverage --ignore-pattern dev-dist",
+    "typecheck": "tsc --noEmit -p jsconfig.json",
     "test": "npm run test:unit",
     "test:unit": "vitest run",
     "test:watch": "vitest",

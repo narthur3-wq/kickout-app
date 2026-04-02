@@ -8,6 +8,14 @@ export const STORAGE_KEYS = {
   syncCursor: 'ko_sync_cursor',
 };
 
+/**
+ * @typedef {'upsert' | 'delete'} PendingSyncOperation
+ */
+
+/**
+ * @typedef {[string, PendingSyncOperation]} PendingSyncEntry
+ */
+
 export function storageScopeForUser(nextUser, supabaseConfigured) {
   if (nextUser?.id) return `user:${nextUser.id}`;
   return supabaseConfigured ? null : LOCAL_STORAGE_SCOPE;
@@ -63,12 +71,12 @@ export function parseStoredMeta(meta, fallbackDate) {
 export function parsePendingSyncEntries(rawValue) {
   if (!Array.isArray(rawValue)) return [];
   if (rawValue.every((item) => typeof item === 'string')) {
-    return rawValue.map((id) => [id, 'upsert']);
+    return rawValue.map((id) => /** @type {PendingSyncEntry} */ ([id, 'upsert']));
   }
 
   return rawValue
     .filter((item) => item && typeof item.id === 'string')
-    .map((item) => [item.id, item.op === 'delete' ? 'delete' : 'upsert']);
+    .map((item) => /** @type {PendingSyncEntry} */ ([item.id, item.op === 'delete' ? 'delete' : 'upsert']));
 }
 
 export function readScopeSnapshot(scope, options = {}) {
@@ -105,12 +113,16 @@ export function migrateLocalScopeToUserScope(targetScope, options = {}) {
     mergedEventsById.set(event.id, event);
   }
 
-  const mergedPendingById = new Map(targetSnapshot.pendingSync);
+  const mergedPendingById = new Map(
+    /** @type {Iterable<PendingSyncEntry>} */ (targetSnapshot.pendingSync)
+  );
   for (const [id, op] of localSnapshot.pendingSync) {
     mergedPendingById.set(id, op);
   }
 
-  const mergedPendingMatchesById = new Map(targetSnapshot.pendingMatchSync);
+  const mergedPendingMatchesById = new Map(
+    /** @type {Iterable<PendingSyncEntry>} */ (targetSnapshot.pendingMatchSync)
+  );
   for (const [id, op] of localSnapshot.pendingMatchSync) {
     mergedPendingMatchesById.set(id, op);
   }

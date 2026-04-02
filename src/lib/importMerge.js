@@ -84,11 +84,11 @@ export function mergeImportedMatches(existingMatches = [], importedMatches = [],
   const { teamId = null, userId = null } = options;
   const matches = [...existingMatches];
   const matchesById = new Map(existingMatches.map((match) => [match.id, match]));
-  const matchesByKey = new Map(
-    existingMatches
-      .map((match) => [logicalMatchKey(match), match])
-      .filter(([key]) => !!key)
-  );
+  const matchesByKey = new Map();
+  for (const match of existingMatches) {
+    const key = logicalMatchKey(match);
+    if (key) matchesByKey.set(key, match);
+  }
   const importedIdToCanonicalId = new Map();
 
   let addedCount = 0;

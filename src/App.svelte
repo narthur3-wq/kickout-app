@@ -76,7 +76,9 @@
 
   // ── Constants ────────────────────────────────────────────────────────────
   const WIDTH_M = 90, LENGTH_M = 145;
-  const OUTCOMES = ['Retained','Lost','Score','Wide','Out','Foul'];
+  const PERIODS = ['H1', 'H2', 'ET'];
+  const DEFAULT_PERIOD_CLOCKS = Object.freeze({ H1: '', H2: '', ET: '' });
+  const OUTCOMES = ['Retained', 'Lost'];
   const CONTESTS = ['clean','break','foul','out'];
   const BREAK_OUTS = ['won','lost','neutral'];
 
@@ -90,13 +92,14 @@
   // ── Match setup (set once per match, persisted to localStorage) ──────────
   let team = '', opponent = '', matchDate = new Date().toISOString().slice(0,10);
   let period = 'H1', ourGoalAtTop = true;
+  let periodClocks = { ...DEFAULT_PERIOD_CLOCKS };
   let setupDraftTeam = '';
   let setupDraftOpponent = '';
   let setupDraftDate = '';
 
   // ── Per-kickout capture state ─────────────────────────────────────────────
   /** @type {'clean'|'break'|'foul'|'out'} */ let contest = 'clean';
-  /** @type {'Retained'|'Lost'|'Score'|'Wide'|'Out'|'Foul'} */ let outcome = 'Retained';
+  /** @type {string} */ let outcome = 'Retained';
   /** @type {'won'|'lost'|'neutral'|''} */ let breakOutcome = '';
   let clock = '', targetPlayer = '';
   let turnoverLostPlayer = '', turnoverWonPlayer = '';
@@ -194,6 +197,24 @@
   let timerInterval = null;
   let timerSeconds = 0;
 
+  function normalizePeriodClocks(candidate) {
+    const base = { ...DEFAULT_PERIOD_CLOCKS };
+    if (!candidate || typeof candidate !== 'object') return base;
+    for (const p of PERIODS) {
+      const value = candidate[p];
+      if (typeof value === 'string') base[p] = value;
+    }
+    return base;
+  }
+
+  function setClock(nextClock, nextPeriod = period) {
+    const safeClock = typeof nextClock === 'string' ? nextClock : '';
+    clock = safeClock;
+    if (periodClocks?.[nextPeriod] !== safeClock) {
+      periodClocks = { ...periodClocks, [nextPeriod]: safeClock };
+    }
+  }
+
   function stopTimer() {
     if (timerInterval) {
       clearInterval(timerInterval);
@@ -214,7 +235,7 @@
         timerSeconds++;
         const mins = Math.floor(timerSeconds / 60);
         const secs = timerSeconds % 60;
-        clock = `${mins}:${secs.toString().padStart(2, '0')}`;
+        setClock(`${mins}:${secs.toString().padStart(2, '0')}`);
       }, 1000);
     }
   }
@@ -308,6 +329,8 @@
     opponent = '';
     matchDate = defaultMatchDate();
     period = 'H1';
+    periodClocks = { ...DEFAULT_PERIOD_CLOCKS };
+    setClock('');
     ourGoalAtTop = true;
     syncSetupDraftFromMatch();
   }
@@ -316,7 +339,7 @@
     contest = 'clean';
     outcome = 'Retained';
     breakOutcome = '';
-    clock = '';
+    setClock('');
     targetPlayer = '';
     turnoverLostPlayer = '';
     turnoverWonPlayer = '';
@@ -361,6 +384,7 @@
       period,
       ourGoalAtTop,
       clock,
+      periodClocks: { ...periodClocks },
       contest,
       outcome,
       breakOutcome,
@@ -388,7 +412,8 @@
     matchDate = snapshot.matchDate;
     period = snapshot.period;
     ourGoalAtTop = snapshot.ourGoalAtTop;
-    clock = snapshot.clock;
+    periodClocks = normalizePeriodClocks(snapshot.periodClocks);
+    setClock(snapshot.clock, snapshot.period);
     contest = snapshot.contest;
     outcome = snapshot.outcome;
     breakOutcome = snapshot.breakOutcome;
@@ -581,6 +606,8 @@
       onCorrupt: () => console.warn('ko_meta corrupt in localStorage'),
     });
     ({ team, opponent, matchDate, period, ourGoalAtTop } = parseStoredMeta(meta, defaultMatchDate()));
+    periodClocks = normalizePeriodClocks(meta.period_clocks);
+    setClock(periodClocks[period] || '', period);
     syncCursor = loadSyncCursor(scope, { storage: localStorage });
     syncSetupDraftFromMatch();
     markDraftPristine();
@@ -592,13 +619,16 @@
     if (!eventsKey || !metaKey) return;
     try {
       localStorage.setItem(eventsKey, JSON.stringify(events.map(normalizeEventForStorage)));
-      localStorage.setItem(metaKey, JSON.stringify(serializeMatchMeta({
-        team,
-        opponent,
-        matchDate,
-        period,
-        ourGoalAtTop,
-      })));
+      localStorage.setItem(metaKey, JSON.stringify({
+        ...serializeMatchMeta({
+          team,
+          opponent,
+          matchDate,
+          period,
+          ourGoalAtTop,
+        }),
+        period_clocks: { ...periodClocks },
+      }));
     } catch (e) {
       if (e instanceof DOMException && e.name === 'QuotaExceededError') {
         recordDiagnostic('storage', 'localStorage quota exceeded', {
@@ -620,13 +650,16 @@
     const metaKey = storageKey(STORAGE_KEYS.meta, storageScope);
     if (!metaKey) return;
     try {
-      localStorage.setItem(metaKey, JSON.stringify(serializeMatchMeta({
-        team,
-        opponent,
-        matchDate,
-        period,
-        ourGoalAtTop,
-      })));
+      localStorage.setItem(metaKey, JSON.stringify({
+        ...serializeMatchMeta({
+          team,
+          opponent,
+          matchDate,
+          period,
+          ourGoalAtTop,
+        }),
+        period_clocks: { ...periodClocks },
+      }));
     } catch (e) {
       console.error('localStorage meta write failed', e);
       recordDiagnostic('storage', 'localStorage meta write failed', {
@@ -640,6 +673,7 @@
     opponent;
     matchDate;
     period;
+    periodClocks;
     ourGoalAtTop;
     persistMeta();
   }
@@ -1739,7 +1773,8 @@
     team         = e.team        || '';
     opponent     = e.opponent    || '';
     period       = e.period      || 'H1';
-    clock        = e.clock       || '';
+    periodClocks = { ...periodClocks, [period]: e.clock || '' };
+    setClock(e.clock || '', period);
     outcome      = e.outcome;
     contest      = e.contest_type;
     breakOutcome = e.break_outcome || '';
@@ -2333,13 +2368,23 @@
     </div>
   </header>
 
-  {#if syncMessage && isOnline}
+  {#if syncMessage || pendingSync.size > 0 || pendingMatchSync.size > 0 || syncStatus === 'error'}
     <div class="sync-banner">
-      <span>{syncMessage}</span>
-      {#if pendingSync.size > 0}
-        <button class="sync-banner-btn" on:click={flushSyncQueue}>Retry now</button>
+      <span>
+        {#if syncMessage}
+          {syncMessage}
+        {:else if !isOnline}
+          Offline - changes queued on this device.
+        {:else}
+          Sync needed: {pendingSync.size + pendingMatchSync.size} pending update(s).
+        {/if}
+      </span>
+      {#if isOnline && (pendingSync.size > 0 || pendingMatchSync.size > 0)}
+        <button class="sync-banner-btn" on:click={flushSyncQueue}>Sync now</button>
       {/if}
-      <button class="sync-banner-btn" on:click={clearSyncMessage}>Dismiss</button>
+      {#if syncMessage}
+        <button class="sync-banner-btn" on:click={clearSyncMessage}>Dismiss</button>
+      {/if}
     </div>
   {/if}
 
@@ -2477,21 +2522,25 @@
         on:periodChange={(e) => {
           const p = e.detail;
           const previousPeriod = period;
+          if (previousPeriod === p) return;
+          periodClocks = { ...periodClocks, [previousPeriod]: clock || '' };
           period = p;
-          if (previousPeriod !== p) {
-            const timerWasRunning = timerRunning;
-            if (timerWasRunning) stopTimer();
-            if ((previousPeriod === 'H1' && p === 'H2') || (previousPeriod === 'H2' && p === 'H1')) {
-              showNotice(
-                'success',
-                timerWasRunning
-                  ? `Period set to ${p}. Timer paused at ${clock || '0:00'}. Ends stay as they are - use "Swap ends" beside the pitch if teams have changed direction.`
-                  : `Period set to ${p}. Ends stay as they are - use "Swap ends" beside the pitch if teams have changed direction.`,
-                6000
-              );
-            } else if (timerWasRunning) {
-              showNotice('success', `Period set to ${p}. Timer paused at ${clock || '0:00'}.`, 5000);
-            }
+          const nextClock = periodClocks?.[p] || '';
+          setClock(nextClock, p);
+          const timerWasRunning = timerRunning;
+          if (timerWasRunning) stopTimer();
+          if ((previousPeriod === 'H1' && p === 'H2') || (previousPeriod === 'H2' && p === 'H1')) {
+            showNotice(
+              'success',
+              timerWasRunning
+                ? `Period set to ${p}. Timer paused at ${nextClock || '0:00'}. Ends stay as they are - use "Swap ends" beside the pitch if teams have changed direction.`
+                : `Period set to ${p}. Ends stay as they are - use "Swap ends" beside the pitch if teams have changed direction.`,
+              6000
+            );
+          } else if (timerWasRunning) {
+            showNotice('success', `Period set to ${p}. Timer paused at ${nextClock || '0:00'}.`, 5000);
+          } else {
+            showNotice('success', `Period set to ${p}.`, 4000);
           }
         }}
         on:cancelEdit={cancelEditMode}
