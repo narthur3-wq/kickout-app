@@ -60,6 +60,21 @@ describe('Pitch', () => {
     expect(container.querySelector('circle[stroke-width="0.9"]')).not.toBeNull();
   });
 
+  it('keeps the 40m and D markings anchored to each goal line', () => {
+    const { container } = renderPitch();
+
+    expect(container.querySelector('circle[data-marking="40-left"][cx="0"]')).not.toBeNull();
+    expect(container.querySelector('circle[data-marking="40-right"][cx="145"]')).not.toBeNull();
+    expect(container.querySelector('circle[data-marking="d-left"][cx="20"][r="13"]')).not.toBeNull();
+    expect(container.querySelector('circle[data-marking="d-right"][cx="125"][r="13"]')).not.toBeNull();
+    expect(container.querySelectorAll('circle[data-marking]').length).toBe(4);
+
+    const clipRects = Array.from(container.querySelectorAll('defs rect'));
+    expect(clipRects).toHaveLength(3);
+    expect(clipRects[1].getAttribute('x')).toBe('20');
+    expect(clipRects[2].getAttribute('x')).toBe('0');
+  });
+
   it('moves the highlighted goal band when the pitch is flipped', async () => {
     const { container, rerender } = renderPitch({ flip: false });
 

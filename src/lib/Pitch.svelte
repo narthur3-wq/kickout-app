@@ -1,3 +1,7 @@
+<script context="module" lang="ts">
+  let pitchInstanceCounter = 0;
+</script>
+
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
 
@@ -22,6 +26,10 @@
   const SMALL_W = 14, SMALL_D = 4.5;
   const R_D = 13, R_40 = 40, R_CENTRE = 10;
   const cy = H / 2; // 45 — vertical centre
+
+  const fieldClipId = `pitch-field-clip-${++pitchInstanceCounter}`;
+  const leftDClipId = `pitch-left-d-clip-${pitchInstanceCounter}`;
+  const rightDClipId = `pitch-right-d-clip-${pitchInstanceCounter}`;
 
   let svgEl: SVGSVGElement;
 
@@ -80,24 +88,6 @@
     }
   }
 
-  function arcPath(acx: number, acy: number, r: number, a0: number, a1: number, sweepOverride: number | null = null) {
-    const sx = acx + r * Math.cos(a0), sy = acy + r * Math.sin(a0);
-    const ex = acx + r * Math.cos(a1), ey = acy + r * Math.sin(a1);
-    const large = Math.abs(a1 - a0) > Math.PI ? 1 : 0;
-    const sweep = sweepOverride !== null ? sweepOverride : (a1 > a0 ? 1 : 0);
-    return `M ${sx} ${sy} A ${r} ${r} 0 ${large} ${sweep} ${ex} ${ey}`;
-  }
-
-  // D arcs — centred on the goal line (x=0 and x=W), R=13m, curving into the field
-  // Left arc: sweep=1 (clockwise in SVG = curves right, into field)
-  // Right arc: sweep=0 (counter-clockwise in SVG = curves left, into field)
-  const pathDLeft  = () => arcPath(0, cy, R_D,  -Math.PI / 2, Math.PI / 2);
-  const pathDRight = () => arcPath(W, cy, R_D,  -Math.PI / 2, Math.PI / 2, 0);
-
-  // 40m arcs — same centre, R=40m, curving into the field
-  const path40Left  = () => arcPath(0, cy, R_40, -Math.PI / 2, Math.PI / 2);
-  const path40Right = () => arcPath(W, cy, R_40, -Math.PI / 2, Math.PI / 2, 0);
-
   // stored x = side (0–1) → SVG y;  stored y = depth (0–1) → SVG x
   function svgX(o: { x: number; y: number }) { return (flip ? 1 - o.y : o.y) * W; }
   function svgY(o: { x: number; y: number }) { return o.x * H; }
@@ -144,7 +134,7 @@
 <style>
   svg {
     touch-action: manipulation; user-select: none;
-    display: block; width: 100%; flex: 1; min-height: 0; cursor: crosshair;
+    display: block; width: 100%; height: 100%; flex: 1; min-height: 0; cursor: crosshair;
   }
   :global(.zlabel) { font-size: 3px; fill: rgba(255,255,255,0.55); pointer-events: none; font-weight: 700; }
   .zone-legend {
@@ -158,12 +148,25 @@
 <svg
   bind:this={svgEl}
   viewBox="0 0 145 90"
+  preserveAspectRatio="xMidYMid meet"
   role="application"
   aria-label="GAA pitch — tap or use arrow keys to set a point"
   tabindex="0"
   on:click={handleClick}
   on:keydown={handleKeydown}
 >
+  <defs>
+    <clipPath id={fieldClipId} clipPathUnits="userSpaceOnUse">
+      <rect x="0" y="0" width={W} height={H} />
+    </clipPath>
+    <clipPath id={leftDClipId} clipPathUnits="userSpaceOnUse">
+      <rect x={L20} y="0" width={W - L20} height={H} />
+    </clipPath>
+    <clipPath id={rightDClipId} clipPathUnits="userSpaceOnUse">
+      <rect x="0" y="0" width={W - L20} height={H} />
+    </clipPath>
+  </defs>
+
   <!-- turf base -->
   <rect x="0" y="0" width={W} height={H} fill="#3d7642" />
   <!-- subtle half-pitch stripe — mimics mown stripes -->
@@ -214,13 +217,54 @@
       vector-effect="non-scaling-stroke" />
   {/if}
 
-  <!-- 40m arcs — centred on goal line, R=40m -->
-  <path d={path40Left()}  fill="none" stroke="rgba(255,255,255,0.65)" stroke-width="0.9" vector-effect="non-scaling-stroke" />
-  <path d={path40Right()} fill="none" stroke="rgba(255,255,255,0.65)" stroke-width="0.9" vector-effect="non-scaling-stroke" />
+  <!-- 40m arcs and D arcs — clipped circles avoid SVG arc quirks in WebKit -->
+  <g clip-path={`url(#${fieldClipId})`}>
+    <circle
+      data-marking="40-left"
+      cx="0"
+      cy={cy}
+      r={R_40}
+      fill="none"
+      stroke="rgba(255,255,255,0.65)"
+      stroke-width="1.0"
+      vector-effect="non-scaling-stroke"
+    />
+    <circle
+      data-marking="40-right"
+      cx={W}
+      cy={cy}
+      r={R_40}
+      fill="none"
+      stroke="rgba(255,255,255,0.65)"
+      stroke-width="1.0"
+      vector-effect="non-scaling-stroke"
+    />
+  </g>
 
-  <!-- D arcs — centred on goal line, R=13m -->
-  <path d={pathDLeft()}  fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.0" vector-effect="non-scaling-stroke" />
-  <path d={pathDRight()} fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.0" vector-effect="non-scaling-stroke" />
+  <g clip-path={`url(#${leftDClipId})`}>
+    <circle
+      data-marking="d-left"
+      cx={L20}
+      cy={cy}
+      r={R_D}
+      fill="none"
+      stroke="rgba(255,255,255,0.85)"
+      stroke-width="1.1"
+      vector-effect="non-scaling-stroke"
+    />
+  </g>
+  <g clip-path={`url(#${rightDClipId})`}>
+    <circle
+      data-marking="d-right"
+      cx={W - L20}
+      cy={cy}
+      r={R_D}
+      fill="none"
+      stroke="rgba(255,255,255,0.85)"
+      stroke-width="1.1"
+      vector-effect="non-scaling-stroke"
+    />
+  </g>
 
   <!-- overlays -->
   <g style="pointer-events:none">
