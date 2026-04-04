@@ -34,6 +34,8 @@ describe('AnalyticsPanel legends', () => {
     render(AnalyticsPanel, {
       props: {
         analyticsEventType: 'kickout',
+        teamName: 'Clontarf',
+        opponentName: 'Vincents',
         vizEvents: [
           { id: 'ko-1', event_type: 'kickout', direction: 'ours', outcome: 'Retained', target_player: '8', contest_type: 'clean' },
         ],
@@ -46,8 +48,8 @@ describe('AnalyticsPanel legends', () => {
     expect(screen.getByText('Team')).toBeInTheDocument();
     expect(screen.getAllByText('Ours').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Theirs').length).toBeGreaterThan(0);
-    expect(screen.getByText('Successful')).toBeInTheDocument();
-    expect(screen.getByText('Lost')).toBeInTheDocument();
+    expect(screen.getByText('Clontarf')).toBeInTheDocument();
+    expect(screen.getByText('Vincents')).toBeInTheDocument();
     expect(screen.getByText('Dead-ball / foul')).toBeInTheDocument();
     expect(screen.getByText('Targeted player')).toBeInTheDocument();
     expect(screen.getByText('Highlighted end = our goal')).toBeInTheDocument();
@@ -58,6 +60,8 @@ describe('AnalyticsPanel legends', () => {
     render(AnalyticsPanel, {
       props: {
         analyticsEventType: 'kickout',
+        teamName: 'Clontarf',
+        opponentName: 'Vincents',
         vizEvents: [
           { id: 'ko-1', event_type: 'kickout', direction: 'ours', outcome: 'Retained' },
           { id: 'ko-2', event_type: 'kickout', direction: 'theirs', outcome: 'Lost' },
@@ -131,6 +135,8 @@ describe('AnalyticsPanel legends', () => {
     render(AnalyticsPanel, {
       props: {
         analyticsEventType: 'kickout',
+        teamName: 'Clontarf',
+        opponentName: 'Vincents',
         vizEvents: [
           { id: 'k1', event_type: 'kickout', direction: 'ours', outcome: 'Retained', contest_type: 'break', target_player: '8' },
         ],
@@ -145,8 +151,8 @@ describe('AnalyticsPanel legends', () => {
 
     await user.click(screen.getByRole('button', { name: 'Heat' }));
     expect(screen.getByRole('button', { name: 'Density' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Successful' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Lost' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Clontarf' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Vincents' })).toBeInTheDocument();
   });
 
   it('uses won and lost labels for turnover heat maps', async () => {

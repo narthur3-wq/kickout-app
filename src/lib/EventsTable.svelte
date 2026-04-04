@@ -1,5 +1,6 @@
 <script>
   import { createEventDispatcher } from 'svelte';
+  import { kickoutOutcomeDisplayLabelOf } from './kickoutOutcome.js';
 
   export let events = [];
   export let editingId = null;
@@ -33,6 +34,13 @@
     return (event.direction || 'ours') === 'ours'
       ? (event.opponent || 'Theirs')
       : (event.team || 'Ours');
+  }
+
+  function outcomeLabel(event) {
+    if ((event.event_type || 'kickout') !== 'kickout') {
+      return event.outcome || '-';
+    }
+    return kickoutOutcomeDisplayLabelOf(event) || event.outcome || '-';
   }
 
   function turnoverPlayersLabel(event) {
@@ -79,6 +87,7 @@
           event.turnover_won_player,
           event.turnover_won_player ? `won #${event.turnover_won_player}` : '',
           turnoverPlayersLabel(event),
+          outcomeLabel(event),
           event.zone_code,
           event.restart_reason,
           event.event_type,
@@ -103,7 +112,7 @@
     if (sortKey === 'date_asc') out = [...out].sort((a, b) => dateOf(a) - dateOf(b));
     if (sortKey === 'date_desc') out = [...out].sort((a, b) => dateOf(b) - dateOf(a));
     if (sortKey === 'seq_asc') out = [...out].sort((a, b) => (a.ko_sequence ?? 999) - (b.ko_sequence ?? 999));
-    if (sortKey === 'outcome') out = [...out].sort((a, b) => (a.outcome ?? '').localeCompare(b.outcome ?? ''));
+    if (sortKey === 'outcome') out = [...out].sort((a, b) => outcomeLabel(a).localeCompare(outcomeLabel(b)));
 
     return out;
   })();
@@ -219,7 +228,7 @@
             <td class="mono">{event.clock || '-'}</td>
             <td class="center cap">{event.event_type || 'kickout'}</td>
             <td class="center">{event.direction || 'ours'}</td>
-            <td><span class="outcome-badge" data-outcome={event.outcome?.toLowerCase()}>{event.outcome}</span></td>
+            <td><span class="outcome-badge" data-outcome={outcomeLabel(event)?.toLowerCase()}>{outcomeLabel(event)}</span></td>
             <td class="center">{event.contest_type || '-'}</td>
             <td class="center mono">{event.zone_code || '-'}</td>
             <td class="num">{event.depth_from_own_goal_m?.toFixed?.(0) ?? '-'}</td>

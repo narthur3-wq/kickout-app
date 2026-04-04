@@ -57,7 +57,7 @@ test('JSON export can round-trip back into the app', async ({ page }) => {
 
   await expect(page.getByText(/Imported 1 new event\(s\)/i)).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Na Fianna' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Retained' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Clontarf' })).toBeVisible();
 });
 
 test('JSON import reuses an existing logical match when the imported id differs', async ({ page }) => {

@@ -65,6 +65,7 @@
   } from './lib/matchStore.js';
   import { buildScoreSnapshots } from './lib/score.js';
   import { buildKickoutClockTrend } from './lib/analyticsHelpers.js';
+  import { kickoutOutcomeSideOf, normalizeKickoutOutcomeFilterValue } from './lib/kickoutOutcome.js';
   import {
     advanceSyncCursor,
     loadSyncCursor,
@@ -78,7 +79,7 @@
   const WIDTH_M = 90, LENGTH_M = 145;
   const PERIODS = ['H1', 'H2', 'ET'];
   const DEFAULT_PERIOD_CLOCKS = Object.freeze({ H1: '', H2: '', ET: '' });
-  const OUTCOMES = ['Retained', 'Lost'];
+  const OUTCOMES = ['selected', 'opposing'];
   const CONTESTS = ['clean','break','foul','out'];
   const BREAK_OUTS = ['won','lost','neutral'];
 
@@ -1484,7 +1485,7 @@
     if (eventType === 'kickout' && contest === 'break') {
       if (Number.isNaN(pickup.x) || Number.isNaN(pickup.y))
         return 'For a break, tap the pickup point too.';
-      if (!breakOutcome) return 'Choose break outcome (won / lost / neutral).';
+      if (!breakOutcome) return 'Choose who won the break.';
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(matchDate))
       return 'Match date must be YYYY-MM-DD.';
@@ -2054,6 +2055,7 @@
   $: opposingTeamLabel = direction === 'ours' ? (opponent || 'Theirs') : (team || 'Ours');
   $: turnoverWonTeamLabel = outcome === 'Won' ? selectedTeamLabel : opposingTeamLabel;
   $: turnoverLostTeamLabel = outcome === 'Lost' ? selectedTeamLabel : opposingTeamLabel;
+  $: normalizedKickoutOutcomeFilters = new Set([...fOutcome].map(normalizeKickoutOutcomeFilterValue));
 
   // ── Filtered events for viz & KPIs ───────────────────────────────────────
   $: vizEvents = events.filter(e => {
@@ -2062,7 +2064,7 @@
     const passOpp    = oppFilter === 'ALL' || norm(e.opponent) === oppFilter;
     const passPly    = plyFilter === 'ALL' || norm(e.target_player) === plyFilter;
     const passYTD    = !ytdOnly || eventYear(e) === String(currentYear);
-    const passCO     = !useFilters || evType !== 'kickout' || (fContest.has(e.contest_type) && fOutcome.has(e.outcome));
+    const passCO     = !useFilters || evType !== 'kickout' || (fContest.has(e.contest_type) && normalizedKickoutOutcomeFilters.has(kickoutOutcomeSideOf(e)));
     const passMatch  = matchFilter === 'ALL' || matchKey(e) === matchFilter;
     const passPeriod = periodFilter === 'ALL' || e.period === periodFilter;
     const passFlag   = !flaggedOnly || !!e.flag;
@@ -2079,6 +2081,7 @@
           x: e.x,
           y: e.y,
           outcome: e.outcome,
+          kickoutOutcomeSide: e.event_type === 'kickout' ? kickoutOutcomeSideOf(e) : null,
           contest_type: e.contest_type,
           at_target: !!e.target_player,
           marker_shape: analyticsMarkerShape(e),
@@ -2093,6 +2096,7 @@
               x: e.pickup_x,
               y: e.pickup_y,
               outcome: e.outcome,
+              kickoutOutcomeSide: e.event_type === 'kickout' ? kickoutOutcomeSideOf(e) : null,
               contest_type: e.contest_type,
               at_target: !!e.target_player,
               marker_shape: analyticsMarkerShape(e),
@@ -2292,7 +2296,7 @@
     !flaggedOnly &&
     !ytdOnly &&
     directionFilter === 'ALL' &&
-    (!useFilters || (fContest.size === CONTESTS.length && fOutcome.size === OUTCOMES.length));
+    (!useFilters || (fContest.size === CONTESTS.length && normalizedKickoutOutcomeFilters.size === OUTCOMES.length));
 </script>
 
 <svelte:window on:beforeunload={handleBeforeUnload} />
@@ -2669,6 +2673,8 @@
         {CONTESTS}
         {OUTCOMES}
         {retTrend}
+        teamName={team}
+        opponentName={opponent}
         bind:matchFilter
         bind:oppFilter
         bind:plyFilter

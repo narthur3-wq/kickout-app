@@ -66,8 +66,17 @@ describe('CaptureForm', () => {
 
     expect(screen.getByText('Team')).toBeInTheDocument();
     expect(screen.getByText(/Choose the team for this event/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Clontarf' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Vincents' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Clontarf' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Vincents' })).toHaveLength(2);
+  });
+
+  it('shows team names instead of retained/lost for kickout outcomes', () => {
+    renderForm();
+
+    expect(screen.getAllByRole('button', { name: 'Clontarf' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Vincents' })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Retained' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Lost' })).not.toBeInTheDocument();
   });
 
   it('updates the custom jersey label as the analyst types', async () => {

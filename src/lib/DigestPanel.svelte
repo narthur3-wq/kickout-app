@@ -128,12 +128,12 @@
       </div>
       <div class="restart-strip">
         <div class="restart-pill">
-          <span>Our kickouts</span>
+          <span>{teamName || 'Our team'} kickouts</span>
           <strong>{ourKickouts.pct ?? '-'}%</strong>
           <small>{ourKickouts.won}/{ourKickouts.total}{#if insights.kickoutPattern.primaryWinner} · {insights.kickoutPattern.primaryWinner.label}{/if}</small>
         </div>
         <div class="restart-pill">
-          <span>Their kickouts</span>
+          <span>{opponentName || 'Their team'} kickouts</span>
           <strong>{theirKickouts.pct ?? '-'}%</strong>
           <small>{theirKickouts.won}/{theirKickouts.total}</small>
         </div>

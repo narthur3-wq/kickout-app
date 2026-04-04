@@ -89,6 +89,17 @@ describe('EventsTable', () => {
     expect(screen.getByText(/These filters only change the Events table/i)).toBeInTheDocument();
   });
 
+  it('shows the kickout winner team name instead of retained/lost in the outcome column', () => {
+    render(EventsTable, {
+      props: {
+        events: [makeEvent({ id: 'event-1', opponent: 'Vincents', outcome: 'Retained' })],
+      },
+    });
+
+    expect(screen.getAllByRole('cell', { name: 'Clontarf' })).toHaveLength(1);
+    expect(screen.queryByRole('cell', { name: 'Retained' })).not.toBeInTheDocument();
+  });
+
   it('searches turnover loser and winner details in the players column', async () => {
     const user = userEvent.setup();
     render(EventsTable, {

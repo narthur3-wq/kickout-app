@@ -1,9 +1,15 @@
 <script>
   import Pitch from './Pitch.svelte';
-  import Heatmap from './Heatmap.svelte';
-  import { createEventDispatcher } from 'svelte';
-  import { SvelteSet } from 'svelte/reactivity';
-  import { buildShotSummary, buildTurnoverSummary } from './analyticsHelpers.js';
+import Heatmap from './Heatmap.svelte';
+import { createEventDispatcher } from 'svelte';
+import { SvelteSet } from 'svelte/reactivity';
+import { buildShotSummary, buildTurnoverSummary } from './analyticsHelpers.js';
+import {
+  kickoutOutcomeDisplayLabelOf,
+  kickoutOutcomeFilterLabels,
+  kickoutOutcomeSideOf,
+  normalizeKickoutOutcomeFilterValue,
+} from './kickoutOutcome.js';
 
   // ── Read-only data props ─────────────────────────────────────────────────
   export let vizEvents    = [];
@@ -20,6 +26,8 @@
   export let currentYear  = new Date().getFullYear();
   export let CONTESTS     = [];
   export let OUTCOMES     = [];
+  export let teamName     = 'Us';
+  export let opponentName = 'Them';
   export let retTrend     = () => null;
   export let clockTrend   = [];
   export let restartStats = [];
@@ -62,15 +70,35 @@
     ytdOnly,
     flaggedOnly,
     fContest.size !== CONTESTS.length,
-    fOutcome.size !== OUTCOMES.length,
+    normalizedKickoutOutcomeFilters.size !== OUTCOMES.length,
   ].filter(Boolean).length;
+
+  $: kickoutOutcomeFilters = kickoutOutcomeFilterLabels(teamName, opponentName);
+  $: normalizedKickoutOutcomeFilters = new Set([...fOutcome].map(normalizeKickoutOutcomeFilterValue));
+  $: kickoutOutcomeSideById = new Map(
+    vizEvents
+      .filter((event) => String(event?.event_type || 'kickout').toLowerCase() === 'kickout')
+      .map((event) => [event.id, kickoutOutcomeSideOf(event)]),
+  );
 
   // Local: heatmap split — all density, won only, or lost only
   let heatMode = 'all'; // 'all' | 'won' | 'lost'
-  const HEAT_POS = new Set(['retained','score','won','goal','point']);
+  const HEAT_POS = new Set(['selected','retained','score','won','goal','point']);
 
-  $: wonPoints  = overlays.filter(o => HEAT_POS.has((o.outcome || '').toLowerCase())).map(o => ({ ...o, weight: 1 }));
-  $: lostPoints = overlays.filter(o => !HEAT_POS.has((o.outcome || '').toLowerCase())).map(o => ({ ...o, weight: 1 }));
+  function heatOutcomeSide(overlay) {
+    return kickoutOutcomeSideById.get(overlay?.id) || overlay?.kickoutOutcomeSide || null;
+  }
+
+  $: wonPoints  = overlays.filter((overlay) => (
+    effectiveEventType === 'kickout'
+      ? heatOutcomeSide(overlay) === 'selected'
+      : HEAT_POS.has((overlay.outcome || '').toLowerCase())
+  )).map(o => ({ ...o, weight: 1 }));
+  $: lostPoints = overlays.filter((overlay) => (
+    effectiveEventType === 'kickout'
+      ? heatOutcomeSide(overlay) === 'opposing'
+      : !HEAT_POS.has((overlay.outcome || '').toLowerCase())
+  )).map(o => ({ ...o, weight: 1 }));
   $: heatPoints = heatMode === 'won' ? wonPoints : heatMode === 'lost' ? lostPoints : overlays.map(o => ({ ...o, weight: 1 }));
   $: heatScheme = heatMode === 'won' ? 'positive' : heatMode === 'lost' ? 'negative' : 'density';
 
@@ -83,9 +111,11 @@
     switch ((o||'').toLowerCase()) {
       case 'score':
       case 'retained':
+      case 'selected':
       case 'won':      return '#16a34a';
       case 'goal':     return '#15803d';
       case 'point':    return '#0f766e';
+      case 'opposing':
       case 'lost':     return '#dc2626';
       case 'wide':
       case 'out':
@@ -104,11 +134,12 @@
   $: heatSuccessButtonLabel =
     effectiveEventType === 'shot' ? 'Scored'
     : effectiveEventType === 'turnover' ? 'Won'
-    : 'Successful';
+    : (teamName || 'Ours');
 
   $: heatFailureButtonLabel =
     effectiveEventType === 'shot' ? 'Missed'
-    : 'Lost';
+    : effectiveEventType === 'turnover' ? 'Lost'
+    : (opponentName || 'Theirs');
 
   $: dotsOutcomeLegend = (() => {
     if (effectiveEventType === 'shot') {
@@ -127,8 +158,8 @@
       ];
     }
     return [
-      { label: 'Successful', color: outcomeColor('retained') },
-      { label: 'Lost', color: outcomeColor('lost') },
+      { label: kickoutOutcomeFilters[0].label, color: outcomeColor('selected') },
+      { label: kickoutOutcomeFilters[1].label, color: outcomeColor('opposing') },
       { label: 'Dead-ball / foul', color: outcomeColor('wide') },
     ];
   })();
@@ -153,9 +184,19 @@
   $: outcomeBreakdown = (() => {
     if (vizEvents.length === 0) return [];
     const map = {};
-    for (const e of vizEvents) { const o = e.outcome || 'Unknown'; map[o] = (map[o] || 0) + 1; }
+    for (const e of vizEvents) {
+      const type = String(e?.event_type || 'kickout').toLowerCase();
+      const key = type === 'kickout'
+        ? (kickoutOutcomeSideOf(e) || 'unknown')
+        : (e.outcome || 'Unknown');
+      const label = type === 'kickout'
+        ? (kickoutOutcomeDisplayLabelOf(e, { teamName, opponentName }) || 'Unknown')
+        : (e.outcome || 'Unknown');
+      map[key] = map[key] || { outcome: key, label, count: 0 };
+      map[key].count += 1;
+    }
     return Object.entries(map)
-      .map(([outcome, count]) => ({ outcome, count, pct: Math.round(100 * count / vizEvents.length) }))
+      .map(([, entry]) => ({ ...entry, pct: Math.round(100 * entry.count / vizEvents.length) }))
       .sort((a, b) => b.count - a.count);
   })();
 
@@ -290,8 +331,8 @@
           <div class="filter-pills-row">
             <div class="fpill-group">
               <span class="fpill-label">Outcome</span>
-              {#each OUTCOMES as o (o)}
-                <button class="fpill {fOutcome.has(o) ? 'fpill-on' : ''}" on:click={() => toggleOutcome(o)}>{o}</button>
+              {#each kickoutOutcomeFilters as o (o.value)}
+                <button class="fpill {normalizedKickoutOutcomeFilters.has(o.value) ? 'fpill-on' : ''}" on:click={() => toggleOutcome(o.value)}>{o.label}</button>
               {/each}
             </div>
           </div>
@@ -479,7 +520,7 @@
         <div class="outcome-chips">
           {#each outcomeBreakdown as o (o.outcome)}
             <div class="outcome-chip" style="border-color:{outcomeColor(o.outcome)};color:{outcomeColor(o.outcome)}">
-              {o.outcome}: {o.count} ({o.pct}%)
+              {o.label}: {o.count} ({o.pct}%)
             </div>
           {/each}
         </div>
@@ -495,7 +536,7 @@
             <div
               class="tl-dot {e.flag ? 'tl-flagged' : ''}"
               style="background:{outcomeColor(e.outcome)}"
-              title="#{e.ko_sequence ?? index + 1} · {e.outcome} · {e.contest_type} · {e.period} {e.clock}{e.target_player ? ' → #' + e.target_player : ''}{e.notes ? ' — ' + e.notes : ''}"
+              title="#{e.ko_sequence ?? index + 1} · {e.event_type === 'kickout' ? (kickoutOutcomeDisplayLabelOf(e, { teamName, opponentName }) || e.outcome) : e.outcome} · {e.contest_type} · {e.period} {e.clock}{e.target_player ? ' → #' + e.target_player : ''}{e.notes ? ' — ' + e.notes : ''}"
             >{e.ko_sequence ?? index + 1}</div>
           {/each}
         </div>

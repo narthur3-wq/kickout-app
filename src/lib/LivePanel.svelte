@@ -77,12 +77,12 @@
       </div>
       <div class="ko-snapshot">
         <div class="snapshot-pill">
-          <span class="snapshot-label">Our kickouts</span>
+          <span class="snapshot-label">{teamName || 'Our team'} kickouts</span>
           <span class="snapshot-value">{ourKickoutStat.pct ?? '-'}%</span>
           <span class="snapshot-sub">{ourKickoutStat.won}/{ourKickoutStat.total}</span>
         </div>
         <div class="snapshot-pill">
-          <span class="snapshot-label">Their kickouts</span>
+          <span class="snapshot-label">{opponentName || 'Their team'} kickouts</span>
           <span class="snapshot-value">{theirKickoutStat.pct ?? '-'}%</span>
           <span class="snapshot-sub">{theirKickoutStat.won}/{theirKickoutStat.total}</span>
         </div>
@@ -160,13 +160,13 @@
     </section>
 
     <section class="card two-column">
-      <div class="eyebrow">Their Kickout Pattern</div>
+      <div class="eyebrow">{opponentName || 'Their'} Kickout Pattern</div>
       <p class="headline-copy">{insights.kickoutPattern.line}</p>
       {#if insights.kickoutPattern.primaryWinner}
         <div class="stat-chip">
-          <span class="stat-chip-label">Most successful target</span>
+          <span class="stat-chip-label">Top kickout target</span>
           <span class="stat-chip-value">{insights.kickoutPattern.primaryWinner.label}</span>
-          <span class="stat-chip-sub">{insights.kickoutPattern.primaryWinner.total} of {insights.kickoutPattern.wonTotal} successful kickouts</span>
+          <span class="stat-chip-sub">{insights.kickoutPattern.primaryWinner.total} of {insights.kickoutPattern.wonTotal} kickouts won</span>
         </div>
       {/if}
       {#if insights.kickoutPattern.primaryTarget}
@@ -189,7 +189,7 @@
     </section>
 
     <section class="card two-column">
-      <div class="eyebrow">Our Kickout Performance</div>
+      <div class="eyebrow">{teamName || 'Our'} Kickout Performance</div>
       <p class="headline-copy">{insights.kickoutPerformance.line}</p>
       <div class="lane-grid">
         {#each insights.kickoutPerformance.laneStats as lane (lane.key)}
