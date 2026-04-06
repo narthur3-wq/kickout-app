@@ -17,7 +17,7 @@ Resolved issues from the original Codex drop (fixed in the current working tree)
 - Analysis view hardcodes `flip={false}` regardless of session orientation
 - Eyebrow labels read "Feature 1" / "Feature 2" — must be replaced before real use
 
-Implementation note: the shipped app already includes Phase 2a using the local analysis store and Admin-managed roster state. The Supabase sync schema below is the future hardening path for persistence and multi-device durability, not a prerequisite for the cross-match view itself.
+Implementation note: the shipped app already includes Phase 2a using the local analysis store and Admin-managed roster state. The Supabase analysis schema has now been added to the repo; the remaining hardening path is wiring app sync and multi-device durability on top of it.
 
 ---
 
@@ -311,7 +311,7 @@ UI: squad management in Admin settings (add player by name, rename, mark inactiv
 
 **Phase 2 pre-B — Supabase sync for analysis sessions**
 
-Analysis data is currently localStorage only. It must be synced to Supabase before cross-match aggregation is useful — localStorage is too fragile for data an analyst may spend 30 minutes populating.
+Analysis data is currently localStorage only in the app. The Supabase analysis tables now exist in the repo; the remaining work is syncing the app to them and handling backfill/realtime durability for data an analyst may spend 30 minutes populating.
 
 Supabase schema:
 

@@ -534,6 +534,7 @@ Priority: must for Supabase sync hardening, but the local-first Phase 2a view is
 Status: partial
 
 Lightweight team-scoped roster. Feeds autocomplete in possession and pass panels and provides stable squad-player IDs for cross-match aggregation. The current app persists this roster in the local analysis scope; a Supabase-backed roster is the later hardening path.
+The Supabase roster table now exists in `supabase/schema.sql` and `supabase/migrations/20260406000100_add_analysis_tables.sql`; the remaining work is to wire the app sync path to it.
 
 Supabase table: `squad_players (id, team_id, name, active, created_at, updated_at)` with per-team unique name index.
 
@@ -549,9 +550,10 @@ Identity behavior:
 
 **A-02 — Supabase sync for analysis sessions**
 Priority: must for multi-device durability, but not blocking the shipped local Phase 2a view
-Status: open
+Status: partial
 
 Analysis data is localStorage-backed today. Supabase sync is the later hardening step for multi-device durability and conflict recovery.
+The Supabase analysis tables now exist in `supabase/schema.sql` and `supabase/migrations/20260406000100_add_analysis_tables.sql`; app-level sync/backfill plumbing is still pending.
 
 Four new tables required:
 - `possession_sessions`

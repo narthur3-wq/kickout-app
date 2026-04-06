@@ -141,7 +141,7 @@ Two post-match analysis workflows are built as separate tabs: Possession Analysi
 
 Analysis sessions use a **squad roster ID** as the cross-match identity key, not jersey number. Jersey numbers are not consistent across matches in GAA (position-based assignment). Numbers remain the identifier for in-match event tracking (shots, tackles, turnovers, kickouts) and the two systems are not cross-referenced.
 
-Sessions store a `squad_player_id` when the analyst selects a roster entry. The display name is still stored on the session for readability and legacy compatibility. When `squad_player_id` is missing (legacy or free-text), the UI falls back to a normalised `player_key` and surfaces a reconciliation warning. Roster management lives in Admin settings and is persisted in the local analysis scope today; Supabase is the future sync target.
+Sessions store a `squad_player_id` when the analyst selects a roster entry. The display name is still stored on the session for readability and legacy compatibility. When `squad_player_id` is missing (legacy or free-text), the UI falls back to a normalised `player_key` and surfaces a reconciliation warning. Roster management lives in Admin settings and is persisted in the local analysis scope today; the Supabase roster table now exists and the remaining work is app sync/backfill wiring.
 
 ### Coordinate model
 
@@ -164,9 +164,9 @@ Sessions carry `match_id`, `player_name`, and optional `squad_player_id`. Events
 
 Scope migration (`migrateLocalScopeToUserScope`) merges analysis state by session ID, same as events.
 
-### Supabase schema (future sync target)
+### Supabase schema (landed; sync plumbing pending)
 
-Analysis data is local-first today. When Supabase sync is added, the following tables are required:
+Analysis data is local-first today. The Supabase tables below now exist in `supabase/schema.sql` and the matching migration files; the remaining work is app sync/backfill plumbing:
 
 ```sql
 create table public.squad_players (
