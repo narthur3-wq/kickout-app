@@ -8,6 +8,8 @@
   import DigestPanel from './lib/DigestPanel.svelte';
   import LivePanel from './lib/LivePanel.svelte';
   import CaptureForm from './lib/CaptureForm.svelte';
+  import PossessionAnalysisPanel from './lib/PossessionAnalysisPanel.svelte';
+  import PassImpactPanel from './lib/PassImpactPanel.svelte';
   import AdminPanel from './lib/AdminPanel.svelte';
   import {
     analyticsMarkerFill,
@@ -28,12 +30,13 @@
     mergeImportedMatches,
     planImportMerge,
   } from './lib/importMerge.js';
-  import {
-    appendDiagnostic,
-    clearDiagnostics,
-    formatDiagnostics,
-    loadDiagnostics,
-  } from './lib/diagnostics.js';
+import {
+  appendDiagnostic,
+  clearDiagnostics,
+  formatDiagnostics,
+  loadDiagnostics,
+} from './lib/diagnostics.js';
+import { loadAnalysisState } from './lib/postMatchAnalysisStore.js';
   import {
     LOCAL_STORAGE_SCOPE,
     STORAGE_KEYS,
@@ -141,6 +144,7 @@
   let accountOpen = false;
   let isAdminUser = false;
   let storageScope = supabaseConfigured ? null : LOCAL_STORAGE_SCOPE;
+  let squadPlayers = [];
   let editReturnContext = null;
   let pitchResetToken = 0;
 
@@ -526,15 +530,31 @@
     }
   }
 
+  function loadAnalysisRoster(scope = storageScope) {
+    if (!scope) {
+      squadPlayers = [];
+      return;
+    }
+    try {
+      const analysis = loadAnalysisState(scope, { storage: localStorage });
+      squadPlayers = Array.isArray(analysis?.squadPlayers) ? analysis.squadPlayers : [];
+    } catch {
+      squadPlayers = [];
+    }
+  }
+
   function activateStorageScope(scope) {
     metaReady = false;
     storageScope = scope;
     resetRuntimeState();
     if (scope) {
       loadFromLocalStorage(scope);
+      loadAnalysisRoster(scope);
       loadPendingSync(scope);
       loadPendingMatchSync(scope);
       loadMatchesFromStorage(scope);
+    } else {
+      squadPlayers = [];
     }
     forceFullSync = true;
     syncSetupDraftFromMatch();
@@ -2410,6 +2430,12 @@
     <button type="button" class="tab-btn {activeTab === 'digest' ? 'active' : ''}" on:click={() => switchTab('digest')}>
       Digest
     </button>
+    <button type="button" class="tab-btn {activeTab === 'analysis-possession' ? 'active' : ''}" on:click={() => switchTab('analysis-possession')}>
+      Possession
+    </button>
+    <button type="button" class="tab-btn {activeTab === 'analysis-pass' ? 'active' : ''}" on:click={() => switchTab('analysis-pass')}>
+      Pass Impact
+    </button>
     <button type="button" class="tab-btn {activeTab === 'kickouts' ? 'active' : ''}" on:click={() => switchTab('kickouts')}>
       Kickouts
     </button>
@@ -2654,6 +2680,42 @@
   </div>
 
   <!-- ══ ANALYTICS TABS (Kickouts / Shots / Turnovers) ══ -->
+  {:else if activeTab === 'analysis-possession'}
+  <div class="full-panel">
+    <PossessionAnalysisPanel
+      {storageScope}
+      {activeMatchId}
+      {activeMatch}
+      {matches}
+      {squadPlayers}
+      teamName={activeMatch?.team || team || ''}
+      opponentName={activeMatch?.opponent || opponent || ''}
+      matchLabel={activeMatch
+        ? `${activeMatch.team || team || 'Team'} v ${activeMatch.opponent || opponent || 'Opposition'}${activeMatch.match_date ? ` (${activeMatch.match_date})` : ''}`
+        : ''}
+      playerOptions={playerChoices}
+      defaultOurGoalAtTop={ourGoalAtTop}
+      on:selectMatch={(e) => switchActiveMatch(e.detail)}
+    />
+  </div>
+
+  {:else if activeTab === 'analysis-pass'}
+  <div class="full-panel">
+    <PassImpactPanel
+      {storageScope}
+      {activeMatchId}
+      {activeMatch}
+      {squadPlayers}
+      teamName={activeMatch?.team || team || ''}
+      opponentName={activeMatch?.opponent || opponent || ''}
+      matchLabel={activeMatch
+        ? `${activeMatch.team || team || 'Team'} v ${activeMatch.opponent || opponent || 'Opposition'}${activeMatch.match_date ? ` (${activeMatch.match_date})` : ''}`
+        : ''}
+      playerOptions={playerChoices}
+      defaultOurGoalAtTop={ourGoalAtTop}
+    />
+  </div>
+
   {:else if activeTab === 'kickouts' || activeTab === 'shots' || activeTab === 'turnovers'}
   <div class="full-panel">
     {#key activeTab}
@@ -2719,7 +2781,13 @@
   </div>
   {:else}
   <div class="full-panel">
-    <AdminPanel {user} {teamName} on:diagnostic={() => diagnostics = loadDiagnostics()} />
+    <AdminPanel
+      {user}
+      {teamName}
+      {storageScope}
+      on:diagnostic={() => diagnostics = loadDiagnostics()}
+      on:rosterchange={() => loadAnalysisRoster(storageScope)}
+    />
   </div>
   {/if}
   {/if}

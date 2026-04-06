@@ -133,6 +133,107 @@ Break kickouts also store:
 
 Turnovers currently store a single location plus named loser/winner players.
 
+## Post-match analysis
+
+Two post-match analysis workflows are built as separate tabs: Possession Analysis (Feature 1) and Pass Impact (Feature 2). Full product spec: [post-match-player-analysis.md](post-match-player-analysis.md).
+
+### Player identity
+
+Analysis sessions use a **squad roster ID** as the cross-match identity key, not jersey number. Jersey numbers are not consistent across matches in GAA (position-based assignment). Numbers remain the identifier for in-match event tracking (shots, tackles, turnovers, kickouts) and the two systems are not cross-referenced.
+
+Sessions store a `squad_player_id` when the analyst selects a roster entry. The display name is still stored on the session for readability and legacy compatibility. When `squad_player_id` is missing (legacy or free-text), the UI falls back to a normalised `player_key` and surfaces a reconciliation warning. Roster management lives in Admin settings and is persisted in the local analysis scope today; Supabase is the future sync target.
+
+### Coordinate model
+
+Each event stores normalised pitch coordinates (0–1 range) plus an `our_goal_at_top` flag on the session. Direction classification (forward / lateral / backward) must normalise the y-axis against this flag before computing the depth delta. Raw coordinates without normalisation will produce inverted direction labels when the attacking direction is toward lower y values.
+
+### Local storage
+
+Analysis state is stored under the key `ko_post_match_analysis` within the scoped storage pattern. The shape is:
+
+```json
+{
+  "version": 1,
+  "squadPlayers": [...],
+  "possessionSessions": [...],
+  "passSessions": [...]
+}
+```
+
+Sessions carry `match_id`, `player_name`, and optional `squad_player_id`. Events carry coordinates, outcome or pass metadata, and a timestamp.
+
+Scope migration (`migrateLocalScopeToUserScope`) merges analysis state by session ID, same as events.
+
+### Supabase schema (future sync target)
+
+Analysis data is local-first today. When Supabase sync is added, the following tables are required:
+
+```sql
+create table public.squad_players (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid references public.teams(id),
+  name text not null,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists squad_players_team_name_unique
+  on public.squad_players (team_id, lower(name));
+
+create table public.possession_sessions (
+  id uuid primary key,
+  team_id uuid references public.teams(id),
+  match_id text references public.matches(id),
+  squad_player_id uuid references public.squad_players(id),
+  player_name text not null,
+  our_goal_at_top boolean not null default true,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.possession_events (
+  id uuid primary key,
+  session_id uuid references public.possession_sessions(id) on delete cascade,
+  receive_x numeric not null,
+  receive_y numeric not null,
+  release_x numeric not null,
+  release_y numeric not null,
+  outcome text not null,
+  under_pressure boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create table public.pass_sessions (
+  id uuid primary key,
+  team_id uuid references public.teams(id),
+  match_id text references public.matches(id),
+  squad_player_id uuid references public.squad_players(id),
+  player_name text not null,
+  our_goal_at_top boolean not null default true,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.pass_events (
+  id uuid primary key,
+  session_id uuid references public.pass_sessions(id) on delete cascade,
+  from_x numeric not null,
+  from_y numeric not null,
+  to_x numeric not null,
+  to_y numeric not null,
+  pass_type text not null,
+  completed boolean not null default true,
+  created_at timestamptz not null default now()
+);
+```
+
+RLS must be team-scoped on all five tables. Sync ordering: sessions before events (same FK guarantee as matches before events).
+
+---
+
 ## Sync and persistence
 
 The app is local-first.
@@ -142,6 +243,7 @@ Local persistence:
 - match metadata
 - event records
 - pending sync queue
+- post-match analysis sessions and roster state (localStorage-backed today)
 
 Cloud sync:
 

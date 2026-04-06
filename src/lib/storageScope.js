@@ -6,6 +6,7 @@ export const STORAGE_KEYS = {
   sync: 'ko_sync_queue',
   matchSync: 'ko_match_sync_queue',
   syncCursor: 'ko_sync_cursor',
+  analysis: 'ko_post_match_analysis',
 };
 
 /**
@@ -48,6 +49,45 @@ function hasMeaningfulMeta(meta = {}) {
   );
 }
 
+/**
+ * @param {any} snapshot
+ */
+export function normalizeAnalysisSnapshot(snapshot = {}) {
+  const analysis = snapshot && typeof snapshot === 'object' ? snapshot : {};
+  return {
+    version: typeof analysis.version === 'number' ? analysis.version : 1,
+    possessionSessions: Array.isArray(analysis.possessionSessions) ? analysis.possessionSessions : [],
+    passSessions: Array.isArray(analysis.passSessions) ? analysis.passSessions : [],
+    squadPlayers: Array.isArray(analysis.squadPlayers) ? analysis.squadPlayers : [],
+  };
+}
+
+function hasMeaningfulAnalysis(analysis = {}) {
+  const normalized = normalizeAnalysisSnapshot(analysis);
+  return normalized.possessionSessions.length > 0
+    || normalized.passSessions.length > 0
+    || normalized.squadPlayers.length > 0;
+}
+
+function mergeAnalysisSnapshots(targetAnalysis = {}, localAnalysis = {}) {
+  const target = normalizeAnalysisSnapshot(targetAnalysis);
+  const source = normalizeAnalysisSnapshot(localAnalysis);
+  const mergeSessions = (targetSessions, sourceSessions) => {
+    const merged = new Map(targetSessions.map((session) => [session.id, session]));
+    for (const session of sourceSessions) {
+      merged.set(session.id, session);
+    }
+    return [...merged.values()];
+  };
+
+  return {
+    version: Math.max(target.version, source.version),
+    possessionSessions: mergeSessions(target.possessionSessions, source.possessionSessions),
+    passSessions: mergeSessions(target.passSessions, source.passSessions),
+    squadPlayers: mergeSessions(target.squadPlayers, source.squadPlayers),
+  };
+}
+
 export function serializeMatchMeta({ team, opponent, matchDate, period, ourGoalAtTop }) {
   return {
     team,
@@ -86,6 +126,12 @@ export function readScopeSnapshot(scope, options = {}) {
     meta: readStoredJson(STORAGE_KEYS.meta, {}, scope, { storage }),
     pendingSync: parsePendingSyncEntries(readStoredJson(STORAGE_KEYS.sync, [], scope, { storage })),
     pendingMatchSync: parsePendingSyncEntries(readStoredJson(STORAGE_KEYS.matchSync, [], scope, { storage })),
+    analysis: readStoredJson(
+      STORAGE_KEYS.analysis,
+      { version: 1, possessionSessions: [], passSessions: [], squadPlayers: [] },
+      scope,
+      { storage },
+    ),
   };
 }
 
@@ -130,12 +176,14 @@ export function migrateLocalScopeToUserScope(targetScope, options = {}) {
   const mergedMeta = hasMeaningfulMeta(localSnapshot.meta)
     ? { ...targetSnapshot.meta, ...localSnapshot.meta }
     : targetSnapshot.meta;
+  const mergedAnalysis = mergeAnalysisSnapshots(targetSnapshot.analysis, localSnapshot.analysis);
 
   const eventsKey = storageKey(STORAGE_KEYS.events, targetScope);
   const metaKey = storageKey(STORAGE_KEYS.meta, targetScope);
   const syncKey = storageKey(STORAGE_KEYS.sync, targetScope);
   const matchSyncKey = storageKey(STORAGE_KEYS.matchSync, targetScope);
-  if (!eventsKey || !metaKey || !syncKey || !matchSyncKey) {
+  const analysisKey = storageKey(STORAGE_KEYS.analysis, targetScope);
+  if (!eventsKey || !metaKey || !syncKey || !matchSyncKey || !analysisKey) {
     return { migrated: false, eventCount: 0, reason: 'invalid-target' };
   }
 
@@ -143,6 +191,9 @@ export function migrateLocalScopeToUserScope(targetScope, options = {}) {
   storage.setItem(metaKey, JSON.stringify(mergedMeta));
   storage.setItem(syncKey, JSON.stringify([...mergedPendingById].map(([id, op]) => ({ id, op }))));
   storage.setItem(matchSyncKey, JSON.stringify([...mergedPendingMatchesById].map(([id, op]) => ({ id, op }))));
+  if (hasMeaningfulAnalysis(mergedAnalysis)) {
+    storage.setItem(analysisKey, JSON.stringify(mergedAnalysis));
+  }
 
   for (const baseKey of Object.values(STORAGE_KEYS)) {
     const localKey = storageKey(baseKey, LOCAL_STORAGE_SCOPE);

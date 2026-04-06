@@ -117,4 +117,26 @@ describe('AdminPanel', () => {
       }),
     }));
   });
+
+  it('adds roster players and toggles their active state', async () => {
+    const user = userEvent.setup();
+
+    render(AdminPanel, {
+      props: {
+        user: { email: 'admin@example.com' },
+        teamName: 'Clontarf',
+        storageScope: 'test',
+      },
+    });
+
+    await user.type(screen.getByPlaceholderText('Add player name'), 'Cian Murphy');
+    await user.click(screen.getByRole('button', { name: /Add player/i }));
+
+    expect(screen.getByDisplayValue('Cian Murphy')).toBeInTheDocument();
+    expect(screen.getByText(/Player added to the roster\./i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('checkbox'));
+
+    expect(screen.getByText('Inactive', { selector: '.roster-toggle span' })).toBeInTheDocument();
+  });
 });

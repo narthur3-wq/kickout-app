@@ -218,6 +218,17 @@ describe('App shell auth and sync', () => {
     expect(mockState.upsertMock).toHaveBeenCalled();
   });
 
+  it('shows the post-match analysis tabs in the authenticated shell', async () => {
+    const session = { user: { id: 'user-1', email: 'analyst@example.com' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    await renderApp();
+
+    expect(await screen.findByRole('button', { name: 'Possession' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pass Impact' })).toBeInTheDocument();
+  });
+
   it('shows a paused sync warning and blocks saving when the user has no team assignment', async () => {
     const session = { user: { id: 'user-2', email: 'analyst@example.com' } };
     mockState.sessionState.session = session;
