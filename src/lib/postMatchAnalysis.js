@@ -200,6 +200,49 @@ export function sessionLabel(session, index, singularLabel = 'event', pluralLabe
   return parts.join(' - ');
 }
 
+export function splitMatchIdsForTrend(matchIds = [], {
+  dateLookup = null,
+  mode = 'halves',
+  lastN = 3,
+} = {}) {
+  const ids = Array.isArray(matchIds) ? matchIds.filter(Boolean) : [];
+  const entries = ids.map((id, index) => {
+    const date = dateLookup instanceof Map
+      ? dateLookup.get(id)
+      : (dateLookup && typeof dateLookup === 'object' ? dateLookup[id] : null);
+    return {
+      id,
+      date: date ? String(date) : '',
+      index,
+    };
+  });
+
+  entries.sort((a, b) => {
+    if (a.date && b.date) return a.date.localeCompare(b.date);
+    if (a.date && !b.date) return -1;
+    if (!a.date && b.date) return 1;
+    return a.index - b.index;
+  });
+
+  const ordered = entries.map((entry) => entry.id);
+  if (mode === 'lastN') {
+    const n = Math.max(1, Math.floor(Number(lastN) || 3));
+    const cut = Math.max(0, ordered.length - n);
+    return {
+      ordered,
+      earlier: ordered.slice(0, cut),
+      recent: ordered.slice(cut),
+    };
+  }
+
+  const mid = Math.ceil(ordered.length / 2);
+  return {
+    ordered,
+    earlier: ordered.slice(0, mid),
+    recent: ordered.slice(mid),
+  };
+}
+
 export function collectPlayerOptions(records = [], fieldNames = ['player_name']) {
   const optionsByKey = new Map();
   for (const record of records) {

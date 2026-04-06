@@ -141,7 +141,7 @@ Two post-match analysis workflows are built as separate tabs: Possession Analysi
 
 Analysis sessions use a **squad roster ID** as the cross-match identity key, not jersey number. Jersey numbers are not consistent across matches in GAA (position-based assignment). Numbers remain the identifier for in-match event tracking (shots, tackles, turnovers, kickouts) and the two systems are not cross-referenced.
 
-Sessions store a `squad_player_id` when the analyst selects a roster entry. The display name is still stored on the session for readability and legacy compatibility. When `squad_player_id` is missing (legacy or free-text), the UI falls back to a normalised `player_key` and surfaces a reconciliation warning. Roster management lives in Admin settings and is persisted in the local analysis scope today; the Supabase roster table now exists and the remaining work is app sync/backfill wiring.
+Sessions store a `squad_player_id` when the analyst selects a roster entry. The display name is still stored on the session for readability and legacy compatibility. When `squad_player_id` is missing (legacy or free-text), the UI falls back to a normalised `player_key` and surfaces a reconciliation warning. Roster management lives in Admin settings, is persisted in the local analysis scope, and syncs to the Supabase roster table for cross-match identity and reconciliation.
 
 ### Coordinate model
 
@@ -164,9 +164,9 @@ Sessions carry `match_id`, `player_name`, and optional `squad_player_id`. Events
 
 Scope migration (`migrateLocalScopeToUserScope`) merges analysis state by session ID, same as events.
 
-### Supabase schema (landed; sync plumbing pending)
+### Supabase schema and sync (landed)
 
-Analysis data is local-first today. The Supabase tables below now exist in `supabase/schema.sql` and the matching migration files; the remaining work is app sync/backfill plumbing:
+Analysis data is local-first in the UI, and the app now syncs analysis sessions and roster state to the Supabase tables below using the same retry-queue pattern as match events. The schema lives in `supabase/schema.sql` and the matching migration files:
 
 ```sql
 create table public.squad_players (
@@ -243,7 +243,7 @@ Local persistence:
 - match metadata
 - event records
 - pending sync queue
-- post-match analysis sessions and roster state (localStorage-backed today)
+- post-match analysis sessions and roster state (localStorage-backed with Supabase sync and retry queues)
 
 Cloud sync:
 

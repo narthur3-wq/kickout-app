@@ -5,6 +5,7 @@ export const STORAGE_KEYS = {
   meta: 'ko_meta',
   sync: 'ko_sync_queue',
   matchSync: 'ko_match_sync_queue',
+  analysisSync: 'ko_post_match_analysis_sync',
   syncCursor: 'ko_sync_cursor',
   analysis: 'ko_post_match_analysis',
 };
@@ -119,6 +120,23 @@ export function parsePendingSyncEntries(rawValue) {
     .map((item) => /** @type {PendingSyncEntry} */ ([item.id, item.op === 'delete' ? 'delete' : 'upsert']));
 }
 
+/**
+ * Analysis deletion tombstones are stored as `{ mode, id }` records.
+ * `mode` is either `possession` or `pass`.
+ */
+export function parseAnalysisSyncEntries(rawValue) {
+  if (!Array.isArray(rawValue)) return [];
+  return rawValue
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const id = typeof item.id === 'string' ? item.id.trim() : '';
+      const mode = item.mode === 'pass' ? 'pass' : item.mode === 'possession' ? 'possession' : '';
+      if (!id || !mode) return null;
+      return { mode, id };
+    })
+    .filter(Boolean);
+}
+
 export function readScopeSnapshot(scope, options = {}) {
   const { storage = globalThis.localStorage } = options;
   return {
@@ -126,6 +144,7 @@ export function readScopeSnapshot(scope, options = {}) {
     meta: readStoredJson(STORAGE_KEYS.meta, {}, scope, { storage }),
     pendingSync: parsePendingSyncEntries(readStoredJson(STORAGE_KEYS.sync, [], scope, { storage })),
     pendingMatchSync: parsePendingSyncEntries(readStoredJson(STORAGE_KEYS.matchSync, [], scope, { storage })),
+    analysisSync: parseAnalysisSyncEntries(readStoredJson(STORAGE_KEYS.analysisSync, [], scope, { storage })),
     analysis: readStoredJson(
       STORAGE_KEYS.analysis,
       { version: 1, possessionSessions: [], passSessions: [], squadPlayers: [] },
@@ -146,7 +165,8 @@ export function migrateLocalScopeToUserScope(targetScope, options = {}) {
     localSnapshot.events.length > 0 ||
     localSnapshot.pendingSync.length > 0 ||
     localSnapshot.pendingMatchSync.length > 0 ||
-    hasMeaningfulMeta(localSnapshot.meta);
+    hasMeaningfulMeta(localSnapshot.meta) ||
+    hasMeaningfulAnalysis(localSnapshot.analysis);
 
   if (!localHasData) {
     return { migrated: false, eventCount: 0, reason: 'no-local-data' };
@@ -173,6 +193,15 @@ export function migrateLocalScopeToUserScope(targetScope, options = {}) {
     mergedPendingMatchesById.set(id, op);
   }
 
+  const mergedAnalysisSyncByKey = new Map(
+    Array.isArray(targetSnapshot.analysisSync)
+      ? targetSnapshot.analysisSync.map((entry) => [`${entry.mode}:${entry.id}`, entry])
+      : []
+  );
+  for (const entry of localSnapshot.analysisSync) {
+    mergedAnalysisSyncByKey.set(`${entry.mode}:${entry.id}`, entry);
+  }
+
   const mergedMeta = hasMeaningfulMeta(localSnapshot.meta)
     ? { ...targetSnapshot.meta, ...localSnapshot.meta }
     : targetSnapshot.meta;
@@ -182,8 +211,9 @@ export function migrateLocalScopeToUserScope(targetScope, options = {}) {
   const metaKey = storageKey(STORAGE_KEYS.meta, targetScope);
   const syncKey = storageKey(STORAGE_KEYS.sync, targetScope);
   const matchSyncKey = storageKey(STORAGE_KEYS.matchSync, targetScope);
+  const analysisSyncKey = storageKey(STORAGE_KEYS.analysisSync, targetScope);
   const analysisKey = storageKey(STORAGE_KEYS.analysis, targetScope);
-  if (!eventsKey || !metaKey || !syncKey || !matchSyncKey || !analysisKey) {
+  if (!eventsKey || !metaKey || !syncKey || !matchSyncKey || !analysisSyncKey || !analysisKey) {
     return { migrated: false, eventCount: 0, reason: 'invalid-target' };
   }
 
@@ -191,6 +221,7 @@ export function migrateLocalScopeToUserScope(targetScope, options = {}) {
   storage.setItem(metaKey, JSON.stringify(mergedMeta));
   storage.setItem(syncKey, JSON.stringify([...mergedPendingById].map(([id, op]) => ({ id, op }))));
   storage.setItem(matchSyncKey, JSON.stringify([...mergedPendingMatchesById].map(([id, op]) => ({ id, op }))));
+  storage.setItem(analysisSyncKey, JSON.stringify([...mergedAnalysisSyncByKey.values()]));
   if (hasMeaningfulAnalysis(mergedAnalysis)) {
     storage.setItem(analysisKey, JSON.stringify(mergedAnalysis));
   }

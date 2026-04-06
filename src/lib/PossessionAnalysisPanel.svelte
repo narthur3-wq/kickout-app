@@ -8,6 +8,7 @@
     collectPlayerOptions,
     displayPlayerLabel,
     formatMetres,
+    formatSignedMetres,
     movementDirection,
     movementDirectionColor,
     movementDirectionLabel,
@@ -15,6 +16,7 @@
     pointDistanceMeters,
     resolveSessionPlayerIdentity,
     sessionLabel,
+    splitMatchIdsForTrend,
     squadPlayerKey,
   } from './postMatchAnalysis.js';
   import Heatmap from './Heatmap.svelte';
@@ -33,6 +35,7 @@
   const dispatch = createEventDispatcher();
 
   export let storageScope = null;
+  export let analysisRefreshToken = 0;
   export let activeMatchId = null;
   export let activeMatch = null;
   export let matches = [];
@@ -55,6 +58,7 @@
 
   let analysisState = createEmptyAnalysisState();
   let loadedScope = null;
+  let loadedAnalysisRefreshToken = null;
   let draftSession = null;
   let draftEvent = blankDraftEvent();
   let draftStep = 'receive';
@@ -69,6 +73,10 @@
   let playerInput = '';
   let notice = '';
   let viewMode = 'dots';
+  let trendMode = 'halves';
+  let trendLastN = 3;
+  let trendFocus = 'earlier';
+  let matchDateLookup = new Map();
 
   const OUTCOME_COLORS = {
     'Score point': '#0f766e',
@@ -152,9 +160,37 @@
     return `${Math.round((value / total) * 100)}%`;
   }
 
+  function percentOf(value, total) {
+    if (!Number.isFinite(value) || !Number.isFinite(total) || total <= 0) return null;
+    return (value / total) * 100;
+  }
+
+  function formatPercentValue(value) {
+    if (!Number.isFinite(value)) return '-';
+    return `${Math.round(value)}%`;
+  }
+
+  function formatDeltaCount(value) {
+    if (!Number.isFinite(value)) return '-';
+    const sign = value > 0 ? '+' : value < 0 ? '-' : '';
+    return `${sign}${Math.abs(Math.round(value))}`;
+  }
+
+  function formatDeltaPercent(value) {
+    if (!Number.isFinite(value)) return '-';
+    const sign = value > 0 ? '+' : value < 0 ? '-' : '';
+    return `${sign}${Math.abs(Math.round(value))}pp`;
+  }
+
   function saveState(nextState) {
+    const previousState = analysisState;
     analysisState = nextState;
     if (storageScope) saveAnalysisState(nextState, storageScope);
+    dispatch('analysischange', {
+      mode: 'possession',
+      state: nextState,
+      previousState,
+    });
   }
 
   function loadScope(scope) {
@@ -427,6 +463,58 @@
     };
   }
 
+  function matchDateForId(matchId, lookup) {
+    if (!matchId) return '';
+    if (lookup && lookup instanceof Map && lookup.has(matchId)) return lookup.get(matchId) || '';
+    return '';
+  }
+
+  function dateRangeLabel(matchIds = [], lookup) {
+    const dates = matchIds
+      .map((id) => matchDateForId(id, lookup))
+      .filter(Boolean);
+    if (dates.length === 0) return '';
+    const first = dates[0];
+    const last = dates[dates.length - 1];
+    if (first === last) return first;
+    return `${first} - ${last}`;
+  }
+
+  function buildTrendBucket(matchIds = [], lookup) {
+    const ids = Array.isArray(matchIds) ? matchIds.filter(Boolean) : [];
+    if (!selectedPlayerKey || ids.length === 0) {
+      const summary = buildPossessionSummary([]);
+      return {
+        matchIds: ids,
+        matchCount: ids.length,
+        eventCount: 0,
+        summary,
+        events: [],
+        heatPoints: [],
+        dateRange: dateRangeLabel(ids, lookup),
+      };
+    }
+
+    const sessions = sessionsForPlayer(analysisState, 'possession', selectedPlayerKey, ids);
+    const events = sessions.flatMap((session) => (session.events || []).map((event) => ({
+      ...event,
+      session_id: session.id,
+      session_our_goal_at_top: session.our_goal_at_top,
+      receive: analysisPointForSession({ x: event.receive_x, y: event.receive_y }, session),
+      release: analysisPointForSession({ x: event.release_x, y: event.release_y }, session),
+    })));
+    const summary = buildPossessionSummary(events);
+    return {
+      matchIds: ids,
+      matchCount: ids.length,
+      eventCount: events.length,
+      summary,
+      events,
+      heatPoints: buildPointSeries(events, (event) => event.receive),
+      dateRange: dateRangeLabel(ids, lookup),
+    };
+  }
+
   function mergeSelectedPlayerNames() {
     const target = rosterList().find((player) => squadPlayerKey(player.id) === mergeTargetPlayerKey);
     if (!target || !selectedPlayerKey) {
@@ -456,6 +544,11 @@
     mergeTargetPlayerKey = '';
     playerInput = '';
     notice = '';
+  }
+
+  $: if (storageScope && analysisRefreshToken !== loadedAnalysisRefreshToken) {
+    loadScope(storageScope);
+    loadedAnalysisRefreshToken = analysisRefreshToken;
   }
 
   $: if (Array.isArray(squadPlayers) && squadPlayers !== rosterPropSource && (squadPlayers.length > 0 || rosterPropSource !== null)) {
@@ -572,6 +665,8 @@
   $: crossMatchCatalogRows = crossMatchIdsForPlayer.map((matchId) => buildCrossMatchRow(matchId))
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
+  $: matchDateLookup = new Map(crossMatchCatalogRows.map((row) => [row.matchId, row.date || '']));
+
   $: crossMatchRows = crossMatchCatalogRows.filter((row) => selectedCrossMatchIds.includes(row.matchId));
 
   $: selectedPlayerEntry = playerDirectory.find((player) => player.key === selectedPlayerKey) || null;
@@ -579,6 +674,79 @@
   $: if (selectedPlayerMismatch && !mergeTargetPlayerKey) {
     mergeTargetPlayerKey = rosterPlayers[0] ? squadPlayerKey(rosterPlayers[0].id) : '';
   }
+
+  $: trendEligible = analysisMode === 'cross'
+    && selectedCrossMatchIds.length >= 4
+    && !!selectedPlayerKey;
+
+  $: trendSplit = analysisMode === 'cross'
+    ? splitMatchIdsForTrend(selectedCrossMatchIds, {
+        dateLookup: matchDateLookup,
+        mode: trendMode,
+        lastN: trendLastN,
+      })
+    : { ordered: [], earlier: [], recent: [] };
+
+  $: trendEarlier = buildTrendBucket(trendSplit.earlier, matchDateLookup);
+  $: trendRecent = buildTrendBucket(trendSplit.recent, matchDateLookup);
+
+  $: trendForwardEarlier = percentOf(trendEarlier.summary.forwardCount, trendEarlier.summary.totalEvents ?? trendEarlier.eventCount);
+  $: trendForwardRecent = percentOf(trendRecent.summary.forwardCount, trendRecent.summary.totalEvents ?? trendRecent.eventCount);
+  $: trendForwardDelta = Number.isFinite(trendForwardEarlier) && Number.isFinite(trendForwardRecent)
+    ? trendForwardRecent - trendForwardEarlier
+    : null;
+  $: trendDeltaTone = trendForwardDelta > 0 ? 'up' : trendForwardDelta < 0 ? 'down' : 'flat';
+  $: trendDeltaLabel = Number.isFinite(trendForwardEarlier) && Number.isFinite(trendForwardRecent)
+    ? `Forward receives: ${formatPercentValue(trendForwardEarlier)} -> ${formatPercentValue(trendForwardRecent)} (${formatDeltaPercent(trendForwardDelta)})`
+    : 'Forward receives: n/a';
+
+  $: trendCompareRows = (() => {
+    if (!trendEligible) return [];
+    const earlierTotal = trendEarlier.summary.totalEvents ?? trendEarlier.eventCount;
+    const recentTotal = trendRecent.summary.totalEvents ?? trendRecent.eventCount;
+    const earlierForward = percentOf(trendEarlier.summary.forwardCount, earlierTotal);
+    const recentForward = percentOf(trendRecent.summary.forwardCount, recentTotal);
+    const earlierAvgCarry = trendEarlier.summary.averageCarry;
+    const recentAvgCarry = trendRecent.summary.averageCarry;
+    return [
+      {
+        label: 'Total events',
+        earlier: earlierTotal,
+        recent: recentTotal,
+        delta: formatDeltaCount(Number.isFinite(recentTotal) && Number.isFinite(earlierTotal) ? recentTotal - earlierTotal : null),
+        deltaTone: Number.isFinite(recentTotal) && Number.isFinite(earlierTotal)
+          ? (recentTotal - earlierTotal > 0 ? 'up' : recentTotal - earlierTotal < 0 ? 'down' : 'flat')
+          : 'flat',
+      },
+      {
+        label: 'Forward %',
+        earlier: formatPercentValue(earlierForward),
+        recent: formatPercentValue(recentForward),
+        delta: formatDeltaPercent(Number.isFinite(earlierForward) && Number.isFinite(recentForward) ? recentForward - earlierForward : null),
+        deltaTone: Number.isFinite(earlierForward) && Number.isFinite(recentForward)
+          ? (recentForward - earlierForward > 0 ? 'up' : recentForward - earlierForward < 0 ? 'down' : 'flat')
+          : 'flat',
+      },
+      {
+        label: 'Avg carry',
+        earlier: formatMetres(earlierAvgCarry),
+        recent: formatMetres(recentAvgCarry),
+        delta: Number.isFinite(earlierAvgCarry) && Number.isFinite(recentAvgCarry)
+          ? formatSignedMetres(recentAvgCarry - earlierAvgCarry)
+          : '-',
+        deltaTone: Number.isFinite(earlierAvgCarry) && Number.isFinite(recentAvgCarry)
+          ? (recentAvgCarry - earlierAvgCarry > 0 ? 'up' : recentAvgCarry - earlierAvgCarry < 0 ? 'down' : 'flat')
+          : 'flat',
+      },
+      {
+        label: 'Top outcome',
+        earlier: trendEarlier.summary.topOutcome || '-',
+        recent: trendRecent.summary.topOutcome || '-',
+        delta: '-',
+        deltaTone: 'flat',
+      },
+    ];
+  })();
 </script>
 
 <section class="analysis-shell">
@@ -827,6 +995,103 @@
             {/if}
           </div>
 
+          {#if analysisMode === 'cross'}
+            <div class="trend-section">
+              <div class="trend-head">
+                <div>
+                  <h4>Trend comparison</h4>
+                  <p>Compare earlier matches to more recent ones without forcing a verdict.</p>
+                </div>
+                <div class="trend-controls">
+                  <button type="button" class:active={trendMode === 'halves'} on:click={() => trendMode = 'halves'}>
+                    First vs second half
+                  </button>
+                  <button
+                    type="button"
+                    class:active={trendMode === 'lastN' && trendLastN === 3}
+                    on:click={() => {
+                      trendMode = 'lastN';
+                      trendLastN = 3;
+                    }}
+                  >
+                    Last 3 matches
+                  </button>
+                  <button
+                    type="button"
+                    class:active={trendMode === 'lastN' && trendLastN === 5}
+                    on:click={() => {
+                      trendMode = 'lastN';
+                      trendLastN = 5;
+                    }}
+                  >
+                    Last 5 matches
+                  </button>
+                </div>
+              </div>
+
+              {#if !trendEligible}
+                <div class="sample-note">
+                  Trend comparison needs at least 4 matches selected. You have {selectedCrossMatchIds.length}.
+                </div>
+              {:else if trendEarlier.eventCount === 0 || trendRecent.eventCount === 0}
+                <div class="sample-note">
+                  Not enough split data to compare earlier vs recent yet.
+                </div>
+              {:else}
+                <div class="trend-delta {trendDeltaTone}">{trendDeltaLabel}</div>
+
+                <div class="trend-toggle">
+                  <button type="button" class:active={trendFocus === 'earlier'} on:click={() => trendFocus = 'earlier'}>
+                    Earlier
+                  </button>
+                  <button type="button" class:active={trendFocus === 'recent'} on:click={() => trendFocus = 'recent'}>
+                    Recent
+                  </button>
+                </div>
+
+                <div class="trend-grid {trendFocus === 'recent' ? 'focus-recent' : 'focus-earlier'}">
+                  <div class="trend-panel earlier">
+                    <div class="trend-label">Earlier</div>
+                    <div class="trend-meta">{trendEarlier.matchCount} matches - {trendEarlier.eventCount} events</div>
+                    {#if trendEarlier.dateRange}
+                      <div class="trend-range">{trendEarlier.dateRange}</div>
+                    {/if}
+                    <div class="pitch-frame">
+                      <Heatmap points={trendEarlier.heatPoints} cols={140} radius={3} smooth={2} colorScheme="density" />
+                    </div>
+                  </div>
+                  <div class="trend-panel recent">
+                    <div class="trend-label">Recent</div>
+                    <div class="trend-meta">{trendRecent.matchCount} matches - {trendRecent.eventCount} events</div>
+                    {#if trendRecent.dateRange}
+                      <div class="trend-range">{trendRecent.dateRange}</div>
+                    {/if}
+                    <div class="pitch-frame">
+                      <Heatmap points={trendRecent.heatPoints} cols={140} radius={3} smooth={2} colorScheme="density" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="trend-compare">
+                  <div class="trend-row trend-head">
+                    <span>Metric</span>
+                    <span>Earlier</span>
+                    <span>Recent</span>
+                    <span>Delta</span>
+                  </div>
+                  {#each trendCompareRows as row (row.label)}
+                    <div class="trend-row">
+                      <strong>{row.label}</strong>
+                      <span>{row.earlier}</span>
+                      <span>{row.recent}</span>
+                      <span class="delta {row.deltaTone}">{row.delta}</span>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
+
           {#if analysisMode === 'cross' && crossMatchRows.length > 0}
             <div class="cross-table">
               <div class="cross-head">
@@ -975,6 +1240,33 @@
   .cross-row { width: 100%; text-align: left; border: 1px solid #e5e7eb; background: #f9fafb; border-radius: 10px; padding: 8px 10px; }
   .cross-row strong { font-size: 12px; color: #111827; }
   .cross-row span { text-align: center; color: #374151; font-size: 12px; }
+  .trend-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #eef2f7; display: grid; gap: 12px; }
+  .trend-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+  .trend-head h4 { margin: 0; font-size: 14px; font-weight: 800; }
+  .trend-head p { margin: 4px 0 0; font-size: 12px; color: #6b7280; }
+  .trend-controls { display: flex; flex-wrap: wrap; gap: 6px; }
+  .trend-controls button { font-size: 12px; padding: 6px 10px; }
+  .trend-controls button.active { background: #1c3f8a; color: #fff; border-color: #1c3f8a; }
+  .trend-delta { font-size: 13px; font-weight: 700; color: #374151; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px; }
+  .trend-delta.up { color: #166534; border-color: #bbf7d0; background: #f0fdf4; }
+  .trend-delta.down { color: #b91c1c; border-color: #fecaca; background: #fef2f2; }
+  .trend-delta.flat { color: #374151; }
+  .trend-toggle { display: none; gap: 6px; }
+  .trend-toggle button { font-size: 12px; padding: 6px 10px; }
+  .trend-toggle button.active { background: #1c3f8a; color: #fff; border-color: #1c3f8a; }
+  .trend-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .trend-panel { display: grid; gap: 6px; }
+  .trend-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; }
+  .trend-meta { font-size: 12px; font-weight: 700; color: #111827; }
+  .trend-range { font-size: 11px; color: #6b7280; }
+  .trend-compare { display: grid; gap: 6px; }
+  .trend-row { display: grid; grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 0.6fr)); gap: 8px; align-items: center; }
+  .trend-row strong { font-size: 12px; }
+  .trend-row span { font-size: 12px; text-align: center; color: #374151; }
+  .trend-row.trend-head { color: #6b7280; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+  .trend-row .delta.up { color: #166534; }
+  .trend-row .delta.down { color: #b91c1c; }
+  .trend-row .delta.flat { color: #6b7280; }
   .session-list { display: grid; gap: 10px; }
   .session-row { border: 1px solid #e5e7eb; padding: 10px; display: grid; gap: 8px; }
   .session-row.selected { background: #eff6ff; border-color: #93c5fd; }
@@ -982,6 +1274,12 @@
   .session-main strong { font-size: 13px; }
   .session-main span { font-size: 11px; color: #6b7280; }
   @media (min-width: 900px) { .grid { grid-template-columns: minmax(320px, 0.9fr) 1.1fr; } .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 820px) {
+    .trend-toggle { display: flex; }
+    .trend-grid { grid-template-columns: 1fr; }
+    .trend-grid.focus-earlier .trend-panel.recent { display: none; }
+    .trend-grid.focus-recent .trend-panel.earlier { display: none; }
+  }
   @media (max-width: 640px) {
     .match-meta { text-align: left; }
     .mini-grid { grid-template-columns: 1fr; }

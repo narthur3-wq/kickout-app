@@ -5,7 +5,7 @@
 | Phase | Feature | Status |
 |---|---|---|
 | Phase 1 | Feature 1: Possession Analysis | Built by Codex — fixes merged in current working tree |
-| Phase 2 | Feature 1 Extension: Cross-Match Aggregation | Built by Codex — Phase 2a shipped; Phase 2b deferred |
+| Phase 2 | Feature 1 Extension: Cross-Match Aggregation | Built by Codex — Phase 2a and Phase 2b shipped |
 | Phase 3 | Feature 2: Pass Destination / Progressive Impact | Built by Codex — fixes merged in current working tree |
 | Phase 4 | Combined View | Deferred |
 
@@ -17,7 +17,7 @@ Resolved issues from the original Codex drop (fixed in the current working tree)
 - Analysis view hardcodes `flip={false}` regardless of session orientation
 - Eyebrow labels read "Feature 1" / "Feature 2" — must be replaced before real use
 
-Implementation note: the shipped app already includes Phase 2a using the local analysis store and Admin-managed roster state. The Supabase analysis schema has now been added to the repo; the remaining hardening path is wiring app sync and multi-device durability on top of it.
+Implementation note: the shipped app already includes Phase 2a and Phase 2b using the local analysis store and Admin-managed roster state. The Supabase analysis schema and app sync are now in the repo; future work is only for extra resilience or richer pattern tooling.
 
 ---
 
@@ -281,9 +281,9 @@ Extend Feature 1 from single-match analysis to a player-level view across multip
 
 ### Current Implementation
 
-- Cross-match aggregation is already shipped in the app using the local analysis store
+- Cross-match aggregation and trend comparison are already shipped in the app using the analysis store
 - Roster management is handled from Admin settings and feeds the analysis autocomplete / reconciliation flow
-- Supabase sync remains a later resilience upgrade, not a prerequisite for the current cross-match view
+- Supabase sync is implemented for durability and multi-device review; local-first remains the fallback
 
 ### Prerequisites
 
@@ -311,7 +311,7 @@ UI: squad management in Admin settings (add player by name, rename, mark inactiv
 
 **Phase 2 pre-B — Supabase sync for analysis sessions**
 
-Analysis data is currently localStorage only in the app. The Supabase analysis tables now exist in the repo; the remaining work is syncing the app to them and handling backfill/realtime durability for data an analyst may spend 30 minutes populating.
+Analysis data is local-first in the app and now syncs to the Supabase analysis tables using the same retry-queue pattern as match events. The remaining work, if any, is only further resilience polish.
 
 Supabase schema:
 
@@ -411,7 +411,7 @@ Sync follows the same local-first, retry-queue pattern as events. RLS should be 
 
 ### Phase 2b — Trend Comparison
 
-Builds on Phase 2a once coaches have enough data to make comparison meaningful (practical minimum: 4–5 matches per player).
+Shipped alongside Phase 2a once there is enough data to make comparison meaningful (practical minimum: 4–5 matches per player).
 
 **Chronological comparison:**
 - Split sessions at the midpoint chronologically or by a coach-selected date
@@ -451,11 +451,10 @@ Post-fix gaps from original spec:
 - Individual event editing (deferred to post-v1 per correction policy)
 - Sample-size note on summary strip (minor — add to polish pass)
 
-### Phase 2 sync hardening — Future resilience
-- Squad name list (implemented in local analysis state today; Supabase sync later)
-- Supabase sync for possession and pass sessions
-
-The shipped Phase 2a view depends on the direction-normalised model already present in Phase 1. The remaining sync hardening should not ship until the direction normalisation fix is confirmed merged.
+### Phase 2 follow-on — Future resilience
+- Pass impact cross-match aggregation
+- Combined possession + passing view
+- Automatic pattern detection or alerts beyond the visual trend comparison
 
 ### Phase 2a — Cross-Match Player Profile
 - `sessionsForPlayer` query across all matches

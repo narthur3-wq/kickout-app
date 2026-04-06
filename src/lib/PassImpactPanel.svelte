@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
   import Pitch from './Pitch.svelte';
   import {
     aggregateConnections,
@@ -31,7 +31,10 @@
     sessionsForPlayer,
   } from './postMatchAnalysisStore.js';
 
+  const dispatch = createEventDispatcher();
+
   export let storageScope = null;
+  export let analysisRefreshToken = 0;
   export let activeMatchId = null;
   export let activeMatch = null;
   export let teamName = '';
@@ -45,6 +48,7 @@
 
   let analysisState = createEmptyAnalysisState();
   let loadedScope = null;
+  let loadedAnalysisRefreshToken = null;
   let draftSession = null;
   let draftEvent = blankDraftEvent();
   let draftStep = 'from';
@@ -116,8 +120,14 @@
   }
 
   function saveState(nextState) {
+    const previousState = analysisState;
     analysisState = nextState;
     if (storageScope) saveAnalysisState(nextState, storageScope);
+    dispatch('analysischange', {
+      mode: 'pass',
+      state: nextState,
+      previousState,
+    });
   }
 
   function loadScope(scope) {
@@ -342,6 +352,11 @@
     mergeTargetPlayerKey = '';
     playerInput = '';
     notice = '';
+  }
+
+  $: if (storageScope && analysisRefreshToken !== loadedAnalysisRefreshToken) {
+    loadScope(storageScope);
+    loadedAnalysisRefreshToken = analysisRefreshToken;
   }
 
   $: if (Array.isArray(squadPlayers) && squadPlayers !== rosterPropSource && (squadPlayers.length > 0 || rosterPropSource !== null)) {

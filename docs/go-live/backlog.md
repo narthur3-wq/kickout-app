@@ -462,14 +462,4 @@ This sprint is explicitly out of scope for the current implementation pass.
 
 ## Post-Launch Product Track (Not In Go-Live Scope)
 
-Phase 2 post-match analysis work is tracked in `documentation/post-match-player-analysis.md` and the A-series backlog. The app already ships the local-first Phase 2a cross-match view; the remaining work is Supabase sync hardening and trend comparison, both intentionally outside the go-live sprint plan.
-
-Current hardening path:
-- squad roster + stable player ID model (Admin settings; local today, Supabase later)
-- analysis session sync to Supabase
-
-Primary Phase 2 delivery:
-- cross-match possession aggregation (Phase 2a)
-
-Deferred follow-on:
-- trend comparison (Phase 2b) after enough data exists
+Phase 2 post-match analysis is implemented and tracked in `documentation/post-match-player-analysis.md` and the A-series backlog. It is not a launch remediation item. If the launch build exposes the analysis tabs, the Supabase analysis migration should be present in the target environment.

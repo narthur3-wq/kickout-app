@@ -281,5 +281,4 @@ export function mergeImportedAnalysisState(currentState, importedState) {
   };
 }
 
-// TODO: Add Supabase row mappers + sync helpers for analysis sessions once the app
-// adopts a dedicated analysis sync queue. Keep local-first until then.
+// Supabase row mapping and sync orchestration now live in analysisSync.js.

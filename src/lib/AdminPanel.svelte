@@ -8,6 +8,7 @@
   export let user = null;
   export let teamName = null;
   export let storageScope = null;
+  export let analysisRefreshToken = 0;
 
   const dispatch = createEventDispatcher();
 
@@ -23,6 +24,7 @@
   let error = '';
   let analysisState = createEmptyAnalysisState();
   let loadedScope = null;
+  let loadedAnalysisRefreshToken = null;
   let rosterDraftName = '';
   let rosterNotice = '';
   let rosterNoticeType = 'success';
@@ -134,6 +136,11 @@
     rosterDraftName = '';
     rosterNotice = '';
     rosterEditNames = {};
+  }
+
+  $: if (storageScope && analysisRefreshToken !== loadedAnalysisRefreshToken) {
+    loadScope(storageScope);
+    loadedAnalysisRefreshToken = analysisRefreshToken;
   }
 
   $: squadPlayers = Array.isArray(analysisState?.squadPlayers)

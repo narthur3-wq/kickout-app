@@ -4,6 +4,7 @@ import {
   STORAGE_KEYS,
   migrateLocalScopeToUserScope,
   parsePendingSyncEntries,
+  parseAnalysisSyncEntries,
   parseStoredMeta,
   readScopeSnapshot,
   readStoredJson,
@@ -66,6 +67,13 @@ describe('storageScope helpers', () => {
       ['one', 'delete'],
       ['two', 'upsert'],
     ]);
+    expect(parseAnalysisSyncEntries([
+      { mode: 'possession', id: 'session-1' },
+      { mode: 'pass', id: 'session-2' },
+    ])).toEqual([
+      { mode: 'possession', id: 'session-1' },
+      { mode: 'pass', id: 'session-2' },
+    ]);
   });
 
   it('migrates legacy local data into the first user scope without dropping events', () => {
@@ -99,6 +107,7 @@ describe('storageScope helpers', () => {
       },
       pendingSync: [['local-1', 'upsert']],
       pendingMatchSync: [],
+      analysisSync: [],
       analysis: {
         version: 1,
         possessionSessions: [{ id: 'pos-1', mode: 'possession', match_id: 'match-1', player_name: '#11', player_key: '#11', our_goal_at_top: true, created_at: '2026-03-25T10:00:00.000Z', updated_at: '2026-03-25T10:00:00.000Z', notes: '', events: [] }],
@@ -150,6 +159,7 @@ describe('storageScope helpers', () => {
         ['local-1', 'upsert'],
       ],
       pendingMatchSync: [['match-1', 'upsert']],
+      analysisSync: [],
       analysis: {
         version: 1,
         possessionSessions: [],

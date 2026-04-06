@@ -9,6 +9,7 @@ Audit basis: April 1, 2026
 - [ ] `ALLOWED_ORIGIN` exactly matches the live app origin
 - [ ] The dedicated smoke account credentials are available and still valid: `PAIRC_SMOKE_EMAIL`, `PAIRC_SMOKE_PASSWORD`
 - [ ] Existing environments have applied `supabase/migrations/20260330000100_add_event_indexes.sql`
+- [ ] Existing environments have applied `supabase/migrations/20260406000100_add_analysis_tables.sql`
 - [ ] Product/engineering signoff exists for the current offline access policy on transient network loss
 
 ## Build

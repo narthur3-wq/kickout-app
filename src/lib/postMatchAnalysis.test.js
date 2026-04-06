@@ -16,6 +16,7 @@ import {
   pointDistanceMeters,
   resolveSessionPlayerIdentity,
   sessionLabel,
+  splitMatchIdsForTrend,
   summarizePossessionEvents,
 } from './postMatchAnalysis.js';
 
@@ -51,6 +52,25 @@ describe('postMatchAnalysis helpers', () => {
       events: [{ id: 'one' }, { id: 'two' }],
       created_at: '2026-04-01T12:00:00.000Z',
     }, 0, 'pass', 'passes')).toBe('1. #8 - 2 passes - 2026-04-01');
+  });
+
+  it('splits match ids for trend comparisons', () => {
+    const matchIds = ['m3', 'm1', 'm2', 'm4'];
+    const dateLookup = {
+      m1: '2026-03-02',
+      m2: '2026-03-03',
+      m3: '2026-03-01',
+      m4: '2026-03-04',
+    };
+
+    const halves = splitMatchIdsForTrend(matchIds, { dateLookup, mode: 'halves' });
+    expect(halves.ordered).toEqual(['m3', 'm1', 'm2', 'm4']);
+    expect(halves.earlier).toEqual(['m3', 'm1']);
+    expect(halves.recent).toEqual(['m2', 'm4']);
+
+    const lastN = splitMatchIdsForTrend(matchIds, { dateLookup, mode: 'lastN', lastN: 3 });
+    expect(lastN.earlier).toEqual(['m3']);
+    expect(lastN.recent).toEqual(['m1', 'm2', 'm4']);
   });
 
   it('collects player options from arrays, strings, and records', () => {
