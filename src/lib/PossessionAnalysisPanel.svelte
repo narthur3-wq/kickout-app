@@ -77,6 +77,9 @@
   let trendLastN = 3;
   let trendFocus = 'earlier';
   let matchDateLookup = new Map();
+  let analysisCardEl;
+  let exportingSnapshot = false;
+  let exportFeedback = null;
 
   const OUTCOME_COLORS = {
     'Score point': '#0f766e',
@@ -559,6 +562,80 @@
     };
   }
 
+  function downloadFile(content, filename, type) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function playerSlug() {
+    return (selectedPlayerEntry?.label || 'player').replace(/[^a-z0-9]/gi, '-').toLowerCase();
+  }
+
+  function exportPossessionCSV() {
+    if (displayedEvents.length === 0) return;
+    const sessionMap = new Map(displayedSessions.map((s) => [s.id, s]));
+    const matchMap = new Map(matches.map((m) => [m.id, m]));
+    const rows = [
+      ['player', 'match', 'match_date', 'session_date', 'receive_x', 'receive_y', 'release_x', 'release_y', 'outcome', 'under_pressure', 'direction', 'carry_m'],
+    ];
+    for (const event of displayedEvents) {
+      const session = sessionMap.get(event.session_id);
+      const match = session ? matchMap.get(session.match_id) : null;
+      const direction = movementDirection(event.receive, event.release);
+      const carry = pointDistanceMeters(event.receive, event.release);
+      rows.push([
+        session?.player_name || '',
+        match ? `${match.team || 'Team'} v ${match.opponent || 'Opposition'}` : (session?.match_id || ''),
+        match?.match_date || '',
+        session?.created_at?.slice(0, 10) || '',
+        Number.isFinite(event.receive.x) ? event.receive.x.toFixed(3) : '',
+        Number.isFinite(event.receive.y) ? event.receive.y.toFixed(3) : '',
+        Number.isFinite(event.release.x) ? event.release.x.toFixed(3) : '',
+        Number.isFinite(event.release.y) ? event.release.y.toFixed(3) : '',
+        event.outcome || '',
+        event.under_pressure ? 'yes' : 'no',
+        direction,
+        Number.isFinite(carry) ? carry.toFixed(1) : '',
+      ]);
+    }
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    downloadFile(csv, `possession-${playerSlug()}.csv`, 'text/csv;charset=utf-8;');
+  }
+
+  async function shareSnapshot() {
+    if (exportingSnapshot || !analysisCardEl) return;
+    exportingSnapshot = true;
+    exportFeedback = null;
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(analysisCardEl, { backgroundColor: '#ffffff', scale: 2, useCORS: true });
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((nextBlob) => {
+          if (nextBlob) resolve(nextBlob);
+          else reject(new Error('Could not generate image.'));
+        }, 'image/png');
+      });
+      const filename = `possession-${playerSlug()}.png`;
+      const file = new File([blob], filename, { type: 'image/png' });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Pairc Possession Analysis' });
+      } else {
+        downloadFile(blob, filename, 'image/png');
+      }
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        exportFeedback = 'Could not generate the snapshot on this device.';
+      }
+    } finally {
+      exportingSnapshot = false;
+    }
+  }
+
   onMount(() => {
     if (storageScope) loadScope(storageScope);
   });
@@ -847,14 +924,25 @@
         {/if}
       </section>
 
-      <section class="card">
+      <section class="card" bind:this={analysisCardEl}>
         <div class="card-head">
           <h3>Analysis View</h3>
-          <div class="view-toggle">
-            <button type="button" class:active={viewMode === 'dots'} on:click={() => viewMode = 'dots'}>Dots</button>
-            <button type="button" class:active={viewMode === 'heat'} on:click={() => viewMode = 'heat'}>Heat</button>
+          <div class="card-head-right">
+            <div class="view-toggle">
+              <button type="button" class:active={viewMode === 'dots'} on:click={() => viewMode = 'dots'}>Dots</button>
+              <button type="button" class:active={viewMode === 'heat'} on:click={() => viewMode = 'heat'}>Heat</button>
+            </div>
+            <div class="export-actions">
+              <button type="button" on:click={exportPossessionCSV} disabled={totalEvents === 0} title="Download raw event data as CSV">CSV</button>
+              <button type="button" on:click={shareSnapshot} disabled={totalEvents === 0 || exportingSnapshot} title="Share or download a snapshot of this view">
+                {exportingSnapshot ? '...' : 'Snapshot'}
+              </button>
+            </div>
           </div>
         </div>
+        {#if exportFeedback}
+          <div class="export-feedback">{exportFeedback}</div>
+        {/if}
 
         <div class="mode-toggle">
           <button type="button" class:active={analysisMode === 'match'} on:click={() => setAnalysisMode('match')}>
@@ -1175,6 +1263,10 @@
   .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 14px; }
   .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
   .card-head h3 { margin: 0; font-size: 15px; font-weight: 800; }
+  .card-head-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .export-actions { display: flex; gap: 6px; }
+  .export-actions button { font-size: 11px; padding: 5px 9px; }
+  .export-feedback { font-size: 12px; color: #b91c1c; margin-bottom: 8px; }
   .card-head span { font-size: 12px; font-weight: 700; color: #1d4ed8; background: #dbeafe; padding: 4px 8px; border-radius: 999px; }
   .field { display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280; }
   .field input, .field select { border: 1.5px solid #d1d5db; border-radius: 10px; padding: 10px 12px; font-family: inherit; font-size: 13px; color: #111827; background: #fff; }

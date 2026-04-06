@@ -42,6 +42,7 @@
   export let matchLabel = '';
   export let playerOptions = [];
   export let squadPlayers = [];
+  export let matches = [];
   export let defaultOurGoalAtTop = true;
 
   const PASS_TYPES = ['Kickpass', 'Handpass'];
@@ -60,6 +61,9 @@
   let rosterPropSource = null;
   let playerInput = '';
   let notice = '';
+  let analysisCardEl;
+  let exportingSnapshot = false;
+  let exportFeedback = null;
 
   function nowIso() {
     return new Date().toISOString();
@@ -367,6 +371,80 @@
     };
   }
 
+  function downloadFile(content, filename, type) {
+    const blob = content instanceof Blob ? content : new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function playerSlug() {
+    return (selectedPlayerEntry?.label || 'player').replace(/[^a-z0-9]/gi, '-').toLowerCase();
+  }
+
+  function exportPassCSV() {
+    if (displayedEvents.length === 0) return;
+    const sessionMap = new Map(displayedSessions.map((s) => [s.id, s]));
+    const matchMap = new Map(matches.map((m) => [m.id, m]));
+    const rows = [
+      ['player', 'match', 'match_date', 'session_date', 'from_x', 'from_y', 'to_x', 'to_y', 'pass_type', 'completed', 'direction', 'net_gain_m'],
+    ];
+    for (const event of displayedEvents) {
+      const session = sessionMap.get(event.session_id);
+      const match = session ? matchMap.get(session.match_id) : null;
+      const direction = movementDirection(event.from, event.to);
+      const gain = depthDeltaMeters(event.from, event.to);
+      rows.push([
+        session?.player_name || '',
+        match ? `${match.team || 'Team'} v ${match.opponent || 'Opposition'}` : (session?.match_id || ''),
+        match?.match_date || '',
+        session?.created_at?.slice(0, 10) || '',
+        Number.isFinite(event.from.x) ? event.from.x.toFixed(3) : '',
+        Number.isFinite(event.from.y) ? event.from.y.toFixed(3) : '',
+        Number.isFinite(event.to.x) ? event.to.x.toFixed(3) : '',
+        Number.isFinite(event.to.y) ? event.to.y.toFixed(3) : '',
+        event.pass_type || '',
+        event.completed !== false ? 'yes' : 'no',
+        direction,
+        Number.isFinite(gain) ? gain.toFixed(1) : '',
+      ]);
+    }
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    downloadFile(csv, `pass-impact-${playerSlug()}.csv`, 'text/csv;charset=utf-8;');
+  }
+
+  async function shareSnapshot() {
+    if (exportingSnapshot || !analysisCardEl) return;
+    exportingSnapshot = true;
+    exportFeedback = null;
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(analysisCardEl, { backgroundColor: '#ffffff', scale: 2, useCORS: true });
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((nextBlob) => {
+          if (nextBlob) resolve(nextBlob);
+          else reject(new Error('Could not generate image.'));
+        }, 'image/png');
+      });
+      const filename = `pass-impact-${playerSlug()}.png`;
+      const file = new File([blob], filename, { type: 'image/png' });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Pairc Pass Impact' });
+      } else {
+        downloadFile(blob, filename, 'image/png');
+      }
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        exportFeedback = 'Could not generate the snapshot on this device.';
+      }
+    } finally {
+      exportingSnapshot = false;
+    }
+  }
+
   onMount(() => {
     if (storageScope) loadScope(storageScope);
   });
@@ -555,11 +633,22 @@
         {/if}
       </section>
 
-      <section class="card">
+      <section class="card" bind:this={analysisCardEl}>
         <div class="card-head">
           <h3>Analysis View</h3>
-          <span>{totalPasses}</span>
+          <div class="card-head-right">
+            <span>{totalPasses}</span>
+            <div class="export-actions">
+              <button type="button" on:click={exportPassCSV} disabled={totalPasses === 0} title="Download raw pass data as CSV">CSV</button>
+              <button type="button" on:click={shareSnapshot} disabled={totalPasses === 0 || exportingSnapshot} title="Share or download a snapshot of this view">
+                {exportingSnapshot ? '...' : 'Snapshot'}
+              </button>
+            </div>
+          </div>
         </div>
+        {#if exportFeedback}
+          <div class="export-feedback">{exportFeedback}</div>
+        {/if}
 
         <div class="player-strip">
           {#each playerDirectory as player (player.key)}
