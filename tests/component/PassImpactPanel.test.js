@@ -86,4 +86,39 @@ describe('PassImpactPanel', () => {
     expect(screen.getByText('Forward')).toBeInTheDocument();
     expect(screen.getByText('+43.5m', { selector: '.detail-grid strong' })).toBeInTheDocument();
   });
+
+  it('shows draft passes immediately before finalizing the session', async () => {
+    render(PassImpactPanel, {
+      props: {
+        storageScope: 'test',
+        activeMatchId: 'match-1',
+        activeMatch: {
+          id: 'match-1',
+          match_date: '2026-04-01',
+          team: 'Clontarf',
+          opponent: 'Vincents',
+        },
+        teamName: 'Clontarf',
+        opponentName: 'Vincents',
+        playerOptions: [['8', '#8']],
+        defaultOurGoalAtTop: true,
+      },
+    });
+
+    const playerInput = screen.getByPlaceholderText('Type a player');
+    await fireEvent.input(playerInput, { target: { value: '#8' } });
+    await fireEvent.click(screen.getByRole('button', { name: /Start draft session/i }));
+
+    const pitch = screen.getByRole('application', { name: /GAA pitch/i });
+    await fireEvent.keyDown(pitch, { key: 'Enter' });
+    await fireEvent.keyDown(pitch, { key: 'Enter' });
+
+    await fireEvent.click(screen.getByRole('button', { name: /Add draft pass/i }));
+
+    expect(screen.getByText('Draft passes')).toBeInTheDocument();
+    expect(screen.getByText(/1\. Kickpass/i)).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: /Finalize session/i }));
+    expect(await screen.findByText('Session finalized.')).toBeInTheDocument();
+  });
 });

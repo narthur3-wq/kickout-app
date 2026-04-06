@@ -345,7 +345,7 @@
         {@const arrowBackY = ty - Math.sin(angle) * arrowSize}
         {@const perpX = Math.cos(angle + Math.PI / 2) * (arrowSize * 0.45)}
         {@const perpY = Math.sin(angle + Math.PI / 2) * (arrowSize * 0.45)}
-        <g opacity={connection.opacity ?? 0.78}>
+        <g opacity={connection.opacity ?? 0.78} data-draft={connection?.draft ? 'true' : undefined}>
           <line
             x1={sx}
             y1={sy}
@@ -399,6 +399,7 @@
       <g
         class:clickable={overlayIsClickable(o)}
         style={overlayIsClickable(o) ? 'pointer-events:auto; cursor:pointer;' : 'pointer-events:none;'}
+        data-draft={o?.draft ? 'true' : undefined}
         role={overlayIsClickable(o) ? 'button' : undefined}
         tabindex={overlayIsClickable(o) ? '0' : undefined}
         aria-label={o?.label || 'Pitch marker'}

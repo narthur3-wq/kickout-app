@@ -68,13 +68,15 @@ Existing in-match events (shots, tackles, turnovers, kickouts) are logged by jer
 ## Correction Policy
 
 During active logging:
-- Undo last event is supported in both panels
+- Draft events render immediately in the session builder at reduced opacity
+- Undo last event removes the most recent draft event
+- Draft lists include a per-event remove action for long sessions
 - Discard draft discards the entire unsaved session
 
-After a session is saved:
+After a session is finalized:
 - Sessions can be deleted and re-logged
 - Player identity can be reassigned to a roster entry to fix spelling inconsistencies across matches
-- Individual event editing within a saved session is deferred — delete and re-log if the session data is wrong
+- Individual event editing within a finalized session is deferred - delete and re-log if the session data is wrong
 
 ---
 
@@ -141,7 +143,7 @@ Sessions also carry `our_goal_at_top` to record which direction the player was a
 
 ### Logging Flow
 
-Entry point: completed match → Analysis tab → Possession tab → New Session
+Entry point: completed match → Analysis tab → Possession tab → Start draft session
 
 1. Select player from squad name list (or type a name)
 2. Confirm attacking direction (`our_goal_at_top`)
@@ -150,14 +152,14 @@ Entry point: completed match → Analysis tab → Possession tab → New Session
 5. Select outcome
 6. Optionally toggle under pressure
 7. Confirm and loop to the next event
-8. Done saves the session
+8. Finalize session commits the draft session
 
 ### Session Rules
 
 - Sessions are per player per match
 - Multiple sessions can exist for the same player and match
 - No minimum event count required
-- Sessions can be resumed before saving; draft is held in component state
+- Draft events remain visible in the builder as ghosted overlays and a numbered list until the session is finalized
 
 ### Viewing / Analysis
 
@@ -228,7 +230,7 @@ This is a separate logging workflow. It is not derived from Feature 1 data.
 
 ### Logging Flow
 
-Entry point: completed match → Analysis tab → Pass Impact tab → New Session
+Entry point: completed match → Analysis tab → Pass Impact tab → Start draft session
 
 1. Select player from squad name list
 2. Confirm attacking direction
@@ -237,7 +239,7 @@ Entry point: completed match → Analysis tab → Pass Impact tab → New Sessio
 5. Select pass type (Kickpass / Handpass)
 6. Mark incomplete if the pass did not reach the target
 7. Confirm and loop to the next pass
-8. Done saves the session
+8. Finalize session commits the draft session
 
 ### Viewing / Analysis
 
@@ -440,16 +442,12 @@ No automated pattern detection or ML in this phase. The visual comparison makes 
 ### Phase 1 — Feature 1: Possession Analysis
 Status: Built and validated.
 
-Bug fixes required before use:
-1. Add `sessionLabel` function to PossessionAnalysisPanel
-2. Fix player input `disabled` logic in both panels
-3. Implement attacking direction normalisation using `our_goal_at_top`
-4. Respect session orientation in analysis view pitch
-5. Replace "Feature 1" / "Feature 2" eyebrow labels
-
-Post-fix gaps from original spec:
-- Individual event editing (deferred to post-v1 per correction policy)
-- Sample-size note on summary strip (minor — add to polish pass)
+Implementation notes:
+- Draft events are visible immediately in the session builder as low-opacity pitch overlays plus a numbered draft list
+- `Finalize session` is the commit point for the session
+- `Discard draft` removes the unsaved session entirely
+- Individual event editing remains deferred; remove and re-log if a finalized session is wrong
+- Sample-size notes remain on the summary strip for small datasets
 
 ### Phase 2 follow-on — Future resilience
 - Pass impact cross-match aggregation

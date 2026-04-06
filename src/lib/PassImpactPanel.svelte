@@ -14,6 +14,7 @@
     movementDirection,
     movementDirectionColor,
     movementDirectionLabel,
+    movementDirectionForSession,
     normalizePlayerKey,
     pointDistanceMeters,
     resolveSessionPlayerIdentity,
@@ -166,7 +167,7 @@
   function startDraftSession() {
     const session = createSession(playerInput);
     if (!session) {
-      notice = 'Choose a player before starting a session.';
+      notice = 'Choose a player before starting a draft session.';
       return;
     }
     draftSession = session;
@@ -239,7 +240,7 @@
 
   function undoLastDraftEvent() {
     if (!draftSession || draftSession.events.length === 0) {
-      notice = 'No saved draft pass to undo.';
+      notice = 'No draft pass to undo.';
       return;
     }
     draftSession = {
@@ -259,7 +260,7 @@
     playerInput = draftSession.player_name;
     draftSession = null;
     resetDraftEvent();
-    notice = 'Session saved.';
+    notice = 'Session finalized.';
   }
 
   function deleteSession(session) {
@@ -297,6 +298,15 @@
     return movementDirection(event.from, event.to) || 'lateral';
   }
 
+  function draftDirectionOf(event) {
+    if (!draftSession) return 'lateral';
+    return movementDirectionForSession(
+      { x: event.from_x, y: event.from_y },
+      { x: event.to_x, y: event.to_y },
+      draftSession,
+    ) || 'lateral';
+  }
+
   function passDistance(event) {
     return pointDistanceMeters(event.from, event.to);
   }
@@ -327,6 +337,52 @@
         completionRate,
       };
     }).filter((row) => row.total > 0 || displayedEvents.length === 0);
+  }
+
+  function draftOverlayFor(event, index) {
+    return {
+      id: event.id,
+      x: event.from_x,
+      y: event.from_y,
+      outcome: event.pass_type,
+      label: `Draft pass ${index + 1}: ${event.pass_type} - ${movementDirectionLabel(draftDirectionOf(event))}`,
+      marker_shape: 'circle',
+      marker_fill: event.completed !== false ? '#2563eb' : '#64748b',
+      marker_ring: event.completed !== false ? null : 'target',
+      marker_ring_color: 'rgba(255,255,255,0.95)',
+      opacity: 0.34,
+      draft: true,
+      clickable: false,
+    };
+  }
+
+  function draftConnectionFor(event, index) {
+    return {
+      id: event.id,
+      from: { x: event.from_x, y: event.from_y },
+      to: { x: event.to_x, y: event.to_y },
+      color: movementDirectionColor(draftDirectionOf(event)),
+      width: 1.35,
+      opacity: event.completed !== false ? 0.35 : 0.28,
+      dasharray: '4 3',
+      arrow: true,
+      draft: true,
+      clickable: false,
+      label: `Draft pass ${index + 1}: ${event.pass_type} - ${movementDirectionLabel(draftDirectionOf(event))}${event.completed !== false ? '' : ' - incomplete'}`,
+    };
+  }
+
+  function removeDraftEvent(eventId) {
+    if (!draftSession) return;
+    const nextEvents = draftSession.events.filter((event) => event.id !== eventId);
+    if (nextEvents.length === draftSession.events.length) return;
+    draftSession = {
+      ...draftSession,
+      updated_at: nowIso(),
+      events: nextEvents,
+    };
+    selectedConnectionId = null;
+    notice = '';
   }
 
   function mergeSelectedPlayerNames() {
@@ -482,6 +538,14 @@
     }))
   );
 
+  $: draftEventCount = draftSession?.events?.length || 0;
+  $: draftOverlays = draftSession
+    ? draftSession.events.map((event, index) => draftOverlayFor(event, index))
+    : [];
+  $: draftConnections = draftSession
+    ? draftSession.events.map((event, index) => draftConnectionFor(event, index))
+    : [];
+
   $: playerAutocomplete = collectPlayerOptions([
     ...matchSessions,
     ...(draftSession ? [draftSession] : []),
@@ -571,7 +635,7 @@
         </label>
 
         <div class="button-row">
-          <button type="button" on:click={startDraftSession} disabled={!!draftSession || !playerInput.trim()}>New session</button>
+          <button type="button" on:click={startDraftSession} disabled={!!draftSession || !playerInput.trim()}>Start draft session</button>
           <button type="button" on:click={cancelDraftSession} disabled={!draftSession}>Discard draft</button>
           <button type="button" on:click={() => draftOurGoalAtTop = !draftOurGoalAtTop}>
             {orientationLabel(draftOurGoalAtTop)}
@@ -580,7 +644,13 @@
 
         {#if draftSession}
           <div class="draft-box">
-            <div class="step">{draftStep === 'from' ? 'Tap release point' : draftStep === 'to' ? 'Tap arrival point' : 'Choose type then add pass'}</div>
+            <div class="draft-head">
+              <div class="step">{draftStep === 'from' ? 'Tap release point' : draftStep === 'to' ? 'Tap arrival point' : 'Choose type then add draft pass'}</div>
+              <div class="draft-status">
+                <span class="draft-chip">Draft session</span>
+                <span>{draftEventCount} pass{draftEventCount === 1 ? '' : 'es'}</span>
+              </div>
+            </div>
             <div class="pitch-frame">
               <Pitch
                 interactive={true}
@@ -588,8 +658,8 @@
                 contestType="clean"
                 landing={draftSession ? draftEvent.from : point()}
                 pickup={draftSession ? draftEvent.to : point()}
-                overlays={[]}
-                connections={[]}
+                overlays={draftOverlays}
+                connections={draftConnections}
                 showZoneLabels={true}
                 showZoneLegend={false}
                 ownGoalFill="rgba(255,255,255,0.16)"
@@ -603,6 +673,31 @@
               <div><span>From</span><strong>{Number.isFinite(draftEvent.from.x) ? `${draftEvent.from.x.toFixed(2)}, ${draftEvent.from.y.toFixed(2)}` : 'Tap pitch'}</strong></div>
               <div><span>To</span><strong>{Number.isFinite(draftEvent.to.x) ? `${draftEvent.to.x.toFixed(2)}, ${draftEvent.to.y.toFixed(2)}` : 'Tap pitch'}</strong></div>
             </div>
+
+            {#if draftSession.events.length > 0}
+              <div class="draft-log" aria-label="Draft pass list">
+                <div class="draft-log-head">
+                  <strong>Draft passes</strong>
+                  <span>{draftSession.events.length}</span>
+                </div>
+                <div class="draft-log-list">
+                  {#each draftSession.events as event, index (event.id)}
+                    <div class="draft-log-row">
+                      <div class="draft-log-main">
+                        <strong>{index + 1}. {event.pass_type}</strong>
+                        <span>
+                          {movementDirectionLabel(draftDirectionOf(event))}
+                          {event.completed !== false ? ' - Completed' : ' - Incomplete'}
+                        </span>
+                      </div>
+                      <button type="button" class="draft-row-remove" on:click={() => removeDraftEvent(event.id)}>
+                        Remove
+                      </button>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
 
             <div class="outcomes">
               {#each PASS_TYPES as passType (passType)}
@@ -623,13 +718,13 @@
 
             <div class="button-row">
               <button type="button" on:click={clearCurrentDraftPoint} disabled={!draftSession}>Clear point</button>
-              <button type="button" on:click={undoLastDraftEvent} disabled={!draftSession || draftSession.events.length === 0}>Undo last pass</button>
-              <button type="button" class="primary" on:click={addDraftEvent} disabled={!draftSession}>Add pass</button>
-              <button type="button" class="primary" on:click={saveDraftSession} disabled={!draftSession}>Save session</button>
+              <button type="button" on:click={undoLastDraftEvent} disabled={!draftSession || draftSession.events.length === 0}>Undo draft pass</button>
+              <button type="button" class="primary" on:click={addDraftEvent} disabled={!draftSession}>Add draft pass</button>
+              <button type="button" class="primary" on:click={saveDraftSession} disabled={!draftSession}>Finalize session</button>
             </div>
           </div>
         {:else}
-          <div class="empty-state">Start a session to begin logging pass events.</div>
+          <div class="empty-state">Start a draft session to begin logging pass events.</div>
         {/if}
       </section>
 
@@ -818,12 +913,25 @@
   .primary:hover:not(:disabled) { background: #163270; }
   .danger { border-color: #fecaca; color: #b91c1c; }
   .draft-box { margin-top: 12px; padding-top: 12px; border-top: 1px solid #eef2f7; display: grid; gap: 12px; }
+  .draft-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
   .step { font-size: 13px; font-weight: 700; color: #1d4ed8; }
+  .draft-status { display: inline-flex; align-items: center; gap: 8px; color: #6b7280; font-size: 12px; font-weight: 700; }
+  .draft-chip { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 999px; background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
   .pitch-frame { border-radius: 14px; overflow: hidden; background: #2f5f32; }
   .mini-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .mini-grid div { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 10px; background: #f8fafc; display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
   .mini-grid span { color: #6b7280; font-weight: 700; }
   .mini-grid strong { font-variant-numeric: tabular-nums; color: #111827; }
+  .draft-log { border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px; background: #fafafa; display: grid; gap: 8px; }
+  .draft-log-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: #374151; }
+  .draft-log-head strong { font-size: 12px; }
+  .draft-log-head span { font-size: 11px; font-weight: 700; color: #1d4ed8; background: #dbeafe; padding: 3px 7px; border-radius: 999px; }
+  .draft-log-list { display: grid; gap: 6px; max-height: 220px; overflow: auto; padding-right: 2px; }
+  .draft-log-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-radius: 10px; border: 1px solid #eef2f7; background: #fff; padding: 8px 10px; }
+  .draft-log-main { display: grid; gap: 2px; min-width: 0; }
+  .draft-log-main strong { font-size: 12px; color: #111827; }
+  .draft-log-main span { font-size: 11px; color: #6b7280; }
+  .draft-row-remove { border-color: #fecaca; color: #b91c1c; padding: 6px 10px; border-radius: 999px; font-size: 11px; }
   .outcomes { display: flex; flex-wrap: wrap; gap: 6px; }
   .outcomes button { border-radius: 999px; padding: 7px 10px; font-size: 12px; }
   .outcomes button.active { background: #1c3f8a; color: #fff; border-color: #1c3f8a; }

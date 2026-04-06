@@ -30,16 +30,20 @@ describe('PossessionAnalysisPanel', () => {
     expect(playerInput).toBeEnabled();
     await fireEvent.input(playerInput, { target: { value: '#8' } });
 
-    await fireEvent.click(screen.getByRole('button', { name: /New session/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /Start draft session/i }));
 
     const pitch = screen.getByRole('application', { name: /GAA pitch/i });
     await fireEvent.keyDown(pitch, { key: 'Enter' });
     await fireEvent.keyDown(pitch, { key: 'Enter' });
 
-    await fireEvent.click(screen.getByRole('button', { name: /Add event/i }));
-    await fireEvent.click(screen.getByRole('button', { name: /Save session/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /Add draft event/i }));
 
-    await screen.findByText('Session saved.');
+    expect(screen.getByText('Draft events')).toBeInTheDocument();
+    expect(screen.getByText(/1\. Passed \/ offloaded/i)).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: /Finalize session/i }));
+
+    await screen.findByText('Session finalized.');
     expect(screen.getByText('Saved Sessions')).toBeInTheDocument();
     expect(screen.getByText(/1 events - Our goal left - 2026-04-06/)).toBeInTheDocument();
   });

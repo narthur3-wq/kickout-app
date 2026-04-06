@@ -143,6 +143,8 @@ Analysis sessions use a **squad roster ID** as the cross-match identity key, not
 
 Sessions store a `squad_player_id` when the analyst selects a roster entry. The display name is still stored on the session for readability and legacy compatibility. When `squad_player_id` is missing (legacy or free-text), the UI falls back to a normalised `player_key` and surfaces a reconciliation warning. Roster management lives in Admin settings, is persisted in the local analysis scope, and syncs to the Supabase roster table for cross-match identity and reconciliation.
 
+While a session is being built, draft events stay in component state and render as ghosted overlays plus a numbered draft list. Only when the analyst taps `Finalize session` does the draft become part of the saved analysis state and sync queue.
+
 ### Coordinate model
 
 Each event stores normalised pitch coordinates (0–1 range) plus an `our_goal_at_top` flag on the session. Direction classification (forward / lateral / backward) must normalise the y-axis against this flag before computing the depth delta. Raw coordinates without normalisation will produce inverted direction labels when the attacking direction is toward lower y values.
@@ -160,7 +162,7 @@ Analysis state is stored under the key `ko_post_match_analysis` within the scope
 }
 ```
 
-Sessions carry `match_id`, `player_name`, and optional `squad_player_id`. Events carry coordinates, outcome or pass metadata, and a timestamp.
+Sessions carry `match_id`, `player_name`, and optional `squad_player_id`. Events carry coordinates, outcome or pass metadata, and a timestamp. Draft sessions are not written to the stored analysis arrays until they are finalized.
 
 Scope migration (`migrateLocalScopeToUserScope`) merges analysis state by session ID, same as events.
 
