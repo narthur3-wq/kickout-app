@@ -239,3 +239,7 @@ Decide whether a secondary total-match-time display is worth shipping after the 
 ### Risk reduction achieved
 
 - Keeps the timing model focused until there is evidence the extra display is worth the extra complexity.
+
+## Product Scope Note — Post-Match Analysis Phase 2 (Post-Launch Track)
+
+Phase 2 post-match analysis is implemented and tracked separately from go-live remediation. If the feature is exposed in the launch build, the Supabase analysis migration should already be present; otherwise it stays outside the launch roadmap.

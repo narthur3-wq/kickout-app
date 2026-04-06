@@ -1,6 +1,6 @@
 # Pairc — Product Backlog
 
-Last updated: 2026-03-30
+Last updated: 2026-04-06
 
 Status key: `open` · `partial` · `deferred` · `done`
 
@@ -307,7 +307,6 @@ Covers:
 ### Explicitly deferred (out of scope for this sprint)
 
 - Fixtures calendar
-- Squad / player registry
 - Automatic deduplication of two analysts logging the same event
 - Competition hierarchy
 - Full season analytics platform
@@ -498,5 +497,122 @@ Across: multiple component files
 ### P5 — Future
 
 - CSV export
-- Season / cross-match analytics
 - Video timestamp integration
+
+---
+
+## Post-Match Analysis (A-series)
+
+Full spec: [post-match-player-analysis.md](post-match-player-analysis.md)
+
+Player identity note: jersey numbers are not used as cross-match identifiers in GAA because players wear different numbers each match. Analysis sessions use a squad roster ID when available, with a normalised-name fallback for legacy sessions. A squad roster (A-01) provides controlled autocomplete and a reconciliation path for mismatches.
+
+---
+
+### Phase 1 Bug Fixes (must resolve before any use)
+
+**A-00 — Possession Analysis bug fixes**
+Priority: must
+Status: done (fixed in current working tree)
+
+Five issues in the Codex build were fixed:
+
+1. `sessionLabel` undefined in PossessionAnalysisPanel — crashes on multiple sessions per player
+2. Player input `disabled` logic inverted in both panels — sessions cannot be started
+3. Attacking direction normalisation absent — forward/backward classification is wrong when attacking toward lower y values; `our_goal_at_top` is stored but not used in `movementDirection` calculations
+4. Analysis view hardcodes `flip={false}` — does not respect session orientation
+5. Eyebrow labels read "Feature 1" / "Feature 2" — replace before real use
+
+Files: `src/lib/PossessionAnalysisPanel.svelte`, `src/lib/PassImpactPanel.svelte`, `src/lib/postMatchAnalysis.js`
+
+---
+
+### Phase 2 Hardening
+
+**A-01 — Squad roster + identity model**
+Priority: must
+Status: done
+
+Lightweight team-scoped roster. Feeds autocomplete in possession and pass panels and provides stable squad-player IDs for cross-match aggregation. The app persists this roster in the local analysis scope and syncs it to Supabase.
+The Supabase roster table exists in `supabase/schema.sql` and `supabase/migrations/20260406000100_add_analysis_tables.sql`, with app-side sync/backfill already wired.
+
+Supabase table: `squad_players (id, team_id, name, active, created_at, updated_at)` with per-team unique name index.
+
+No jersey number field — numbers are match-specific and not used for player identity.
+
+UI: squad management in Admin settings. Add player by name, rename, toggle active/inactive. Active players appear in analysis panel autocomplete.
+
+Identity behavior:
+- sessions store `squad_player_id` when selected from roster
+- legacy/free-text sessions fall back to name matching and are flagged for reconciliation
+
+---
+
+**A-02 — Supabase sync for analysis sessions**
+Priority: must
+Status: done
+
+Analysis data now syncs through the local-first retry queue pattern used by match events. The Supabase analysis tables exist in `supabase/schema.sql` and `supabase/migrations/20260406000100_add_analysis_tables.sql`, and the app reads/writes them for multi-device durability and recovery.
+
+Four new tables required:
+- `possession_sessions`
+- `possession_events`
+- `pass_sessions`
+- `pass_events`
+
+Full schema in [post-match-player-analysis.md](post-match-player-analysis.md). Session tables include `squad_player_id` (nullable) plus `player_name` for readability and legacy fallback.
+
+Sync follows the same local-first, retry-queue pattern as match events. RLS must be team-scoped. Session upserts should be ordered: session before events (same FK guarantee as matches before events).
+
+---
+
+### Phase 2a — Cross-Match Player Profile
+
+**A-03 — Cross-match query layer**
+Priority: must
+Status: done
+
+Add `sessionsForPlayer(state, mode, playerKey, matchIds?)` to `postMatchAnalysisStore.js`. Returns all sessions for a player across all matches or a filtered subset. Include unit tests.
+
+---
+
+**A-04 — Cross-match player profile view (primary Phase 2 delivery)**
+Priority: must
+Status: done
+
+Entry point: Possession tab → player selected → "View across matches" (shown when sessions span more than one match).
+
+- Multi-select match filter (defaults to all; each match shows event count and date)
+- Aggregated heat map across selected matches
+- Aggregated summary strip (total events, outcome %, direction split, avg carry)
+- Per-match breakdown table (match, date, events, fwd %, back %, top outcome)
+- Drill-through row → single-match session view
+- Sample-size caveat when fewer than 3 matches selected
+- Unmatched player names flagged with a one-tap reconcile action (link to roster)
+
+---
+
+### Phase 2b — Trend Comparison
+
+**A-05 — Chronological trend comparison**
+Priority: should
+Status: done
+
+Builds on A-04. Requires minimum ~4 matches of data per player to be meaningful.
+
+- Chronological split: first half vs second half of selected matches
+- Last N matches selector (N = 3 or 5)
+- Before/after heat map (side by side or toggled)
+- Direction trend delta: forward % change between periods
+
+No automated pattern detection. Visual comparison is sufficient.
+
+---
+
+### Phase 4
+
+**A-06 — Combined possession and pass view**
+Priority: nice
+Status: deferred
+
+Show Feature 1 and Feature 2 data together for one player in one view. Not required for any earlier phase.

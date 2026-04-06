@@ -9,6 +9,9 @@ export default [
   ...svelte.configs["flat/recommended"],
   {
     files: ["**/*.js", "**/*.svelte"],
+    rules: {
+      "svelte/no-immutable-reactive-statements": "off",
+    },
     languageOptions: {
       globals: { window: "readonly", document: "readonly" },
       parserOptions: {

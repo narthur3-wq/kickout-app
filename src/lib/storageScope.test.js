@@ -4,6 +4,7 @@ import {
   STORAGE_KEYS,
   migrateLocalScopeToUserScope,
   parsePendingSyncEntries,
+  parseAnalysisSyncEntries,
   parseStoredMeta,
   readScopeSnapshot,
   readStoredJson,
@@ -66,6 +67,13 @@ describe('storageScope helpers', () => {
       ['one', 'delete'],
       ['two', 'upsert'],
     ]);
+    expect(parseAnalysisSyncEntries([
+      { mode: 'possession', id: 'session-1' },
+      { mode: 'pass', id: 'session-2' },
+    ])).toEqual([
+      { mode: 'possession', id: 'session-1' },
+      { mode: 'pass', id: 'session-2' },
+    ]);
   });
 
   it('migrates legacy local data into the first user scope without dropping events', () => {
@@ -74,6 +82,11 @@ describe('storageScope helpers', () => {
         ['ko_events', JSON.stringify([{ id: 'local-1', outcome: 'Retained' }])],
         ['ko_meta', JSON.stringify({ team: 'Clontarf', opponent: 'Boden', match_date: '2026-03-25', period: 'H1', our_goal_at_top: true })],
         ['ko_sync_queue', JSON.stringify([{ id: 'local-1', op: 'upsert' }])],
+        ['ko_post_match_analysis', JSON.stringify({
+          version: 1,
+          possessionSessions: [{ id: 'pos-1', mode: 'possession', match_id: 'match-1', player_name: '#11', player_key: '#11', our_goal_at_top: true, created_at: '2026-03-25T10:00:00.000Z', updated_at: '2026-03-25T10:00:00.000Z', notes: '', events: [] }],
+          passSessions: [{ id: 'pass-1', mode: 'pass', match_id: 'match-1', player_name: '#7', player_key: '#7', our_goal_at_top: true, created_at: '2026-03-25T10:00:00.000Z', updated_at: '2026-03-25T10:00:00.000Z', notes: '', events: [] }],
+        })],
       ]),
       getItem(key) { return this.values.get(key) ?? null; },
       setItem(key, value) { this.values.set(key, value); },
@@ -94,6 +107,13 @@ describe('storageScope helpers', () => {
       },
       pendingSync: [['local-1', 'upsert']],
       pendingMatchSync: [],
+      analysisSync: [],
+      analysis: {
+        version: 1,
+        possessionSessions: [{ id: 'pos-1', mode: 'possession', match_id: 'match-1', player_name: '#11', player_key: '#11', our_goal_at_top: true, created_at: '2026-03-25T10:00:00.000Z', updated_at: '2026-03-25T10:00:00.000Z', notes: '', events: [] }],
+        passSessions: [{ id: 'pass-1', mode: 'pass', match_id: 'match-1', player_name: '#7', player_key: '#7', our_goal_at_top: true, created_at: '2026-03-25T10:00:00.000Z', updated_at: '2026-03-25T10:00:00.000Z', notes: '', events: [] }],
+        squadPlayers: [],
+      },
     });
     expect(storage.getItem('ko_events')).toBeNull();
     expect(storage.getItem('ko_meta')).toBeNull();
@@ -107,6 +127,7 @@ describe('storageScope helpers', () => {
         ['ko_events', JSON.stringify([{ id: 'local-1', outcome: 'Retained' }, { id: 'shared-1', outcome: 'Lost' }])],
         ['ko_meta', JSON.stringify({ team: 'Clontarf', opponent: 'Boden', match_date: '2026-03-25', period: 'H2', our_goal_at_top: false })],
         ['ko_sync_queue', JSON.stringify([{ id: 'local-1', op: 'upsert' }])],
+        ['ko_post_match_analysis', JSON.stringify({ version: 1, possessionSessions: [], passSessions: [] })],
         ['ko_events:user:abc', JSON.stringify([{ id: 'remote-1', outcome: 'Point' }, { id: 'shared-1', outcome: 'Retained' }])],
         ['ko_meta:user:abc', JSON.stringify({ team: 'Clontarf', opponent: 'Na Fianna', match_date: '2026-03-24', period: 'H1', our_goal_at_top: true })],
         ['ko_sync_queue:user:abc', JSON.stringify([{ id: 'remote-1', op: 'delete' }])],
@@ -138,6 +159,13 @@ describe('storageScope helpers', () => {
         ['local-1', 'upsert'],
       ],
       pendingMatchSync: [['match-1', 'upsert']],
+      analysisSync: [],
+      analysis: {
+        version: 1,
+        possessionSessions: [],
+        passSessions: [],
+        squadPlayers: [],
+      },
     });
   });
 });

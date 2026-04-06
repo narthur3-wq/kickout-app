@@ -12,6 +12,7 @@ import {
   meaningfulGap,
   pct,
 } from './thresholds.js';
+import { kickoutOutcomeSideOf } from './kickoutOutcome.js';
 
 const POSITIVE_KICKOUT_OUTCOMES = new Set(['retained', 'score', 'won']);
 const SCORE_OUTCOMES = new Set(['goal', 'point', 'two point', 'two-point']);
@@ -117,7 +118,7 @@ function buildPositionResolver(items) {
 }
 
 function isPositiveKickout(event) {
-  return POSITIVE_KICKOUT_OUTCOMES.has(norm(event?.outcome));
+  return kickoutOutcomeSideOf(event) === 'selected' || POSITIVE_KICKOUT_OUTCOMES.has(norm(event?.outcome));
 }
 
 function isScoreEvent(event) {
@@ -399,7 +400,7 @@ function buildKickoutPattern(events) {
     hasMinimumSample(wonKickouts.length, 4) &&
     dominantShare(primaryWinner.total, wonKickouts.length, 0.5, 3)
   ) {
-    line = `${primaryWinner.label} is their main successful kickout target so far (${primaryWinner.total} of ${wonKickouts.length} wins).`;
+    line = `${primaryWinner.label} is their main kickout target so far (${primaryWinner.total} of ${wonKickouts.length} kickouts won).`;
   } else if (
     primaryTarget &&
     dominantShare(primaryTarget.total, theirKickouts.length, 0.45, 3)
@@ -638,7 +639,7 @@ function buildRecommendations(context) {
     items.push({
       type: 'press_kickout_target',
       title: `Press ${context.kickoutPattern.primaryWinner.label} on their kickouts`,
-      reason: `${context.kickoutPattern.primaryWinner.label} has won ${context.kickoutPattern.primaryWinner.total} of their ${context.kickoutPattern.wonTotal} successful kickouts.`,
+      reason: `${context.kickoutPattern.primaryWinner.label} has won ${context.kickoutPattern.primaryWinner.total} of their ${context.kickoutPattern.wonTotal} kickouts.`,
       priority: 2,
     });
   } else if (context.kickoutPattern.primaryTarget) {

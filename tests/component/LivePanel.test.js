@@ -19,7 +19,7 @@ describe('LivePanel', () => {
 
     expect(screen.getByText('Live Match State')).toBeInTheDocument();
     expect(screen.getByText('Recent Momentum')).toBeInTheDocument();
-    expect(screen.getByText('Most successful target')).toBeInTheDocument();
+    expect(screen.getByText('Top kickout target')).toBeInTheDocument();
     expect(screen.getByText('Press #8 on their kickouts')).toBeInTheDocument();
   });
 

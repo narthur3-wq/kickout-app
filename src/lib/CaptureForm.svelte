@@ -50,9 +50,17 @@
   const EVENT_TYPES = ['kickout', 'turnover', 'shot'];
   const JERSEY_NUMS = Array.from({ length: 15 }, (_, index) => index + 1);
 
-  $: activeOutcomes = OUTCOME_MAP[`${eventType}-${direction}`] || ['Retained'];
+  $: selectedTeamName = direction === 'ours' ? (team || 'Ours') : (opponent || 'Theirs');
+  $: opposingTeamName = direction === 'ours' ? (opponent || 'Theirs') : (team || 'Ours');
+  $: activeOutcomes = eventType === 'kickout'
+    ? [selectedTeamName, opposingTeamName]
+    : (OUTCOME_MAP[`${eventType}-${direction}`] || ['Retained']);
 
-  $: if (activeOutcomes.length > 0 && !activeOutcomes.includes(outcome)) {
+  $: if (eventType === 'kickout') {
+    if (outcome !== 'Retained' && outcome !== 'Lost') {
+      outcome = 'Retained';
+    }
+  } else if (activeOutcomes.length > 0 && !activeOutcomes.includes(outcome)) {
     outcome = activeOutcomes[0];
   }
 
@@ -65,7 +73,31 @@
   }
 
   function outcomeClass(value) {
+    if (eventType === 'kickout') {
+      return 'outcome-kickout';
+    }
     return `outcome-${String(value || '').toLowerCase().replace(/\s+/g, '-')}`;
+  }
+
+  function outcomeLabel(value) {
+    if (eventType === 'kickout') {
+      return value === 'Retained' ? selectedTeamName : opposingTeamName;
+    }
+    return value;
+  }
+
+  function outcomeMatches(option) {
+    return eventType === 'kickout'
+      ? outcomeLabel(outcome) === option
+      : outcome === option;
+  }
+
+  function chooseOutcome(option) {
+    if (eventType === 'kickout') {
+      outcome = option === selectedTeamName ? 'Retained' : 'Lost';
+      return;
+    }
+    outcome = option;
   }
 </script>
 
@@ -145,12 +177,12 @@
   {/if}
 
   <div class="field-label">Outcome</div>
-  <div class="btn-group outcome-grid">
+  <div class="btn-group outcome-grid {eventType === 'kickout' ? 'kickout-grid' : ''}">
     {#each activeOutcomes as option (option)}
       <button
         type="button"
-        class="seg-btn {outcome === option ? `active ${outcomeClass(option)}` : ''}"
-        on:click={() => (outcome = option)}
+        class="seg-btn {outcomeMatches(option) ? `active ${outcomeClass(option)}` : ''}"
+        on:click={() => chooseOutcome(option)}
       >
         {option}
       </button>
@@ -414,6 +446,10 @@
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 5px;
+  }
+
+  .kickout-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .seg-btn {

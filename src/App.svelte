@@ -8,6 +8,8 @@
   import DigestPanel from './lib/DigestPanel.svelte';
   import LivePanel from './lib/LivePanel.svelte';
   import CaptureForm from './lib/CaptureForm.svelte';
+  import PossessionAnalysisPanel from './lib/PossessionAnalysisPanel.svelte';
+  import PassImpactPanel from './lib/PassImpactPanel.svelte';
   import AdminPanel from './lib/AdminPanel.svelte';
   import {
     analyticsMarkerFill,
@@ -28,20 +30,29 @@
     mergeImportedMatches,
     planImportMerge,
   } from './lib/importMerge.js';
+import {
+  appendDiagnostic,
+  clearDiagnostics,
+  formatDiagnostics,
+  loadDiagnostics,
+} from './lib/diagnostics.js';
+import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisStore.js';
+import {
+  analysisDeleteEntriesFromStates,
+  analysisDeleteKey,
+  analysisStateFromSupabaseRows,
+  analysisStateToSupabaseRows,
+  mergeAnalysisRows,
+} from './lib/analysisSync.js';
   import {
-    appendDiagnostic,
-    clearDiagnostics,
-    formatDiagnostics,
-    loadDiagnostics,
-  } from './lib/diagnostics.js';
-  import {
-    LOCAL_STORAGE_SCOPE,
-    STORAGE_KEYS,
-    parsePendingSyncEntries,
-    parseStoredMeta,
-    readStoredJson,
-    migrateLocalScopeToUserScope,
-    serializeMatchMeta,
+  LOCAL_STORAGE_SCOPE,
+  STORAGE_KEYS,
+  parsePendingSyncEntries,
+  parseAnalysisSyncEntries,
+  parseStoredMeta,
+  readStoredJson,
+  migrateLocalScopeToUserScope,
+  serializeMatchMeta,
     storageKey,
     storageScopeForUser,
   } from './lib/storageScope.js';
@@ -65,6 +76,7 @@
   } from './lib/matchStore.js';
   import { buildScoreSnapshots } from './lib/score.js';
   import { buildKickoutClockTrend } from './lib/analyticsHelpers.js';
+  import { kickoutOutcomeSideOf, normalizeKickoutOutcomeFilterValue } from './lib/kickoutOutcome.js';
   import {
     advanceSyncCursor,
     loadSyncCursor,
@@ -78,7 +90,7 @@
   const WIDTH_M = 90, LENGTH_M = 145;
   const PERIODS = ['H1', 'H2', 'ET'];
   const DEFAULT_PERIOD_CLOCKS = Object.freeze({ H1: '', H2: '', ET: '' });
-  const OUTCOMES = ['Retained', 'Lost'];
+  const OUTCOMES = ['selected', 'opposing'];
   const CONTESTS = ['clean','break','foul','out'];
   const BREAK_OUTS = ['won','lost','neutral'];
 
@@ -129,8 +141,10 @@
   let savedFlash = false;
   let pendingSync = new SvelteMap(); // id -> 'upsert' | 'delete'
   let pendingMatchSync = new SvelteMap(); // id -> 'upsert'
+  let pendingAnalysisDeletes = new SvelteMap(); // key -> { mode, id }
   let syncCursor = loadSyncCursor();
   let forceFullSync = false;
+  let forceAnalysisFullSync = false;
   let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
   let syncMessage = '';
   let metaReady = false;
@@ -140,8 +154,13 @@
   let accountOpen = false;
   let isAdminUser = false;
   let storageScope = supabaseConfigured ? null : LOCAL_STORAGE_SCOPE;
+  let squadPlayers = [];
+  let analysisRefreshToken = 0;
   let editReturnContext = null;
   let pitchResetToken = 0;
+  let analysisRealtimeRefreshTimer = null;
+  let analysisSyncInFlight = false;
+  let analysisSyncQueued = false;
 
   // ── Match entity state ────────────────────────────────────────────────────
   let matches = [];
@@ -365,10 +384,19 @@
     matchPickerOpen = false;
     pendingSync = new SvelteMap();
     pendingMatchSync = new SvelteMap();
+    pendingAnalysisDeletes = new SvelteMap();
     syncStatus = '';
     syncMessage = '';
     syncCursor = { matches: null, events: null };
     forceFullSync = false;
+    forceAnalysisFullSync = false;
+    analysisRefreshToken = 0;
+    if (analysisRealtimeRefreshTimer) {
+      clearTimeout(analysisRealtimeRefreshTimer);
+      analysisRealtimeRefreshTimer = null;
+    }
+    analysisSyncInFlight = false;
+    analysisSyncQueued = false;
     backupReminder = false;
     showSummary = false;
     accountOpen = false;
@@ -525,17 +553,35 @@
     }
   }
 
+  function loadAnalysisRoster(scope = storageScope) {
+    if (!scope) {
+      squadPlayers = [];
+      return;
+    }
+    try {
+      const analysis = loadAnalysisState(scope, { storage: localStorage });
+      squadPlayers = Array.isArray(analysis?.squadPlayers) ? analysis.squadPlayers : [];
+    } catch {
+      squadPlayers = [];
+    }
+  }
+
   function activateStorageScope(scope) {
     metaReady = false;
     storageScope = scope;
     resetRuntimeState();
     if (scope) {
       loadFromLocalStorage(scope);
+      loadAnalysisRoster(scope);
       loadPendingSync(scope);
       loadPendingMatchSync(scope);
+      loadPendingAnalysisDeletes(scope);
       loadMatchesFromStorage(scope);
+    } else {
+      squadPlayers = [];
     }
     forceFullSync = true;
+    forceAnalysisFullSync = true;
     syncSetupDraftFromMatch();
     markDraftPristine();
     metaReady = true;
@@ -728,6 +774,19 @@
       pendingMatchSync = new SvelteMap();
     }
   }
+  function loadPendingAnalysisDeletes(scope = storageScope) {
+    const key = storageKey(STORAGE_KEYS.analysisSync, scope);
+    if (!key) {
+      pendingAnalysisDeletes = new SvelteMap();
+      return;
+    }
+    try {
+      const entries = parseAnalysisSyncEntries(JSON.parse(localStorage.getItem(key) || '[]'));
+      pendingAnalysisDeletes = new SvelteMap(entries.map((entry) => [analysisDeleteKey(entry.mode, entry.id), entry]));
+    } catch {
+      pendingAnalysisDeletes = new SvelteMap();
+    }
+  }
   function savePendingSync() {
     const key = storageKey(STORAGE_KEYS.sync, storageScope);
     if (!key) return;
@@ -748,6 +807,16 @@
       );
     } catch {}
   }
+  function savePendingAnalysisDeletes() {
+    const key = storageKey(STORAGE_KEYS.analysisSync, storageScope);
+    if (!key) return;
+    try {
+      localStorage.setItem(
+        key,
+        JSON.stringify([...pendingAnalysisDeletes.values()])
+      );
+    } catch {}
+  }
   function queuePendingSync(id, op) {
     pendingSync.set(id, op);
     savePendingSync();
@@ -764,18 +833,32 @@
     pendingMatchSync.delete(id);
     savePendingMatchSync();
   }
+  function queuePendingAnalysisDelete(mode, id) {
+    if (!id) return;
+    const key = analysisDeleteKey(mode, id);
+    pendingAnalysisDeletes.set(key, { mode, id });
+    savePendingAnalysisDeletes();
+  }
+  function clearPendingAnalysisDelete(mode, id) {
+    if (!id) return;
+    pendingAnalysisDeletes.delete(analysisDeleteKey(mode, id));
+    savePendingAnalysisDeletes();
+  }
   function refreshSyncStateFromQueues() {
-    if (pendingSync.size === 0 && pendingMatchSync.size === 0) {
+    if (pendingSync.size === 0 && pendingMatchSync.size === 0 && pendingAnalysisDeletes.size === 0) {
       syncStatus = 'synced';
       clearSyncMessage();
     } else if (syncStatus !== 'error') {
       syncStatus = 'syncing';
     }
   }
-  function setSyncError(message) {
+  function setSyncError(message, options = {}) {
     syncStatus = 'error';
     syncMessage = message;
     recordDiagnostic('sync', message);
+    if (options.showNotice !== false) {
+      showNotice('error', message, 7000);
+    }
   }
   function clearSyncMessage() {
     syncMessage = '';
@@ -808,6 +891,7 @@
         isOnline,
         pendingSyncCount: pendingSync.size,
         pendingMatchSyncCount: pendingMatchSync.size,
+        pendingAnalysisDeleteCount: pendingAnalysisDeletes.size,
       },
     });
   }
@@ -830,6 +914,7 @@
       `Sync message: ${syncMessage || 'none'}`,
       `Pending event queue: ${pendingSync.size}`,
       `Pending match queue: ${pendingMatchSync.size}`,
+      `Pending analysis delete queue: ${pendingAnalysisDeletes.size}`,
       `Online: ${isOnline ? 'yes' : 'no'}`,
       '',
       'Recent diagnostics:',
@@ -934,10 +1019,159 @@
   }
 
   // ── Supabase helpers ──────────────────────────────────────────────────────
+  function scheduleAnalysisSync() {
+    if (!supabase || !user || !isOnline) return;
+    if (analysisSyncInFlight) {
+      analysisSyncQueued = true;
+      return;
+    }
+    if (analysisRealtimeRefreshTimer) return;
+    analysisRealtimeRefreshTimer = setTimeout(async () => {
+      analysisRealtimeRefreshTimer = null;
+      await syncAnalysisFromSupabase();
+    }, 250);
+  }
+
+  function refreshAnalysisStateAfterSync(nextState) {
+    if (!nextState) return;
+    if (storageScope) {
+      saveAnalysisState(nextState, storageScope);
+    }
+    squadPlayers = Array.isArray(nextState.squadPlayers) ? nextState.squadPlayers : [];
+    analysisRefreshToken += 1;
+  }
+
+  async function syncAnalysisFromSupabase() {
+    if (!supabase || !user) return;
+    if (!teamId) {
+      setSyncError('Your account has no team assigned yet, so cloud sync is paused.', { showNotice: false });
+      return;
+    }
+    if (analysisSyncInFlight) {
+      analysisSyncQueued = true;
+      return;
+    }
+    analysisSyncInFlight = true;
+    if (analysisRealtimeRefreshTimer) {
+      clearTimeout(analysisRealtimeRefreshTimer);
+      analysisRealtimeRefreshTimer = null;
+    }
+    syncStatus = 'syncing';
+    clearSyncMessage();
+    try {
+      const shouldForceAnalysisRefresh = forceAnalysisFullSync || pendingAnalysisDeletes.size > 0;
+      void shouldForceAnalysisRefresh;
+      const [
+        { data: squadData, error: squadError },
+        { data: possessionSessionData, error: possessionSessionError },
+        { data: possessionEventData, error: possessionEventError },
+        { data: passSessionData, error: passSessionError },
+        { data: passEventData, error: passEventError },
+      ] = await Promise.all([
+        supabase.from('squad_players').select('*').eq('team_id', teamId).order('updated_at', { ascending: true }),
+        supabase.from('possession_sessions').select('*').eq('team_id', teamId).order('updated_at', { ascending: true }),
+        supabase.from('possession_events').select('*').order('created_at', { ascending: true }),
+        supabase.from('pass_sessions').select('*').eq('team_id', teamId).order('updated_at', { ascending: true }),
+        supabase.from('pass_events').select('*').order('created_at', { ascending: true }),
+      ]);
+      if (squadError) throw squadError;
+      if (possessionSessionError) throw possessionSessionError;
+      if (possessionEventError) throw possessionEventError;
+      if (passSessionError) throw passSessionError;
+      if (passEventError) throw passEventError;
+
+      const remoteState = analysisStateFromSupabaseRows({
+        squadPlayers: squadData || [],
+        possessionSessions: possessionSessionData || [],
+        possessionEvents: possessionEventData || [],
+        passSessions: passSessionData || [],
+        passEvents: passEventData || [],
+      });
+      const localState = loadAnalysisState(storageScope, { storage: localStorage });
+      const localRows = analysisStateToSupabaseRows(localState, teamId);
+      const remoteRows = analysisStateToSupabaseRows(remoteState, teamId);
+      const mergedRows = {
+        squadPlayers: mergeAnalysisRows(remoteRows.squadPlayers, localRows.squadPlayers),
+        possessionSessions: mergeAnalysisRows(remoteRows.possessionSessions, localRows.possessionSessions),
+        possessionEvents: mergeAnalysisRows(remoteRows.possessionEvents, localRows.possessionEvents),
+        passSessions: mergeAnalysisRows(remoteRows.passSessions, localRows.passSessions),
+        passEvents: mergeAnalysisRows(remoteRows.passEvents, localRows.passEvents),
+      };
+      const tombstones = [...pendingAnalysisDeletes.values()];
+      const tombstonedSessionIds = new Set(tombstones.map((entry) => entry.id));
+      const filteredRows = {
+        squadPlayers: mergedRows.squadPlayers,
+        possessionSessions: mergedRows.possessionSessions.filter((row) => !tombstonedSessionIds.has(row.id)),
+        possessionEvents: mergedRows.possessionEvents.filter((row) => !tombstonedSessionIds.has(row.session_id)),
+        passSessions: mergedRows.passSessions.filter((row) => !tombstonedSessionIds.has(row.id)),
+        passEvents: mergedRows.passEvents.filter((row) => !tombstonedSessionIds.has(row.session_id)),
+      };
+      const nextState = analysisStateFromSupabaseRows(filteredRows);
+      refreshAnalysisStateAfterSync(nextState);
+
+      const payloads = analysisStateToSupabaseRows(nextState, teamId);
+      if (payloads.squadPlayers.length > 0) {
+        const { error } = await supabase.from('squad_players').upsert(payloads.squadPlayers);
+        if (error) throw error;
+      }
+      if (payloads.possessionSessions.length > 0) {
+        const { error } = await supabase.from('possession_sessions').upsert(payloads.possessionSessions);
+        if (error) throw error;
+      }
+      if (payloads.passSessions.length > 0) {
+        const { error } = await supabase.from('pass_sessions').upsert(payloads.passSessions);
+        if (error) throw error;
+      }
+      if (payloads.possessionEvents.length > 0) {
+        const { error } = await supabase.from('possession_events').upsert(payloads.possessionEvents);
+        if (error) throw error;
+      }
+      if (payloads.passEvents.length > 0) {
+        const { error } = await supabase.from('pass_events').upsert(payloads.passEvents);
+        if (error) throw error;
+      }
+
+      for (const entry of tombstones) {
+        const table = entry.mode === 'pass' ? 'pass_sessions' : 'possession_sessions';
+        const { error } = await supabase.from(table).delete().eq('id', entry.id);
+        if (error) throw error;
+      }
+      for (const entry of tombstones) {
+        clearPendingAnalysisDelete(entry.mode, entry.id);
+      }
+      forceAnalysisFullSync = false;
+      refreshSyncStateFromQueues();
+    } catch (e) {
+      console.error('Analysis sync failed', e);
+      setSyncError(e?.message || 'Analysis sync failed.');
+    } finally {
+      analysisSyncInFlight = false;
+      if (analysisSyncQueued) {
+        analysisSyncQueued = false;
+        scheduleAnalysisSync();
+      }
+    }
+  }
+
+  function handleAnalysisChange(detail = {}) {
+    const previousState = detail.previousState || null;
+    const nextState = detail.state || null;
+    if (previousState && nextState) {
+      for (const entry of analysisDeleteEntriesFromStates(previousState, nextState)) {
+        queuePendingAnalysisDelete(entry.mode, entry.id);
+      }
+    }
+    if (nextState?.squadPlayers) {
+      squadPlayers = Array.isArray(nextState.squadPlayers) ? nextState.squadPlayers : squadPlayers;
+    }
+    scheduleAnalysisSync();
+    refreshSyncStateFromQueues();
+  }
+
   async function syncFromSupabase() {
     if (!supabase || !user) return;
     if (!teamId) {
-      setSyncError('Your account has no team assigned yet, so cloud sync is paused.');
+      setSyncError('Your account has no team assigned yet, so cloud sync is paused.', { showNotice: false });
       return;
     }
     syncStatus = 'syncing';
@@ -1201,7 +1435,9 @@
     const handleOnline = () => {
       isOnline = true;
       forceFullSync = true;
+      forceAnalysisFullSync = true;
       flushSyncQueue();
+      syncAnalysisFromSupabase();
       scheduleRealtimeSync();
     };
     const handleOffline = () => {
@@ -1230,6 +1466,7 @@
                 showNotice('success', `Moved ${migration.eventCount} local event(s) into your signed-in storage.`, 7000);
               }
               await syncFromSupabase();
+              await syncAnalysisFromSupabase();
               if (!disposed) startRealtimeSync();
             } else {
               await supabase.auth.signOut();
@@ -1278,6 +1515,7 @@
             showNotice('success', `Moved ${migration.eventCount} local event(s) into your signed-in storage.`, 7000);
           }
           await syncFromSupabase();
+          await syncAnalysisFromSupabase();
           if (!disposed) startRealtimeSync();
         });
         authSubscription = subscription;
@@ -1308,6 +1546,7 @@
       showNotice('success', `Moved ${migration.eventCount} local event(s) into your signed-in storage.`, 7000);
     }
     await syncFromSupabase();
+    await syncAnalysisFromSupabase();
     startRealtimeSync();
   }
 
@@ -1484,7 +1723,7 @@
     if (eventType === 'kickout' && contest === 'break') {
       if (Number.isNaN(pickup.x) || Number.isNaN(pickup.y))
         return 'For a break, tap the pickup point too.';
-      if (!breakOutcome) return 'Choose break outcome (won / lost / neutral).';
+      if (!breakOutcome) return 'Choose who won the break.';
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(matchDate))
       return 'Match date must be YYYY-MM-DD.';
@@ -2054,6 +2293,7 @@
   $: opposingTeamLabel = direction === 'ours' ? (opponent || 'Theirs') : (team || 'Ours');
   $: turnoverWonTeamLabel = outcome === 'Won' ? selectedTeamLabel : opposingTeamLabel;
   $: turnoverLostTeamLabel = outcome === 'Lost' ? selectedTeamLabel : opposingTeamLabel;
+  $: normalizedKickoutOutcomeFilters = new Set([...fOutcome].map(normalizeKickoutOutcomeFilterValue));
 
   // ── Filtered events for viz & KPIs ───────────────────────────────────────
   $: vizEvents = events.filter(e => {
@@ -2062,7 +2302,7 @@
     const passOpp    = oppFilter === 'ALL' || norm(e.opponent) === oppFilter;
     const passPly    = plyFilter === 'ALL' || norm(e.target_player) === plyFilter;
     const passYTD    = !ytdOnly || eventYear(e) === String(currentYear);
-    const passCO     = !useFilters || evType !== 'kickout' || (fContest.has(e.contest_type) && fOutcome.has(e.outcome));
+    const passCO     = !useFilters || evType !== 'kickout' || (fContest.has(e.contest_type) && normalizedKickoutOutcomeFilters.has(kickoutOutcomeSideOf(e)));
     const passMatch  = matchFilter === 'ALL' || matchKey(e) === matchFilter;
     const passPeriod = periodFilter === 'ALL' || e.period === periodFilter;
     const passFlag   = !flaggedOnly || !!e.flag;
@@ -2079,6 +2319,7 @@
           x: e.x,
           y: e.y,
           outcome: e.outcome,
+          kickoutOutcomeSide: e.event_type === 'kickout' ? kickoutOutcomeSideOf(e) : null,
           contest_type: e.contest_type,
           at_target: !!e.target_player,
           marker_shape: analyticsMarkerShape(e),
@@ -2093,6 +2334,7 @@
               x: e.pickup_x,
               y: e.pickup_y,
               outcome: e.outcome,
+              kickoutOutcomeSide: e.event_type === 'kickout' ? kickoutOutcomeSideOf(e) : null,
               contest_type: e.contest_type,
               at_target: !!e.target_player,
               marker_shape: analyticsMarkerShape(e),
@@ -2292,7 +2534,7 @@
     !flaggedOnly &&
     !ytdOnly &&
     directionFilter === 'ALL' &&
-    (!useFilters || (fContest.size === CONTESTS.length && fOutcome.size === OUTCOMES.length));
+    (!useFilters || (fContest.size === CONTESTS.length && normalizedKickoutOutcomeFilters.size === OUTCOMES.length));
 </script>
 
 <svelte:window on:beforeunload={handleBeforeUnload} />
@@ -2380,7 +2622,7 @@
         {/if}
       </span>
       {#if isOnline && (pendingSync.size > 0 || pendingMatchSync.size > 0)}
-        <button class="sync-banner-btn" on:click={flushSyncQueue}>Sync now</button>
+<button class="sync-banner-btn" on:click={() => { flushSyncQueue(); syncAnalysisFromSupabase(); }}>Sync now</button>
       {/if}
       {#if syncMessage}
         <button class="sync-banner-btn" on:click={clearSyncMessage}>Dismiss</button>
@@ -2405,6 +2647,12 @@
     </button>
     <button type="button" class="tab-btn {activeTab === 'digest' ? 'active' : ''}" on:click={() => switchTab('digest')}>
       Digest
+    </button>
+    <button type="button" class="tab-btn {activeTab === 'analysis-possession' ? 'active' : ''}" on:click={() => switchTab('analysis-possession')}>
+      Possession
+    </button>
+    <button type="button" class="tab-btn {activeTab === 'analysis-pass' ? 'active' : ''}" on:click={() => switchTab('analysis-pass')}>
+      Pass Impact
     </button>
     <button type="button" class="tab-btn {activeTab === 'kickouts' ? 'active' : ''}" on:click={() => switchTab('kickouts')}>
       Kickouts
@@ -2650,6 +2898,46 @@
   </div>
 
   <!-- ══ ANALYTICS TABS (Kickouts / Shots / Turnovers) ══ -->
+  {:else if activeTab === 'analysis-possession'}
+  <div class="full-panel">
+    <PossessionAnalysisPanel
+      {storageScope}
+      {analysisRefreshToken}
+      {activeMatchId}
+      {activeMatch}
+      {matches}
+      {squadPlayers}
+      teamName={activeMatch?.team || team || ''}
+      opponentName={activeMatch?.opponent || opponent || ''}
+      matchLabel={activeMatch
+        ? `${activeMatch.team || team || 'Team'} v ${activeMatch.opponent || opponent || 'Opposition'}${activeMatch.match_date ? ` (${activeMatch.match_date})` : ''}`
+        : ''}
+      playerOptions={playerChoices}
+      defaultOurGoalAtTop={ourGoalAtTop}
+      on:selectMatch={(e) => switchActiveMatch(e.detail)}
+      on:analysischange={(e) => handleAnalysisChange(e.detail)}
+    />
+  </div>
+
+  {:else if activeTab === 'analysis-pass'}
+  <div class="full-panel">
+    <PassImpactPanel
+      {storageScope}
+      {analysisRefreshToken}
+      {activeMatchId}
+      {activeMatch}
+      {squadPlayers}
+      teamName={activeMatch?.team || team || ''}
+      opponentName={activeMatch?.opponent || opponent || ''}
+      matchLabel={activeMatch
+        ? `${activeMatch.team || team || 'Team'} v ${activeMatch.opponent || opponent || 'Opposition'}${activeMatch.match_date ? ` (${activeMatch.match_date})` : ''}`
+        : ''}
+      playerOptions={playerChoices}
+      defaultOurGoalAtTop={ourGoalAtTop}
+      on:analysischange={(e) => handleAnalysisChange(e.detail)}
+    />
+  </div>
+
   {:else if activeTab === 'kickouts' || activeTab === 'shots' || activeTab === 'turnovers'}
   <div class="full-panel">
     {#key activeTab}
@@ -2669,6 +2957,8 @@
         {CONTESTS}
         {OUTCOMES}
         {retTrend}
+        teamName={team}
+        opponentName={opponent}
         bind:matchFilter
         bind:oppFilter
         bind:plyFilter
@@ -2713,7 +3003,17 @@
   </div>
   {:else}
   <div class="full-panel">
-    <AdminPanel {user} {teamName} on:diagnostic={() => diagnostics = loadDiagnostics()} />
+    <AdminPanel
+      {user}
+      {teamName}
+      {storageScope}
+      {analysisRefreshToken}
+      on:diagnostic={() => diagnostics = loadDiagnostics()}
+    on:rosterchange={() => {
+      loadAnalysisRoster(storageScope);
+      scheduleAnalysisSync();
+    }}
+  />
   </div>
   {/if}
   {/if}

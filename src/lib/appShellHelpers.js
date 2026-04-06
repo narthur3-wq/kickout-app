@@ -1,3 +1,5 @@
+import { kickoutOutcomeSideOf } from './kickoutOutcome.js';
+
 export function normText(value) {
   return (value ?? '').trim().toLowerCase();
 }
@@ -44,8 +46,8 @@ export function analyticsMarkerFill(event) {
     return '#d97706';
   }
 
-  if (outcome === 'retained' || outcome === 'won' || outcome === 'score') return '#16a34a';
-  if (outcome === 'lost') return '#dc2626';
+  if (kickoutOutcomeSideOf(event) === 'selected') return '#16a34a';
+  if (kickoutOutcomeSideOf(event) === 'opposing') return '#dc2626';
   return '#d97706';
 }
 

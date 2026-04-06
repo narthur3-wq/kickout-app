@@ -4,12 +4,15 @@
 
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { isValidPoint, normalizePoint } from './postMatchAnalysis.js';
 
   export let flip = false;
   export let contestType: 'clean'|'break'|'foul'|'out' = 'clean';
   export let landing = { x: NaN, y: NaN };
   export let pickup  = { x: NaN, y: NaN };
   export let overlays: Array<any> = [];
+  export let connections: Array<any> = [];
+  export let interactive = true;
   export let showZoneLabels = false;
   export let showZoneLegend = showZoneLabels;
   export let resetToken = 0;
@@ -63,6 +66,7 @@
   }
 
   function handleClick(e: MouseEvent) {
+    if (!interactive) return;
     const pos = getPoint(e);
     if (contestType === 'break') {
       if (!awaitingPickup) { awaitingPickup = true;  dispatch('landed', pos); }
@@ -73,6 +77,7 @@
   // Keyboard crosshair — kb in normalised coords (x=side, y=depth)
   let kb = { x: 0.5, y: 0.5 };
   function handleKeydown(e: KeyboardEvent) {
+    if (!interactive) return;
     const s = 0.02;
     if (e.key === 'ArrowUp')    kb = { ...kb, x: Math.max(0, kb.x - s) };
     if (e.key === 'ArrowDown')  kb = { ...kb, x: Math.min(1, kb.x + s) };
@@ -128,6 +133,57 @@
     return o?.marker_ring_color || 'rgba(255,255,255,0.9)';
   }
 
+  function connectionPoint(connection: any, prefix: 'from' | 'to') {
+    if (!connection || typeof connection !== 'object') return { x: NaN, y: NaN };
+    if (connection[prefix]) return normalizePoint(connection[prefix]);
+    return normalizePoint({
+      x: connection[`${prefix}_x`],
+      y: connection[`${prefix}_y`],
+    });
+  }
+
+  function connectionColor(connection: any) {
+    return connection?.color || connection?.stroke || 'rgba(28,63,138,0.78)';
+  }
+
+  function connectionWidth(connection: any) {
+    const width = Number(connection?.width ?? connection?.stroke_width ?? 1.5);
+    return Number.isFinite(width) ? width : 1.5;
+  }
+
+  function connectionDash(connection: any) {
+    return connection?.dasharray || (connection?.dashed ? '4 3' : null);
+  }
+
+  function connectionArrowSize(connection: any) {
+    const size = Number(connection?.arrow_size ?? 2.4);
+    return Number.isFinite(size) ? size : 2.4;
+  }
+
+  function connectionIsClickable(connection: any) {
+    return connection?.clickable !== false;
+  }
+
+  function connectionLabel(connection: any) {
+    return connection?.label || 'Pitch connection';
+  }
+
+  function overlayIsClickable(o: any) {
+    return o?.clickable !== false;
+  }
+
+  function connectionKeydown(event: KeyboardEvent, connection: any, index: number) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    dispatch('connectionclick', { connection, index });
+  }
+
+  function overlayKeydown(event: KeyboardEvent, overlay: any, index: number) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    dispatch('overlayclick', { overlay, index });
+  }
+
   const SZ = 2.0;
 </script>
 
@@ -141,6 +197,10 @@
     display: flex; gap: 12px; justify-content: center;
     font-size: 10px; color: #6b7280; padding: 4px 0;
     flex-shrink: 0;
+  }
+  .clickable:focus-visible {
+    outline: 2px solid rgba(255,255,255,0.9);
+    outline-offset: 2px;
   }
 </style>
 
@@ -266,8 +326,69 @@
     />
   </g>
 
+  <!-- pass / carry connections -->
+  <g>
+    {#each connections as connection, index (`${connection.id ?? 'connection'}-${index}`)}
+      {@const from = connectionPoint(connection, 'from')}
+      {@const to = connectionPoint(connection, 'to')}
+      {#if isValidPoint(from) && isValidPoint(to)}
+        {@const sx = svgX(from)}
+        {@const sy = svgY(from)}
+        {@const tx = svgX(to)}
+        {@const ty = svgY(to)}
+        {@const color = connectionColor(connection)}
+        {@const width = connectionWidth(connection)}
+        {@const dash = connectionDash(connection)}
+        {@const arrowSize = connectionArrowSize(connection)}
+        {@const angle = Math.atan2(ty - sy, tx - sx)}
+        {@const arrowBackX = tx - Math.cos(angle) * arrowSize}
+        {@const arrowBackY = ty - Math.sin(angle) * arrowSize}
+        {@const perpX = Math.cos(angle + Math.PI / 2) * (arrowSize * 0.45)}
+        {@const perpY = Math.sin(angle + Math.PI / 2) * (arrowSize * 0.45)}
+        <g opacity={connection.opacity ?? 0.78}>
+          <line
+            x1={sx}
+            y1={sy}
+            x2={tx}
+            y2={ty}
+            stroke={color}
+            stroke-width={width}
+            stroke-linecap="round"
+            stroke-dasharray={dash}
+            vector-effect="non-scaling-stroke"
+          />
+          {#if connection.arrow !== false}
+            <polygon
+              points={`${tx},${ty} ${arrowBackX + perpX},${arrowBackY + perpY} ${arrowBackX - perpX},${arrowBackY - perpY}`}
+              fill={color}
+              opacity="0.95"
+            />
+          {/if}
+          {#if connectionIsClickable(connection)}
+            <line
+              class:clickable={true}
+              x1={sx}
+              y1={sy}
+              x2={tx}
+              y2={ty}
+              stroke="rgba(255,255,255,0.001)"
+              stroke-width={Math.max(width + 5, 7)}
+              stroke-linecap="round"
+              pointer-events="stroke"
+              role="button"
+              tabindex="0"
+              aria-label={connectionLabel(connection)}
+              on:click={() => dispatch('connectionclick', { connection, index })}
+              on:keydown={(event) => connectionKeydown(event, connection, index)}
+            />
+          {/if}
+        </g>
+      {/if}
+    {/each}
+  </g>
+
   <!-- overlays -->
-  <g style="pointer-events:none">
+  <g>
     {#each overlays as o, index (`${o.id ?? 'overlay'}-${index}`)}
       {@const sx = svgX(o)}
       {@const sy = svgY(o)}
@@ -275,56 +396,66 @@
       {@const shape = overlayShape(o)}
       {@const ring = overlayRing(o)}
       {@const ringColor = overlayRingColor(o)}
-      {#if shape === 'triangle'}
-        <polygon
-          points={`${sx},${sy-SZ} ${sx-SZ*.9},${sy+SZ*.7} ${sx+SZ*.9},${sy+SZ*.7}`}
-          fill={col}
-          stroke="rgba(255,255,255,0.75)"
-          stroke-width="0.55"
-          vector-effect="non-scaling-stroke"
-        />
-      {:else if shape === 'diamond'}
-        <polygon
-          points={`${sx},${sy-SZ} ${sx-SZ},${sy} ${sx},${sy+SZ} ${sx+SZ},${sy}`}
-          fill={col}
-          stroke="rgba(255,255,255,0.75)"
-          stroke-width="0.55"
-          vector-effect="non-scaling-stroke"
-        />
-      {:else if shape === 'square'}
-        <rect
-          x={sx - SZ * 0.88}
-          y={sy - SZ * 0.88}
-          width={SZ * 1.76}
-          height={SZ * 1.76}
-          fill={col}
-          stroke="rgba(255,255,255,0.75)"
-          stroke-width="0.55"
-          vector-effect="non-scaling-stroke"
-        />
-      {:else}
-        <circle
-          cx={sx}
-          cy={sy}
-          r={SZ * 0.92}
-          fill={col}
-          stroke="rgba(255,255,255,0.75)"
-          stroke-width="0.55"
-          vector-effect="non-scaling-stroke"
-        />
-      {/if}
-      {#if ring}
-        <circle
-          cx={sx}
-          cy={sy}
-          r={SZ * 1.55}
-          fill="none"
-          stroke={ringColor}
-          stroke-width={ring === 'goal-attempt' ? 0.9 : 0.7}
-          stroke-dasharray={ring === 'target' ? '1.6 1.2' : null}
-          vector-effect="non-scaling-stroke"
-        />
-      {/if}
+      <g
+        class:clickable={overlayIsClickable(o)}
+        style={overlayIsClickable(o) ? 'pointer-events:auto; cursor:pointer;' : 'pointer-events:none;'}
+        role={overlayIsClickable(o) ? 'button' : undefined}
+        tabindex={overlayIsClickable(o) ? '0' : undefined}
+        aria-label={o?.label || 'Pitch marker'}
+        on:click={() => overlayIsClickable(o) && dispatch('overlayclick', { overlay: o, index })}
+        on:keydown={(event) => overlayIsClickable(o) && overlayKeydown(event, o, index)}
+      >
+        {#if shape === 'triangle'}
+          <polygon
+            points={`${sx},${sy-SZ} ${sx-SZ*.9},${sy+SZ*.7} ${sx+SZ*.9},${sy+SZ*.7}`}
+            fill={col}
+            stroke="rgba(255,255,255,0.75)"
+            stroke-width="0.55"
+            vector-effect="non-scaling-stroke"
+          />
+        {:else if shape === 'diamond'}
+          <polygon
+            points={`${sx},${sy-SZ} ${sx-SZ},${sy} ${sx},${sy+SZ} ${sx+SZ},${sy}`}
+            fill={col}
+            stroke="rgba(255,255,255,0.75)"
+            stroke-width="0.55"
+            vector-effect="non-scaling-stroke"
+          />
+        {:else if shape === 'square'}
+          <rect
+            x={sx - SZ * 0.88}
+            y={sy - SZ * 0.88}
+            width={SZ * 1.76}
+            height={SZ * 1.76}
+            fill={col}
+            stroke="rgba(255,255,255,0.75)"
+            stroke-width="0.55"
+            vector-effect="non-scaling-stroke"
+          />
+        {:else}
+          <circle
+            cx={sx}
+            cy={sy}
+            r={SZ * 0.92}
+            fill={col}
+            stroke="rgba(255,255,255,0.75)"
+            stroke-width="0.55"
+            vector-effect="non-scaling-stroke"
+          />
+        {/if}
+        {#if ring}
+          <circle
+            cx={sx}
+            cy={sy}
+            r={SZ * 1.55}
+            fill="none"
+            stroke={ringColor}
+            stroke-width={ring === 'goal-attempt' ? 0.9 : 0.7}
+            stroke-dasharray={ring === 'target' ? '1.6 1.2' : null}
+            vector-effect="non-scaling-stroke"
+          />
+        {/if}
+      </g>
     {/each}
   </g>
 

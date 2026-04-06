@@ -459,3 +459,7 @@ This sprint is explicitly out of scope for the current implementation pass.
 - Do not add a heavyweight global state library before extracting the existing shell concerns.
 - Do not introduce a complex monitoring stack before defining who will read and act on the signals.
 - Do not broaden the product into a generic season-management platform while launch blockers remain open.
+
+## Post-Launch Product Track (Not In Go-Live Scope)
+
+Phase 2 post-match analysis is implemented and tracked in `documentation/post-match-player-analysis.md` and the A-series backlog. It is not a launch remediation item. If the launch build exposes the analysis tabs, the Supabase analysis migration should be present in the target environment.

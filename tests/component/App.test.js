@@ -10,10 +10,16 @@ const mockState = vi.hoisted(() => {
   const selectOrderMock = vi.fn();
   const selectGtMock = vi.fn(() => ({ order: selectOrderMock }));
   const selectEqMock = vi.fn(() => ({ gt: selectGtMock, order: selectOrderMock }));
-  const selectMock = vi.fn(() => ({ eq: selectEqMock }));
+  const selectMock = vi.fn(() => ({ eq: selectEqMock, order: selectOrderMock }));
   const upsertMock = vi.fn();
   const deleteEqMock = vi.fn();
   const deleteMock = vi.fn(() => ({ eq: deleteEqMock }));
+  const analysisSelectOrderMock = vi.fn();
+  const analysisSelectEqMock = vi.fn(() => ({ order: analysisSelectOrderMock }));
+  const analysisSelectMock = vi.fn(() => ({ eq: analysisSelectEqMock, order: analysisSelectOrderMock }));
+  const analysisUpsertMock = vi.fn();
+  const analysisDeleteEqMock = vi.fn();
+  const analysisDeleteMock = vi.fn(() => ({ eq: analysisDeleteEqMock }));
   const realtimeHandlers = [];
   const fromMock = vi.fn(() => ({
     select: selectMock,
@@ -45,6 +51,12 @@ const mockState = vi.hoisted(() => {
     upsertMock,
     deleteEqMock,
     deleteMock,
+    analysisSelectOrderMock,
+    analysisSelectEqMock,
+    analysisSelectMock,
+    analysisUpsertMock,
+    analysisDeleteEqMock,
+    analysisDeleteMock,
     fromMock,
     channelFactoryMock: vi.fn(() => channelMock),
     channelMock,
@@ -141,15 +153,31 @@ describe('App shell auth and sync', () => {
     mockState.selectOrderMock.mockReset().mockResolvedValue({ data: [], error: null });
     mockState.selectGtMock.mockReset().mockImplementation(() => ({ order: mockState.selectOrderMock }));
     mockState.selectEqMock.mockReset().mockImplementation(() => ({ gt: mockState.selectGtMock, order: mockState.selectOrderMock }));
-    mockState.selectMock.mockReset().mockImplementation(() => ({ eq: mockState.selectEqMock }));
+    mockState.selectMock.mockReset().mockImplementation(() => ({ eq: mockState.selectEqMock, order: mockState.selectOrderMock }));
     mockState.upsertMock.mockReset().mockResolvedValue({ error: null });
     mockState.deleteEqMock.mockReset().mockResolvedValue({ error: null });
     mockState.deleteMock.mockReset().mockImplementation(() => ({ eq: mockState.deleteEqMock }));
-    mockState.fromMock.mockReset().mockImplementation(() => ({
-      select: mockState.selectMock,
-      upsert: mockState.upsertMock,
-      delete: mockState.deleteMock,
-    }));
+    mockState.analysisSelectOrderMock.mockReset().mockResolvedValue({ data: [], error: null });
+    mockState.analysisSelectEqMock.mockReset().mockImplementation(() => ({ order: mockState.analysisSelectOrderMock }));
+    mockState.analysisSelectMock.mockReset().mockImplementation(() => ({ eq: mockState.analysisSelectEqMock, order: mockState.analysisSelectOrderMock }));
+    mockState.analysisUpsertMock.mockReset().mockResolvedValue({ error: null });
+    mockState.analysisDeleteEqMock.mockReset().mockResolvedValue({ error: null });
+    mockState.analysisDeleteMock.mockReset().mockImplementation(() => ({ eq: mockState.analysisDeleteEqMock }));
+    mockState.fromMock.mockReset().mockImplementation((tableName) => {
+      const analysisTables = new Set([
+        'squad_players',
+        'possession_sessions',
+        'possession_events',
+        'pass_sessions',
+        'pass_events',
+      ]);
+      const isAnalysisTable = analysisTables.has(tableName);
+      return {
+        select: isAnalysisTable ? mockState.analysisSelectMock : mockState.selectMock,
+        upsert: isAnalysisTable ? mockState.analysisUpsertMock : mockState.upsertMock,
+        delete: isAnalysisTable ? mockState.analysisDeleteMock : mockState.deleteMock,
+      };
+    });
     mockState.channelFactoryMock.mockReset().mockImplementation(() => mockState.channelMock);
     mockState.channelMock.on.mockReset().mockImplementation((...args) => {
       mockState.realtimeHandlers.push(args);
@@ -216,6 +244,17 @@ describe('App shell auth and sync', () => {
     expect(localStorage.getItem(storageKey(STORAGE_KEYS.events, LOCAL_STORAGE_SCOPE))).toBeNull();
     expect(JSON.parse(localStorage.getItem(storageKey(STORAGE_KEYS.events, 'user:user-1')))).toHaveLength(1);
     expect(mockState.upsertMock).toHaveBeenCalled();
+  });
+
+  it('shows the post-match analysis tabs in the authenticated shell', async () => {
+    const session = { user: { id: 'user-1', email: 'analyst@example.com' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    await renderApp();
+
+    expect(await screen.findByRole('button', { name: 'Possession' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pass Impact' })).toBeInTheDocument();
   });
 
   it('shows a paused sync warning and blocks saving when the user has no team assignment', async () => {

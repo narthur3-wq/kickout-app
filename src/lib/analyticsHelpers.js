@@ -1,3 +1,5 @@
+import { kickoutOutcomeSideOf } from './kickoutOutcome.js';
+
 const RETAINED = new Set(['retained', 'score', 'won']);
 
 function outcomeOf(event) {
@@ -95,7 +97,7 @@ export function buildKickoutClockTrend(events = [], analyticsEventType = 'ALL') 
     const bucket = buckets.find((candidate) => absoluteMinutes >= candidate.lo && absoluteMinutes < candidate.hi);
     if (!bucket) continue;
     bucket.tot += 1;
-    if (RETAINED.has(outcomeOf(event))) bucket.ret += 1;
+    if (kickoutOutcomeSideOf(event) === 'selected' || RETAINED.has(outcomeOf(event))) bucket.ret += 1;
   }
 
   return buckets

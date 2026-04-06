@@ -340,3 +340,4 @@ The release gate is substantially healthier after the in-session fixes:
 - No real multi-device signed-in sync session was exercised.
 - No Lighthouse or WebPageTest run was performed; performance findings are based on build output, repo structure, and observed layout behavior.
 - Because this is a specialist app rather than a marketing site, SEO/social metadata may be intentionally low priority.
+- Post-match Phase 2 cross-match aggregation, roster identity, Supabase sync, and trend comparison are implemented; they remain tracked as product functionality rather than go-live remediation.

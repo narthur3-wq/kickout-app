@@ -61,14 +61,14 @@ test('captures a live event and restores the match after reload', async ({ page 
 
   await page.getByRole('button', { name: /Events/i }).click();
   await expect(page.getByRole('cell', { name: 'Crokes' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Retained' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Clontarf' })).toBeVisible();
 
   await page.reload();
 
   await expect(page.locator('button.match-ctx-bar')).toContainText('Clontarf vs Crokes');
   await page.getByRole('button', { name: /Events/i }).click();
   await expect(page.getByRole('cell', { name: 'Crokes' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Retained' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Clontarf' })).toBeVisible();
 });
 
 test('clear points fully resets the break capture flow on the pitch', async ({ page }) => {
@@ -345,7 +345,8 @@ test('analytics legends update to match the active tab', async ({ page }) => {
   await expect(legend.getByText('Blocked')).toBeVisible();
 
   await page.getByRole('button', { name: /^Kickouts/i }).click();
-  await expect(legend.getByText('Successful')).toBeVisible();
+  await expect(legend.getByText('Clontarf')).toBeVisible();
+  await expect(legend.getByText('Crokes')).toBeVisible();
   await expect(legend.getByText('Dead-ball / foul')).toBeVisible();
   await expect(legend.getByText('Targeted player')).toBeVisible();
   await expect(legend.getByText('Goal attempt')).toHaveCount(0);
