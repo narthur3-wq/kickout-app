@@ -56,7 +56,8 @@ describe('Pitch', () => {
     expect(screen.getByText('C')).toBeInTheDocument();
     expect(screen.getByText('R')).toBeInTheDocument();
     expect(screen.getAllByText('20').length).toBeGreaterThan(0);
-    expect(container.querySelector('circle[stroke-dasharray="1.6 1.2"]')).not.toBeNull();
+    expect(container.querySelector('circle[stroke="rgba(255,255,255,0.98)"]')).not.toBeNull();
+    expect(container.querySelector('circle[stroke-width="2"]')).not.toBeNull();
     expect(container.querySelector('circle[stroke-width="0.9"]')).not.toBeNull();
   });
 

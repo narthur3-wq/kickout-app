@@ -254,7 +254,7 @@ describe('App shell auth and sync', () => {
     await renderApp();
 
     expect(await screen.findByRole('button', { name: 'Possession' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Pass Impact' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pass Destination' })).toBeInTheDocument();
   });
 
   it('shows a paused sync warning and blocks saving when the user has no team assignment', async () => {

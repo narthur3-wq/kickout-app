@@ -1,245 +1,154 @@
 # Go-Live Remediation Roadmap
 
-This roadmap mirrors the sprint grouping in `docs/go-live/backlog.md`. It is the short version of the plan; use the backlog for full acceptance criteria and file references.
+Audit date: 2026-04-06
 
-## Completed During Prior Audit
+This roadmap maps directly to the findings in `docs/go-live/audit.md` and the execution items in `docs/go-live/backlog.md`.
 
-### Objective
+## Phase 0 - Blockers before launch
 
-Clear the immediate validation and usability blockers that prevented even a conditional launch recommendation.
+Objective:
 
-### Delivered
+- Make the release gate trustworthy and prove the real launch environment for any Supabase-backed scope.
 
-- `BL-01` fixed the analytics landscape overflow and restored a green layout spec.
-- `BL-02` restored a green `npm run test:unit`.
-- `BL-03` restored a green `npm run test:coverage`.
+Exact tasks:
 
-### Risk reduction achieved
+- `BL-01` Stabilize or replace the broken coverage gate so `npm run test:coverage` and `npm run check:full` are deterministic on the approved release path.
+- `BL-02` Run the Supabase smoke path against staging or the real launch environment and record the result.
+- `BL-03` Verify `ALLOWED_ORIGIN`, Supabase Auth redirect URLs, and any invite/reset dependencies against the deployed domain.
 
-- Removed the universal launch blockers found in the first audit pass.
-- Restored trust in the local validation path.
+Dependencies:
 
-## Sprint 0 - Release Hygiene And Handoff
+- Access to the actual launch environment and smoke credentials.
+- Agreement on whether cloud auth/sync and admin onboarding are in launch scope.
 
-### Objective
-
-Decide whether the prior audit bundle should ship as one coherent set, then close the release-readiness gap around typechecking.
-
-### Exact tasks
-
-- Resolve the prior audit bundle as one unit.
-- Keep or discard the dirty audit files together rather than piecemeal.
-- Add a supported `typecheck` command and make it green.
-
-### Dependencies
-
-- Agreement on whether the audit bundle is being kept.
-- A valid typecheck scope for the app sources.
-
-### Owner type needed
-
-- frontend/product engineer
-- repo hygiene owner
-
-### Acceptance criteria
-
-- The audit bundle decision is recorded.
-- The go-live docs remain internally consistent.
-- `npm run typecheck` exists and passes, or there is a documented reason it is deferred.
-
-### Risk reduction achieved
-
-- Keeps the release story coherent before the feature sprints begin.
-
-## Sprint 1 - Trust The Data
-
-### Objective
-
-Make the kickout story and sync story trustworthy enough that coaches can rely on the app in live use.
-
-### Exact tasks
-
-- Align kickout capture semantics and analytics totals with live operator expectations.
-- Add an explicit sync banner and manual push path for pending cloud data.
-- Execute the Supabase smoke path against the actual launch environment.
-
-### Dependencies
-
-- Launch environment and smoke credentials.
-- A settled decision on whether cloud sync is in launch scope.
-
-### Owner type needed
-
-- frontend/product engineer
-- QA / release engineer
-- auth/sync owner
-
-### Acceptance criteria
-
-- Kickout labels and analytics use the same perspective.
-- The sync banner is visible and can trigger a manual flush.
-- The launch-environment smoke path is either proven or explicitly deferred by scope decision.
-
-### Risk reduction achieved
-
-- Prevents the trust-breaking "data is there, but the tab says otherwise" failure mode.
-
-## Sprint 2 - Live Capture Reliability
-
-### Objective
-
-Make live entry fast and obvious on the devices people actually use at the sideline or in the stand.
-
-### Exact tasks
-
-- Fit full capture data entry without scrolling on iPad landscape.
-- Replace the shared clock with remembered per-period clocks and safe paused defaults.
-- Reorder capture so `Team` leads the flow on every screen size.
-- Make Events edit/delete actions obvious and left-aligned.
-
-### Dependencies
-
-- A stable capture layout target.
-- Agreement on the period-clock model.
-
-### Owner type needed
+Owner type needed:
 
 - frontend engineer
-- UX-minded product engineer
+- QA / release engineer
+- Supabase / platform owner
 
-### Acceptance criteria
+Estimated effort:
 
-- Capture stays visible without scrolling on the target iPad landscape viewport.
-- `H1`, `H2`, and `ET` each remember their own clock.
-- `Team` appears above `Type`.
-- Events actions are obvious at a glance.
+- M
 
-### Risk reduction achieved
+Acceptance criteria:
 
-- Reduces operator friction in the highest-pressure part of the product.
+- `npm run test:coverage` either passes reliably on the supported release machine or is replaced by a deterministic approved coverage command.
+- `npm run check:full` is trustworthy again.
+- `npm run test:smoke` passes, or the repo explicitly documents that cloud scope is deferred.
+- Admin onboarding and password reset are verified end-to-end against the real domain.
 
-## Sprint 3 - Match Model And Launch Hardening
+Risk reduction achieved:
 
-### Objective
+- Removes the two conditions currently blocking an unconditional launch recommendation.
 
-Extend the match model so it matches the real game, then close the highest-value usability and observability gaps.
+## Phase 1 - Must-fix before launch
 
-### Exact tasks
+Objective:
 
-- Extend shot capture and scoring for `Dropped short` and `Two Point`.
-- Close the high-value accessibility gaps in login, search, pitch, and the summary modal.
-- Add a minimal production observability path.
+- Reduce the biggest operational, accessibility, and performance risks without adding large abstractions.
 
-### Dependencies
+Exact tasks:
 
-- Stable capture and scoring semantics from Sprint 2.
-- Agreement on the minimum launch accessibility and monitoring bar.
+- `BL-04` Add a supportable operator-visible path for sync, onboarding, and share failures beyond device-local diagnostics.
+- `BL-05` Close key accessibility gaps on login, pitch, summary modal, and event search, and add one automated a11y regression check.
+- `BL-06` Decide and document the offline fail-open access policy and device-loss/revocation handling.
+- `BL-07` Put a simple budget around first-load cost and defer one non-core surface if it materially improves install/open performance.
+- `BL-08` Add a Windows validation path or a required pre-release Windows check.
 
-### Owner type needed
+Dependencies:
 
-- senior frontend/product engineer
-- accessibility-aware UI engineer
-- release/ops partner
+- Phase 0 complete.
+- Agreement on the minimum acceptable launch-day support posture.
 
-### Acceptance criteria
+Owner type needed:
 
-- The new shot taxonomy is represented consistently end-to-end.
-- Key controls are keyboard and screen-reader sensible.
-- Critical production failures can be reviewed somewhere outside the dev console.
+- frontend engineer
+- UX / accessibility-minded product engineer
+- release / operations owner
 
-### Risk reduction achieved
+Estimated effort:
 
-- Makes the app safer to use in real matches and easier to support after launch.
+- M
 
-## Sprint 4 - Performance And Change Safety
+Acceptance criteria:
 
-### Objective
+- Support staff can review critical client failures somewhere other than browser console only.
+- Key controls have explicit accessible names and sane keyboard behavior.
+- The access-revocation policy is documented and approved.
+- The build has an explicit bundle target and at least one measured improvement or approved exception.
+- The supported-platform validation path is documented and repeatable.
 
-Make the app cheaper to load and safer to change without rewriting the shell.
+Risk reduction achieved:
 
-### Exact tasks
+- Cuts the highest-value launch-day support and usability risks without a rewrite.
 
-- Reduce first-load cost where there is clear low-churn payoff.
-- Extract the highest-risk shell concerns out of `src/App.svelte`.
-- Expand validation coverage beyond Ubuntu-only CI.
+## Phase 2 - Should-fix shortly after launch
 
-### Dependencies
+Objective:
 
-- A stable regression suite.
-- The supported typecheck gate from Sprint 0.
+- Improve change safety and repo clarity once launch-critical work is complete.
 
-### Owner type needed
+Exact tasks:
+
+- `BL-09` Extract auth, sync, import/export, and diagnostics seams out of `src/App.svelte`.
+- `BL-10` Separate source docs from generated artifacts and document the real deployment artifact path.
+- `BL-11` Refresh lagging patch/minor dependencies in small validated batches.
+
+Dependencies:
+
+- Launch gate stable.
+- A calm post-launch window with time for low-risk refactoring and cleanup.
+
+Owner type needed:
 
 - senior frontend engineer
-- repo/platform engineer
+- repo / platform engineer
 
-### Acceptance criteria
+Estimated effort:
 
-- The main entry path is lighter or explicitly justified.
-- `src/App.svelte` is less monolithic.
-- Validation covers the supported platform risk better than Ubuntu-only CI.
+- L
 
-### Risk reduction achieved
+Acceptance criteria:
 
-- Lowers future regression risk and improves contributor confidence.
+- `src/App.svelte` is materially smaller in responsibility, not just moved around cosmetically.
+- Docs/build artifact ownership is obvious to a new contributor.
+- Dependency refreshes land in small green batches with no release regression.
 
-## Sprint 5 - Repo And Platform Cleanup
+Risk reduction achieved:
 
-### Objective
+- Lowers future regression cost and makes the repo easier to maintain after launch.
 
-Tidy the repository and surrounding release hygiene so the project is easier to maintain after launch.
+## Phase 3 - Later improvements
 
-### Exact tasks
+Objective:
 
-- Separate source docs from generated static artifacts.
-- Refresh lagging dependencies in small verified batches.
-- Add public metadata only if the deployed URL is truly public-facing.
+- Only pursue deeper improvements when usage data proves the payoff.
 
-### Dependencies
+Exact tasks:
 
-- Product decision on whether the app is public-facing.
+- Revisit broader performance work if first-install pain shows up in field feedback.
+- Expand observability if the user base or support burden grows beyond a small trusted team.
+- Add public metadata or product analytics only if the app becomes public-facing and those signals matter.
 
-### Owner type needed
+Dependencies:
 
-- repo/platform engineer
-- product engineer
+- Real post-launch usage data.
 
-### Acceptance criteria
-
-- Docs, build artifacts, and metadata each live in the right place.
-- Dependency refreshes land in small, green batches.
-
-### Risk reduction achieved
-
-- Makes the repo easier to reason about after launch without distracting from the core product work.
-
-## Sprint 6 - Later Product Decision
-
-### Objective
-
-Decide whether a secondary total-match-time display is worth shipping after the half-by-half clock model has been proven in use.
-
-### Exact tasks
-
-- Evaluate whether a secondary total-match-time display adds real coaching value.
-
-### Dependencies
-
-- The period-specific clock model from Sprint 2.
-
-### Owner type needed
+Owner type needed:
 
 - product engineer
+- platform / ops partner
 
-### Acceptance criteria
+Estimated effort:
 
-- The product decision is documented before implementation.
-- Any added display stays secondary to the per-period clocks.
+- M
 
-### Risk reduction achieved
+Acceptance criteria:
 
-- Keeps the timing model focused until there is evidence the extra display is worth the extra complexity.
+- Each later improvement is justified by measured usage pain or clear product need.
+- No speculative rewrite is introduced in the name of “future-proofing”.
 
-## Product Scope Note — Post-Match Analysis Phase 2 (Post-Launch Track)
+Risk reduction achieved:
 
-Phase 2 post-match analysis is implemented and tracked separately from go-live remediation. If the feature is exposed in the launch build, the Supabase analysis migration should already be present; otherwise it stays outside the launch roadmap.
+- Keeps the roadmap pragmatic and prevents over-engineering after launch.

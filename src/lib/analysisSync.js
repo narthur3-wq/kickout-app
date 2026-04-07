@@ -72,6 +72,7 @@ export function analysisStateToSupabaseRows(state = {}, teamId = null) {
     squad_player_id: session.squad_player_id ?? null,
     player_name: session.player_name,
     our_goal_at_top: session.our_goal_at_top !== false,
+    half: session.half ?? null,
     notes: session.notes || null,
     created_at: session.created_at,
     updated_at: session.updated_at,
@@ -99,6 +100,7 @@ export function analysisStateToSupabaseRows(state = {}, teamId = null) {
       release_y: event.release_y,
       outcome: event.outcome,
       under_pressure: !!event.under_pressure,
+      assist: !!event.assist,
       created_at: event.created_at,
     }))
   );

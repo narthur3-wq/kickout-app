@@ -445,16 +445,37 @@
           />
         {/if}
         {#if ring}
-          <circle
-            cx={sx}
-            cy={sy}
-            r={SZ * 1.55}
-            fill="none"
-            stroke={ringColor}
-            stroke-width={ring === 'goal-attempt' ? 0.9 : 0.7}
-            stroke-dasharray={ring === 'target' ? '1.6 1.2' : null}
-            vector-effect="non-scaling-stroke"
-          />
+          {#if ring === 'target'}
+            <circle
+              cx={sx}
+              cy={sy}
+              r={SZ * 1.4}
+              fill="none"
+              stroke="rgba(255,255,255,0.98)"
+              stroke-width="3"
+              vector-effect="non-scaling-stroke"
+            />
+            <circle
+              cx={sx}
+              cy={sy}
+              r={SZ * 1.4}
+              fill="none"
+              stroke={ringColor}
+              stroke-width="2"
+              vector-effect="non-scaling-stroke"
+            />
+          {:else}
+            <circle
+              cx={sx}
+              cy={sy}
+              r={SZ * 1.55}
+              fill="none"
+              stroke={ringColor}
+              stroke-width={ring === 'goal-attempt' ? 0.9 : 0.7}
+              stroke-dasharray={ring === 'goal-attempt' ? null : null}
+              vector-effect="non-scaling-stroke"
+            />
+          {/if}
         {/if}
       </g>
     {/each}

@@ -39,7 +39,7 @@ describe('PossessionAnalysisPanel', () => {
     await fireEvent.click(screen.getByRole('button', { name: /Add draft event/i }));
 
     expect(screen.getByText('Draft events')).toBeInTheDocument();
-    expect(screen.getByText(/1\. Passed \/ offloaded/i)).toBeInTheDocument();
+    expect(screen.getByText(/1\. Hand pass/i)).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole('button', { name: /Finalize session/i }));
 

@@ -125,10 +125,18 @@ create table if not exists possession_sessions (
   squad_player_id uuid        references squad_players(id) on delete set null,
   player_name     text        not null,
   our_goal_at_top boolean     not null default true,
+  half            text,
   notes           text,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
+
+alter table possession_sessions
+  drop constraint if exists possession_sessions_half_check;
+
+alter table possession_sessions
+  add constraint possession_sessions_half_check
+  check (half in ('first', 'second', 'et') or half is null);
 
 create index if not exists possession_sessions_team_updated_idx
   on possession_sessions (team_id, updated_at desc);
@@ -151,6 +159,7 @@ create table if not exists possession_events (
   release_y      numeric     not null,
   outcome        text        not null,
   under_pressure boolean     not null default false,
+  assist         boolean     not null default false,
   created_at     timestamptz not null default now()
 );
 

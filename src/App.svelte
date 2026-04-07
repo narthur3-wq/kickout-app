@@ -2652,7 +2652,7 @@ import {
       Possession
     </button>
     <button type="button" class="tab-btn {activeTab === 'analysis-pass' ? 'active' : ''}" on:click={() => switchTab('analysis-pass')}>
-      Pass Impact
+      Pass Destination
     </button>
     <button type="button" class="tab-btn {activeTab === 'kickouts' ? 'active' : ''}" on:click={() => switchTab('kickouts')}>
       Kickouts

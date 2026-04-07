@@ -22,6 +22,11 @@ function normalizeOutcomeList(outcomes = []) {
     .filter(Boolean);
 }
 
+function normalizeHalfTag(value) {
+  const half = String(value ?? '').trim();
+  return ['first', 'second', 'et'].includes(half) ? half : null;
+}
+
 export function createEmptyAnalysisState() {
   return {
     version: 1,
@@ -42,6 +47,7 @@ export function normalizePossessionEvent(event, fallbackCreatedAt = nowIso()) {
     release_y: release.y,
     outcome: String(event?.outcome ?? '').trim() || 'Passed / offloaded',
     under_pressure: !!event?.under_pressure,
+    assist: event?.assist === true,
     created_at: event?.created_at || fallbackCreatedAt,
   };
 }
@@ -73,6 +79,7 @@ function normalizeSessionBase(session, mode) {
     player_key: normalizePlayerKey(session?.player_key || playerName),
     squad_player_id: session?.squad_player_id || session?.player_id || null,
     our_goal_at_top: session?.our_goal_at_top !== undefined ? !!session.our_goal_at_top : true,
+    half: normalizeHalfTag(session?.half),
     created_at: createdAt,
     updated_at: updatedAt,
     notes: String(session?.notes ?? '').trim(),

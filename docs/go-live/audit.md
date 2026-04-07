@@ -1,343 +1,352 @@
 # Go-Live Audit
 
-Audit date: 2026-04-01
+Audit date: 2026-04-06
 
-## Executive summary
+## Executive Summary
 
-Páirc is now in **GO WITH CONDITIONS** territory from this working tree.
+Pairc is now in **GO WITH CONDITIONS** territory from this working tree.
 
-The first audit pass found two universal launch blockers:
+During this audit I made two small, high-confidence fixes:
 
-- the analytics pitch overflowed the viewport in a tested landscape layout
-- the local validation path was not reliable because coverage mode failed and several tests timed out
+- `package.json` now runs `typecheck` inside `check` and `check:full`
+- `tests/e2e/match-summary.spec.js` now matches the shipped Live copy, which restored a green full E2E suite
 
-Both of those issues were fixed and revalidated during this session. The current release picture is:
+Current validation evidence from this working tree:
 
-- `npm run lint` — passed
-- `npm run test:unit` — passed
-- `npm run test:coverage` — passed
-- `npm run test:e2e` — passed with `22` green and `1` skipped Supabase smoke test
-- `npm run build` — passed
-- `npm audit --omit=dev --audit-level=moderate` — passed with `0` production vulnerabilities
-- `npx tsc --noEmit -p jsconfig.json` — failed
+- `npm run lint` - passed
+- `npm run typecheck` - passed
+- `npm run test:unit` - passed (`29` files, `187` tests)
+- `npm run test:coverage` - passed from a clean `coverage/` directory (`77.43%` statements, `61.99%` branches, `77.19%` functions, `79.21%` lines)
+- `npm run test:e2e` - passed (`22` green, `1` skipped Supabase smoke)
+- `npm run build` - passed
+- `npm run check:full` - passed
+- `npm run test:smoke` - skipped because launch-environment Supabase credentials were not available
+- `npm audit --omit=dev --audit-level=moderate` - passed with `0` production vulnerabilities
+- `npm outdated --long` - showed manageable but real framework/tooling drift
 
-The repo still has meaningful pre-launch work before it deserves an unqualified **GO**:
+The app is credible for a focused launch because the local quality gate is now green, the product is clearly scoped, and the offline-first architecture fits the match-day operating environment. It still should **not** ship as an unqualified GO until the launch-environment auth/sync path is proven and the remaining pre-launch UX, accessibility, and operations gaps are addressed.
 
-- there is no supported green typecheck gate
-- the Supabase smoke path was skipped because launch-env secrets were not available in this audit
-- production observability is still mostly local diagnostics plus console output
-
-The codebase already has strong launch-worthy traits that should be preserved:
-
-- clear product focus
-- offline-first persistence and sync design
-- substantial automated coverage for a small repo
-- pragmatic Supabase security checks
-- useful documentation and release-checklist discipline
-
-## Launch recommendation
+## Launch Recommendation
 
 **GO WITH CONDITIONS**
 
-Conditions to reach **GO**:
+Conditions to reach an unqualified GO:
 
-- add a supported `typecheck` command and make it part of the release evidence
-- run the Supabase smoke flow against the intended launch environment if cloud auth/sync is part of launch
-- define the minimum acceptable production observability path for sync, onboarding, and digest-share failures
+- Run `npm run test:smoke` against the actual launch Supabase project, or explicitly document that launch excludes cloud auth/sync.
+- Close the essential accessibility gaps on login, search, pitch interaction, and modal keyboard handling.
+- Define the production failure path for sync, onboarding, and digest sharing so launch-day issues are observable by a named owner.
 
-## Fixes applied during audit
+## Fixes Applied During Audit
 
-- `.gitignore` now allows `docs/go-live/**` so these artifacts can be tracked in Git
-- `src/lib/AnalyticsPanel.svelte` reduced the analytics pitch size cap in landscape (`52svh` -> `47svh`), which cleared the failing layout spec
-- `vitest.config.js` now sets `testTimeout: 15000`, which cleared the previously timed-out tests and restored `test:coverage`
+### FX-01 - Release gate now includes typecheck
 
-## Top 10 findings by impact
+- Files: `package.json`
+- Why it mattered: the repo had a working `typecheck` script, but the main release gate did not actually enforce it.
+- Validation: `npm run check:full` now includes `typecheck` and passed locally.
+
+### FX-02 - Stale E2E expectation aligned with shipped copy
+
+- Files: `tests/e2e/match-summary.spec.js`
+- Why it mattered: the full E2E suite was failing because the test expected older Live-panel wording.
+- Validation: `npm run test:e2e` and `npm run check:full` both passed after the update.
+
+## Top 10 Findings By Impact
 
 | ID | Severity | Area | Finding |
 | --- | --- | --- | --- |
-| GL-05 | high | Release readiness | Supabase smoke path is env-gated and was not exercised in this audit |
-| GL-03 | high | Engineering | No supported green typecheck workflow exists |
-| GL-04 | high | Architecture | `src/App.svelte` is still too concentrated for safe change velocity |
-| GL-07 | medium | Accessibility | Several key surfaces still rely on placeholder-only or custom interaction patterns |
-| GL-06 | medium | Reliability / Ops | Production observability is mostly console + local diagnostics only |
-| GL-08 | medium | Performance | First-load bundle is heavier than ideal for poor match-day connectivity |
-| GL-09 | medium | Repo coherence | Source docs and generated static artifacts are mixed together under `docs/` |
-| GL-10 | low | Dependencies | Dependency set is safe but behind on several minor/patch upgrades |
-| GL-11 | low | Product / Distribution | Public metadata is still minimal if this deploy is public-facing |
-| GL-12 | low | Release hygiene | The new release gate still needs a first-class typecheck step |
+| GL-01 | blocker | Release readiness | Launch-environment Supabase auth/sync is still unproven in this audit |
+| GL-02 | high | Architecture | `src/App.svelte` is still too concentrated for safe long-term change |
+| GL-03 | high | Performance | The app ships one heavy initial client bundle and pays initial load cost for nearly every feature |
+| GL-04 | high | UX / Accessibility | Essential accessibility gaps remain on login, search, pitch interaction, and modal behavior |
+| GL-05 | high | Reliability / Ops | Failure capture is still mostly local and incomplete for launch-day support |
+| GL-06 | medium | Performance / PWA | The PWA precache currently pulls the `html2canvas` export chunk into first install |
+| GL-07 | medium | Performance / Reliability | Long matches will pay extra main-thread cost from repeated full-array derivations and full-state localStorage writes |
+| GL-08 | medium | Testing / QA | Release protection still misses real multi-device sync proof and any dedicated a11y validation |
+| GL-09 | medium | Repo coherence | Source docs, generated artifacts, and release source-of-truth ownership are still blurry |
+| GL-10 | low | Security / Dependencies | Security posture is decent, but admin UI gating is still client-exposed and dependencies are drifting |
 
-## Architecture review
-
-What is working well:
-
-- The app has a clear product core: capture, live read, analytics, digest, events, admin.
-- High-risk data concerns are already partially extracted into focused helpers and stores: `matchStore.js`, `storageScope.js`, `importMerge.js`, `syncState.js`, `analyticsHelpers.js`.
-- The local-first persistence and queued-sync model is appropriate for a match-day tool.
-
-Main architectural concern:
-
-- `src/App.svelte` is still too concentrated. It owns auth/session, storage migration, persistence, sync orchestration, notices, diagnostics, tab routing, import/export, match context, summary modal state, and a large amount of shell CSS.
-
-Impact:
-
-- The architecture is workable, but the current concentration increases regression risk and slows safe changes.
-
-## UX review
+## Architecture Review
 
 What is working well:
 
-- The capture flow is purposeful and domain-specific rather than generic.
-- The app separates operator-facing (`Live`) and coach-facing (`Digest`) modes cleanly.
-- Empty states and operational guidance exist in major surfaces.
-- The repo already had a regression test specifically for landscape ergonomics, which is exactly the right instinct for this product.
-
-Main UX concerns:
-
-- The previously failing analytics landscape issue is fixed, but the surface remains dense enough that viewport regressions are still easy to reintroduce.
-- Accessibility is mixed: several inputs still rely on placeholders, and the pitch uses a custom `role="application"` pattern with a deliberate a11y suppression comment.
-- The summary modal is visually polished but still needs stronger focus/keyboard treatment.
-
-## Testing review
-
-What is working well:
-
-- There is real depth here: unit, component, Playwright E2E, and a dedicated Supabase smoke path.
-- The suite covers meaningful journeys: capture, import/export, layout, summary, navigation, and PWA wiring.
-
-Current gaps:
-
-- The main local validation path is now green, but the repo still lacks a supported `typecheck` command.
-- The authenticated Supabase smoke test is env-gated and was skipped in this audit.
-- The app-shell test runtime remains heavy enough that time budgets should be watched instead of forgotten.
-
-## Performance review
-
-What is working well:
-
-- The app builds successfully.
-- Digest export loads `html2canvas` dynamically instead of baking it into the initial bundle.
-- The PWA setup is reasonable for an offline-first tool.
-
-Main performance concerns:
-
-- The main bundle is still heavy for field conditions: `dist/assets/index-DcLLKA3L.js` built at `420.71 kB` raw / `122.37 kB` gzip.
-- The precache size remains notable at `731.04 KiB`.
-- A very large app shell tends to drag render, test, and maintainability cost together.
-
-## Security / reliability / hidden gotchas
-
-What is working well:
-
-- The Supabase onboarding function uses admin JWT verification plus an allowlisted admin email check.
-- CORS handling in the Edge Function is deliberately restrictive.
-- The audit command found `0` production vulnerabilities.
+- The repo structure is coherent for a small specialist app: one shell plus focused `src/lib/*` modules.
+- The local-first model is correct for this product and is documented consistently in `documentation/technical-spec.md`.
+- The best extracted modules are the right abstractions: `src/lib/matchStore.js`, `src/lib/storageScope.js`, `src/lib/importMerge.js`, `src/lib/syncState.js`, and `src/lib/analysisSync.js` are practical and test-backed.
+- The explicit match entity model and migration path are thoughtful and reduce future data-shape ambiguity.
 
 Main concerns:
 
-- Runtime failures are still mostly surfaced through `console.*` and local diagnostics rather than a remote incident path.
-- If launch includes shared/team sync, the most important production path still needs explicit smoke evidence.
-- The app is resilient offline, but first install and authenticated sync still depend on network behavior that was not validated against live infrastructure during this audit.
+- `src/App.svelte` is `3311` lines and `142203` bytes and still owns auth, storage-scope activation, local persistence, sync queueing, realtime wiring, match CRUD, event CRUD, import/export, tab routing, and a large render tree.
+- Persistence and sync boundaries are only partially extracted. `App.svelte` still manually serializes local storage, queue state, and Supabase protocol behavior end to end.
+- Match identity logic is duplicated across the shell and helpers, which raises drift risk.
+- Several feature components are also becoming large enough to be second-order monoliths: `src/lib/PossessionAnalysisPanel.svelte` (`1375` lines), `src/lib/AnalyticsPanel.svelte` (`1055`), `src/lib/PassImpactPanel.svelte` (`901`), and `src/lib/CaptureForm.svelte` (`748`).
 
-## Dependency and repo coherence review
+Pragmatic conclusion:
+
+Do not rewrite the app. Extract only the shell seams that are already obvious and already hurting change safety: auth/session activation, sync/storage orchestration, and import/export workflows.
+
+## UX Review
 
 What is working well:
 
-- The repo uses one package manager (`npm`) with a single lockfile.
-- Dependency drift is modest rather than alarming.
-- The repo now cleanly allows tracking `docs/go-live/**`.
+- Navigation is already protected by meaningful E2E coverage in `tests/e2e/navigation.spec.js`, `tests/e2e/layout.spec.js`, and `tests/e2e/capture-flow.spec.js`.
+- Empty states are present in important surfaces like `src/lib/DigestPanel.svelte` and `src/lib/EventsTable.svelte`.
+- The product is domain-specific and operationally focused instead of feeling like a generic data-entry shell.
+- The app already exposes a visible sync banner and local diagnostics entry point in `src/App.svelte`, which is the right direction for a field tool.
 
 Main concerns:
 
-- Several dependencies are behind on minor or patch releases: Playwright, Supabase, Vitest, Svelte, and the Svelte Vite plugin.
-- `docs/` currently mixes tracked generated static output with source documentation concerns, while deployment is described as not relying on committed `docs/`.
-- CI only runs on `ubuntu-latest`, so platform-specific local issues can still slip past the main gate.
+- `src/lib/Login.svelte:116-123` uses placeholder-only email and password inputs instead of explicit labels.
+- `src/lib/EventsTable.svelte:147` uses a placeholder-only search field.
+- `src/lib/Pitch.svelte:207-216` suppresses Svelte a11y warnings and uses `role="application"`, which is a valid but high-responsibility pattern that needs stronger documentation and test coverage.
+- `src/lib/SummaryModal.svelte:19` renders a dialog but swallows keydown without explicit Escape-close or focus-return handling.
+- `index.html` is still minimal. If the deployed URL is public-facing, social/share metadata is not yet ready.
 
-## Release-readiness review
+Pragmatic conclusion:
 
-The release gate is substantially healthier after the in-session fixes:
+The core flow is usable, but accessibility is still being carried too much by good luck and browser defaults. That is not enough for a production launch.
 
-- `lint`, `test:unit`, `test:coverage`, `test:e2e`, and `build` now pass in this working tree
-- the cloud-sync launch path still needs a real smoke run
-- there is still no reliable typecheck evidence in the gate
+## Testing Review
 
-## What is already good and should be preserved
+What is working well:
 
-- The product remains focused on a clear specialist use case rather than expanding into a generic club platform.
-- The offline-first design is appropriate for the operating environment.
+- The repo has real test depth: unit, component, Playwright E2E, and a dedicated Supabase smoke test.
+- Coverage is meaningful rather than cosmetic. The current run landed at `77.43%` statements overall, with strong coverage across most helpers and several critical components.
+- The E2E suite covers actual user journeys: capture, import/export, layout, digest export, navigation, and PWA manifest presence.
+
+Main concerns:
+
+- The cloud-backed smoke path is still env-gated and was skipped in this audit.
+- There is no dedicated accessibility validation in the current scripts or CI.
+- The release gate only became complete in this session; keep `check:full` as the required release command so the repo does not drift again.
+- The most important behavior gap is still real multi-device sync in a launch-like environment.
+
+Pragmatic conclusion:
+
+The current suite is strong enough to support incremental change, but launch confidence still depends on one piece of evidence the repo cannot provide by itself: a real launch-environment auth/sync run.
+
+## Performance Review
+
+What is working well:
+
+- Export work is at least isolated behind dynamic imports in `src/lib/DigestPanel.svelte`, `src/lib/PassImpactPanel.svelte`, and `src/lib/PossessionAnalysisPanel.svelte`.
+- The PWA direction is correct for the product. The issue is install weight and cache scope, not the existence of offline support.
+- There are no obvious large static image or font payloads driving the build.
+
+Main concerns:
+
+- `npm run build` produced `dist/assets/index-BZxRoK8C.js` at `515.37 kB` minified / `150.22 kB` gzip and triggered Vite's chunk-size warning.
+- The build reported a PWA precache size of `848.38 KiB`.
+- `dist/sw.js` currently precaches `assets/html2canvas.esm-DXEQVQnt.js`, which reduces the payoff of splitting export code out of the initial app bundle.
+- `src/App.svelte` repeatedly filters, maps, sorts, and summarizes large event arrays, while also doing synchronous `localStorage.setItem(JSON.stringify(...))` writes on the main thread.
+- Sync paths still rely on full-table reads and realtime-triggered refreshes that will age poorly as data grows.
+
+Pragmatic conclusion:
+
+Before launch, trim at least one meaningful install-cost risk. After launch, tackle the broader shell/runtime cost more systematically.
+
+## Security, Reliability, And Hidden Gotchas
+
+What is working well:
+
+- `supabase/functions/onboard-user/index.ts` correctly verifies JWT identity, checks admin allowlisting, and restricts CORS by `ALLOWED_ORIGIN`.
+- `npm audit --omit=dev --audit-level=moderate` found `0` production vulnerabilities.
+- The offline-first design is an intentional reliability choice, not an accident.
+
+Main concerns:
+
+- The app still leans heavily on local diagnostics plus console output. `src/lib/DigestPanel.svelte:72-79` only reports share failures locally and does not feed the same diagnostics path the shell uses.
+- `src/lib/supabase.js:5` uses `VITE_ADMIN_EMAILS` for client-side admin-tab gating. Real authorization remains server-side, which is good, but the allowlist itself is still exposed in the client bundle.
+- `src/lib/supabase.js:64-76` intentionally fails open on `userHasAccess()` network errors to preserve match-day usability. That is a defensible product tradeoff, but it should be explicitly owned and documented as such.
+
+Pragmatic conclusion:
+
+There is no obvious launch-stopping vulnerability here. The real production risk is operational: failures are still too easy to miss and too hard to review from outside the device.
+
+## Dependency And Repo Coherence Review
+
+What is working well:
+
+- The repo uses one package manager (`npm`) with one lockfile (`package-lock.json`).
+- CI is simple and easy to reason about: `.github/workflows/ci.yml` checks out the repo, installs Chromium, and runs `npm run check:full`.
+- README setup instructions are directionally accurate for offline-first local use.
+
+Main concerns:
+
+- `npm outdated --long` shows drift across Playwright, Supabase, Svelte, the Svelte Vite plugin, Vite, Vitest, and related tooling.
+- `npm ls --depth=0` shows `workbox-window` installed, but no references were found in `src/` or `tests/`.
+- `docs/` contains generated build artifacts while source narrative docs live under `documentation/`, yet `documentation/technical-spec.md` explicitly says deployment does not rely on a committed `docs/` folder.
+- `documentation/release-checklist.md` still reflects an older release gate than the now-canonical `check:full`.
+
+Pragmatic conclusion:
+
+The repo is not chaotic, but it does need one pass to make source-of-truth ownership obvious and prevent future documentation drift.
+
+## Release-Readiness Review
+
+Current state:
+
+- The local release gate is green.
+- The smoke gate is not green because it was not runnable without launch-environment secrets.
+- The product is viable for a focused launch if the remaining conditions are handled deliberately, not hand-waved.
+
+Biggest launch-day risks:
+
+- Unproven cloud auth/sync if that is in scope for launch.
+- Limited incident visibility for sync, onboarding, and digest-share failures.
+- Install/perceived-speed pain on weak connectivity because the initial bundle and precache remain heavy.
+
+## What Is Already Good And Should Be Preserved
+
+- The product scope is tight and specialist.
+- The offline-first design fits the actual operating environment.
 - The current regression suite encodes a lot of valuable behavior and should be extended, not replaced.
-- The helper modules around match identity, storage scope, sync cursor management, scoring, and diagnostics are good building blocks.
-- The admin onboarding flow is pragmatic and operator-friendly.
-- The digest export being lazily loaded is the right idea and should be preserved.
+- The match entity model, import merge path, and scoped storage work are thoughtful and worth keeping.
+- The sync banner, manual retry affordance, and local diagnostics entry point are good foundations for better launch ops.
+- Dynamic import for image-export functionality is the right instinct even if the current cache strategy blunts part of the gain.
 
-## Detailed findings
+## Detailed Findings
 
-### GL-01 — Analytics pitch overflowed the landscape viewport before the audit fix
+### GL-01 - Launch-environment Supabase auth/sync is still unproven
 
-- Status: resolved during audit
 - Severity: blocker
-- Area: Product / UX
-- Why it matters: a match-day analytics screen that does not fit a common landscape viewport is a direct usability failure.
+- Area: Release readiness
+- Why it matters: if launch includes sign-in, team-scoped sync, or shared-device workflows, the most important production path still lacks direct proof.
 - Evidence:
-  - Initial audit run: `npm run test:e2e` failed `tests/e2e/layout.spec.js:54-85`
-  - Initial observed failure: expected pitch bottom `<= 768`, received `790.34375`
-  - `src/lib/AnalyticsPanel.svelte:848-855` originally sized `.pitch-viz-card` with `width: min(100%, calc(52svh * 145 / 90))`
-  - After reducing that cap to `47svh`, `npm run test:e2e` passed with `22` green and `1` skipped smoke test
-- Recommended fix: keep the more conservative pitch sizing and preserve the Playwright layout spec as a regression gate.
+  - `tests/e2e/supabase-smoke.spec.js` skips unless `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `PAIRC_SMOKE_EMAIL`, and `PAIRC_SMOKE_PASSWORD` are present
+  - `npm run test:smoke` on 2026-04-06 skipped `1` test
+  - `README.md` and `documentation/multi-analyst-setup.md` position shared/team usage as a real workflow
+- Recommended fix: run `npm run test:smoke` against the actual launch environment, then perform one manual two-device verification and record the result in the release checklist. If launch is offline-only, document that scope decision explicitly.
 - Effort: S
 - Confidence: high
 
-### GL-02 — The local release validation path was red before the audit fix
-
-- Status: resolved during audit
-- Severity: blocker
-- Area: Testing / Release
-- Why it matters: shipping from a repo that cannot pass its own validation path undermines release confidence and slows every follow-up fix.
-- Evidence:
-  - Initial audit run: `npm run test:unit` failed with timeouts in:
-    - `tests/component/App.test.js:560`
-    - `tests/component/CaptureContextBanner.test.js:39`
-    - `tests/component/CaptureForm.test.js:20`
-  - Initial audit run: `npm run test:coverage` failed with `ENOENT: no such file or directory, open 'C:\Users\neila\ko-app\coverage\.tmp\coverage-0.json'`
-  - After setting `testTimeout: 15000` in `vitest.config.js`, both `npm run test:unit` and `npm run test:coverage` passed locally
-- Recommended fix: keep the longer timeout only if it continues to reflect real expected runtime, and look for ways to reduce test setup cost over time.
-- Effort: S
-- Confidence: high
-
-### GL-03 — There is no supported green typecheck command
-
-- Severity: high
-- Area: Engineering
-- Why it matters: this repo already asks JavaScript files to participate in type checking (`checkJs: true`), but there is no supported way to run and trust that signal during release preparation.
-- Evidence:
-  - `package.json` has no `typecheck` script
-  - `jsconfig.json` enables `checkJs`
-  - `npx tsc --noEmit -p jsconfig.json` failed both in `node_modules/punycode` parsing and in repo files such as `src/lib/analyticsHelpers.js`, `src/lib/importMerge.js`, `src/lib/matchStore.js`, and `src/lib/storageScope.js`
-- Recommended fix: add one supported typecheck command scoped to the app sources, make it green, and add it to the release gate.
-- Effort: M
-- Confidence: high
-
-### GL-04 — `src/App.svelte` is still too concentrated
+### GL-02 - `src/App.svelte` is still too concentrated
 
 - Severity: high
 - Area: Architecture
-- Why it matters: the app shell now carries too much state and too many side effects in one place, which raises regression risk and makes targeted change harder than it needs to be.
+- Why it matters: review cost, regression risk, and change latency are all higher than they need to be when one file owns most of the application protocol and composition.
 - Evidence:
-  - `src/App.svelte` is 3,180 lines long
-  - The file owns local persistence (`src/App.svelte:589`), notices (`src/App.svelte:749`), diagnostics (`src/App.svelte:759`), sync queue flushing (`src/App.svelte:860`), Supabase sync (`src/App.svelte:903`), and auth/on-mount wiring (`src/App.svelte:1157`)
-- Recommended fix: extract shell-only concerns first: auth/session wiring, sync orchestration, and import/export workflows. Do not rewrite the product surface wholesale.
+  - `src/App.svelte` is `3311` lines and `142203` bytes
+  - The file imports and coordinates almost every major feature surface and helper seam
+  - Storage/sync/auth logic still lives directly in the shell alongside rendering and event handlers
+- Recommended fix: extract only the obvious seams first: auth/session activation, sync queue and realtime orchestration, and import/export flows. Do not rewrite the SPA or introduce a state library.
 - Effort: L
 - Confidence: high
 
-### GL-05 — The cloud-sync launch path still lacks real launch-env evidence
+### GL-03 - First load is paying for too much of the app up front
 
 - Severity: high
-- Area: Release readiness
-- Why it matters: if launch includes Supabase-backed sign-in and shared sync, the most important production behavior is still only partially validated.
+- Area: Performance
+- Why it matters: the product is intended for field use, so initial load and first install need to be treated as product quality, not just engineering neatness.
 - Evidence:
-  - `tests/e2e/supabase-smoke.spec.js` is skipped unless `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `PAIRC_SMOKE_EMAIL`, and `PAIRC_SMOKE_PASSWORD` are configured
-  - The test was skipped in this audit
-  - README and `documentation/multi-analyst-setup.md` position shared/team usage as a real scenario
-- Recommended fix: run the smoke path against the actual launch environment before go-live and treat it as mandatory evidence whenever cloud sync/auth is in scope.
-- Effort: S
+  - `npm run build` produced `dist/assets/index-BZxRoK8C.js` at `515.37 kB` minified / `150.22 kB` gzip and emitted Vite's chunk-size warning
+  - `src/App.svelte:2-13` statically imports all major panels
+  - `src/main.js` mounts a single client-only SPA entry
+- Recommended fix: lazy-load non-capture tabs first, keep Capture/Live hot, and adopt a simple bundle budget that is checked during release review.
+- Effort: M
 - Confidence: high
 
-### GL-06 — Production observability is too local
+### GL-04 - Essential accessibility gaps remain on key surfaces
 
-- Severity: medium
-- Area: Reliability / Operations
-- Why it matters: once real users are in the field, console output and local diagnostics alone are not enough for timely incident detection.
-- Evidence:
-  - `src/App.svelte` uses `console.error` / `console.warn` for migration, storage, sync, and wake-lock failures
-  - `src/lib/DigestPanel.svelte:72` logs digest-share failures with `console.error` only
-  - `package.json` contains no remote telemetry or error-capture package
-- Recommended fix: add a minimal remote error trail for sync/onboarding/share failures, or at minimum route all user-visible failures into the existing diagnostics system and define where operators should inspect them.
-- Effort: M
-- Confidence: medium
-
-### GL-07 — Accessibility coverage is incomplete on key surfaces
-
-- Severity: medium
+- Severity: high
 - Area: UX / Accessibility
-- Why it matters: this app uses custom controls extensively, so accessibility quality must be deliberate rather than assumed.
+- Why it matters: this app uses custom interactions extensively, so missing labels and incomplete keyboard behavior become real usability and support issues.
 - Evidence:
-  - `src/lib/Login.svelte` uses placeholder-only email/password inputs
-  - `src/lib/EventsTable.svelte:135-139` uses a placeholder-only search box
-  - `src/lib/Pitch.svelte:157-165` suppresses Svelte a11y warnings and uses `role="application"`
-  - `src/lib/SummaryModal.svelte` renders a dialog but does not show explicit Escape-close or focus-trap behavior
-- Recommended fix: add explicit labels, harden keyboard/focus behavior, review pitch semantics with screen-reader expectations, and add at least one automated a11y check to the validation toolchain.
+  - `src/lib/Login.svelte:116-123` uses placeholder-only email and password fields
+  - `src/lib/EventsTable.svelte:147` uses a placeholder-only search field
+  - `src/lib/Pitch.svelte:207-216` suppresses Svelte a11y warnings and uses `role="application"`
+  - `src/lib/SummaryModal.svelte:19` captures keydown without explicit Escape-close behavior
+- Recommended fix: add explicit labels, harden keyboard and focus behavior, document the pitch interaction model, and add at least one automated a11y smoke path.
+- Effort: M
+- Confidence: high
+
+### GL-05 - Failure capture is still too local and incomplete
+
+- Severity: high
+- Area: Reliability / Operations
+- Why it matters: production issues are much harder to support when they live only in the browser console or only on the affected device.
+- Evidence:
+  - `src/App.svelte:2594-2603` exposes local diagnostics and copy/clear actions, which is good
+  - `src/lib/DigestPanel.svelte:72-79` logs digest-share failures to `console.error` and local UI copy only
+  - no remote telemetry package appears in `package.json`
+- Recommended fix: route sync, onboarding, and digest-share failures into a shared diagnostics path and decide who will review those signals on launch day. Add remote capture only if there is a real owner for it.
 - Effort: M
 - Confidence: medium
 
-### GL-08 — First-load performance is heavier than ideal
+### GL-06 - PWA precache currently includes the export chunk
 
 - Severity: medium
-- Area: Performance
-- Why it matters: the app is meant for field use, and the technical spec already notes that first install still requires network.
+- Area: Performance / PWA
+- Why it matters: pre-caching export code on first install reduces the benefit of splitting that code out of the initial app bundle.
 - Evidence:
-  - `npm run build` produced:
-    - `dist/assets/index-DcLLKA3L.js` — `420.71 kB` raw / `122.37 kB` gzip
-    - `dist/assets/index-CSEir7gr.css` — `68.36 kB` raw / `12.03 kB` gzip
-  - `documentation/technical-spec.md` explicitly calls out first-install network dependency
-  - Positive evidence: `src/lib/DigestPanel.svelte:52` loads `html2canvas` dynamically
-- Recommended fix: trim the app-shell payload, lazy-load non-capture surfaces where practical, and set a simple performance budget for the main bundle.
+  - `src/lib/DigestPanel.svelte:52-53`, `src/lib/PassImpactPanel.svelte:480-481`, and `src/lib/PossessionAnalysisPanel.svelte:673-674` dynamically import `html2canvas`
+  - `dist/sw.js` precaches `assets/html2canvas.esm-DXEQVQnt.js`
+  - `npm run build` reported `848.38 KiB` total precache size
+- Recommended fix: decide whether offline-first export on day-one install is actually required. If not, exclude the export chunk from precache. If yes, keep it intentionally and recover the install budget elsewhere.
+- Effort: M
+- Confidence: high
+
+### GL-07 - Long-match runtime cost will grow because the shell recomputes and persists large state on the main thread
+
+- Severity: medium
+- Area: Performance / Reliability
+- Why it matters: long matches and larger saved histories will amplify UI latency if every meaningful change reserializes and re-derives broad app state.
+- Evidence:
+  - `src/App.svelte:667-699` performs full `localStorage.setItem(JSON.stringify(...))` writes for events and meta
+  - `src/App.svelte:794-816` serializes pending queues the same way
+  - runtime analysis shows repeated whole-array filtering and summarization across `App.svelte` and `src/lib/liveInsights.js`
+- Recommended fix: batch writes where practical, narrow persistence to changed slices where feasible, and move expensive derivations behind focused helpers so they stop re-accumulating in the shell.
 - Effort: M
 - Confidence: medium
 
-### GL-09 — Repo/documentation artifact ownership is blurry
+### GL-08 - The release gate still misses the real multi-device and a11y risk
+
+- Severity: medium
+- Area: Testing / QA
+- Why it matters: local green tests are necessary, but they do not yet prove the launch-critical cloud collaboration path or accessibility quality.
+- Evidence:
+  - `npm run check:full` passed on 2026-04-06
+  - `npm run test:smoke` still skipped
+  - no dedicated a11y command or CI step exists in `package.json` or `.github/workflows/ci.yml`
+- Recommended fix: keep `check:full` mandatory, add a lightweight a11y smoke, and retain a manual two-device verification step in the release checklist until it is automated.
+- Effort: M
+- Confidence: high
+
+### GL-09 - Source-of-truth ownership is still blurry across docs and generated output
 
 - Severity: medium
 - Area: Dependency and repo coherence
-- Why it matters: release work is harder when source documentation, generated assets, and deployment assumptions are mixed together.
+- Why it matters: release work gets slower and more error-prone when engineers cannot tell which docs are source, which files are build artifacts, and which checklist is canonical.
 - Evidence:
-  - `docs/` contains generated static assets and HTML
-  - `dist/` also contains generated build output
-  - `documentation/technical-spec.md` says deployment does not rely on a committed `docs/` folder
-  - `git check-ignore -v docs\go-live\audit.md` originally showed `docs/` was ignored before the audit fix
-- Recommended fix: clearly separate source docs from generated artifacts and document the intended deployment artifact path.
-- Effort: M
+  - `docs/` contains generated static output and `docs/go-live/*`
+  - source narrative docs live in `documentation/`
+  - `documentation/technical-spec.md` says deployment does not rely on committed `docs/`
+  - `documentation/release-checklist.md` does not match the now-current `check:full` release gate
+- Recommended fix: define one source-of-truth docs structure, align the source release checklist with the real gate, and stop mixing source docs with generated assets unless a host requires it.
+- Effort: S
 - Confidence: high
 
-### GL-10 — Dependencies are safe but drifting
+### GL-10 - Security and dependency hygiene are good enough for a pilot, not fully tightened for broader production
 
 - Severity: low
-- Area: Dependencies
-- Why it matters: there is no active security emergency, but letting test/build dependencies drift makes future upgrades harder.
+- Area: Security / Dependencies
+- Why it matters: nothing here is a launch emergency, but leaving small security and dependency issues to drift makes later hardening harder.
 - Evidence:
-  - `npm outdated --long` shows available upgrades for Playwright, Supabase, Svelte, the Svelte Vite plugin, Vitest, and related tooling
   - `npm audit --omit=dev --audit-level=moderate` returned `0` production vulnerabilities
-- Recommended fix: upgrade in small batches after the release gate is green, starting with patch/minor versions for test and framework tooling.
-- Effort: M
-- Confidence: high
-
-### GL-11 — Public metadata is still minimal
-
-- Severity: low
-- Area: Product / Distribution
-- Why it matters: if the deployed URL is public-facing, missing metadata hurts share quality and discoverability.
-- Evidence:
-  - `index.html` sets theme and PWA tags, but does not include meta description, canonical, Open Graph, or Twitter card tags
-- Recommended fix: add a minimal metadata set only if the deployed URL is intended to be publicly shared beyond authenticated users.
+  - `supabase/functions/onboard-user/index.ts` applies JWT validation, admin allowlisting, and `ALLOWED_ORIGIN` checks
+  - `src/lib/supabase.js:5` exposes `VITE_ADMIN_EMAILS` client-side for UI gating
+  - `npm outdated --long` shows framework/tooling drift
+  - `npm ls --depth=0` shows `workbox-window` installed with no references found in `src/` or `tests/`
+- Recommended fix: keep real authorization server-side, move UI capability decisions to a server-driven signal when practical, refresh dependencies in small green batches, and remove unused packages as they are confirmed unnecessary.
 - Effort: S
-- Confidence: high
+- Confidence: medium
 
-### GL-12 — The release checklist now needs to absorb the typecheck requirement
+## Assumptions And Unknowns
 
-- Severity: low
-- Area: Release hygiene
-- Why it matters: once a supported typecheck command exists, the checklist and CI gate need to reflect it so it does not drift back out of the release process.
-- Evidence:
-  - `docs/go-live/release-checklist.md` now includes `npm run typecheck`
-  - `package.json` still does not expose a working `typecheck` command
-- Recommended fix: add the command first, then keep the checklist and CI in sync with the actual release gate.
-- Effort: S
-- Confidence: high
-
-## Assumptions and unknowns
-
-- This audit was run locally on Windows; the main CI workflow targets `ubuntu-latest`, so some failures may be platform-specific.
-- No live Vercel project, production URL, or Supabase project settings were inspected directly during this audit.
-- The Supabase smoke path could not be run because the required env vars were not present.
-- No real multi-device signed-in sync session was exercised.
-- No Lighthouse or WebPageTest run was performed; performance findings are based on build output, repo structure, and observed layout behavior.
-- Because this is a specialist app rather than a marketing site, SEO/social metadata may be intentionally low priority.
-- Post-match Phase 2 cross-match aggregation, roster identity, Supabase sync, and trend comparison are implemented; they remain tracked as product functionality rather than go-live remediation.
+- This audit was run locally on Windows. CI runs on `ubuntu-latest`, so platform-specific issues may still exist.
+- No live Vercel project, production URL, or real Supabase project configuration was inspected directly.
+- The Supabase smoke path could not be run because launch-environment secrets were not available.
+- No real multi-device signed-in sync session was exercised during this audit.
+- No Lighthouse, RUM, or production tracing data was available; performance findings are based on build output and source inspection.
+- It is unclear whether the deployed URL is a private team tool or a public-facing product URL; that affects the priority of metadata and some security/privacy hardening.
+- Current local validation also reflects the existing worktree setting `workers: 1` in `playwright.config.js`.

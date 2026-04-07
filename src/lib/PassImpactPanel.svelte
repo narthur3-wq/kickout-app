@@ -603,8 +603,8 @@
   <div class="heading">
     <div>
       <div class="eyebrow">Post-match</div>
-      <h2>Pass Impact</h2>
-      <p>Log where a player releases the ball, where it lands, and whether it actually progresses play.</p>
+      <h2>Pass Destination</h2>
+      <p>Where do this player's passes travel to, and do they progress play?</p>
     </div>
     <div class="match-meta">
       <div>{titleOfMatch()}</div>

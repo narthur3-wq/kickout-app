@@ -23,8 +23,8 @@ test('simulates a match and exports the coach digest as a PNG', async ({ page })
   await expect(page.getByText(/Phase filter active: showing H1 only/i)).toBeVisible();
   await page.getByRole('button', { name: 'Show all' }).click();
   await expect(page.getByText('Showing all periods in this view.')).toBeVisible();
-  await expect(page.getByText('Most successful target')).toBeVisible();
-  await expect(page.getByText('#8 is their main successful kickout target so far')).toBeVisible();
+  await expect(page.getByText('Top kickout target')).toBeVisible();
+  await expect(page.getByText(/#8 is their main kickout target so far/i)).toBeVisible();
 
   await page.getByRole('button', { name: 'Digest' }).click();
   await expect(page.getByText('Coach Digest')).toBeVisible();

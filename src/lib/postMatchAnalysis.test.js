@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   aggregateConnections,
   analysisPointForSession,
@@ -142,6 +142,58 @@ describe('postMatchAnalysis helpers', () => {
     expect(summary.lateralCount).toBe(1);
     expect(summary.topOutcome).toBe('Lost');
     expect(buildPossessionSummary(events).totalEvents).toBe(3);
+  });
+
+  it('computes score involvement for empty events', () => {
+    const summary = buildPossessionSummary([]);
+    expect(summary.directScores).toBe(0);
+    expect(summary.assistCount).toBe(0);
+    expect(summary.scoreInvolvement).toBe(0);
+    expect(summary.scoreInvolvementRate).toBeNull();
+  });
+
+  it('computes score involvement for direct scores only', () => {
+    const summary = buildPossessionSummary([
+      { outcome: 'Score point' },
+      { outcome: 'Score goal' },
+    ]);
+    expect(summary.directScores).toBe(2);
+    expect(summary.assistCount).toBe(0);
+    expect(summary.scoreInvolvement).toBe(2);
+    expect(summary.scoreInvolvementRate).toBeCloseTo(1, 5);
+  });
+
+  it('computes score involvement for assists only', () => {
+    const summary = buildPossessionSummary([
+      { outcome: 'Passed / offloaded', assist: true },
+      { outcome: 'Foul won', assist: true },
+    ]);
+    expect(summary.directScores).toBe(0);
+    expect(summary.assistCount).toBe(2);
+    expect(summary.scoreInvolvement).toBe(2);
+    expect(summary.scoreInvolvementRate).toBeCloseTo(1, 5);
+  });
+
+  it('does not count invalid assists and warns once per invalid event', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const summary = buildPossessionSummary([
+      { outcome: 'Possession lost', assist: true },
+      { outcome: 'Score point', assist: true },
+    ]);
+    expect(summary.directScores).toBe(1);
+    expect(summary.assistCount).toBe(0);
+    expect(summary.scoreInvolvement).toBe(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('treats legacy events without assist as false', () => {
+    const summary = buildPossessionSummary([
+      { outcome: 'Passed / offloaded' },
+      { outcome: 'Foul won' },
+    ]);
+    expect(summary.assistCount).toBe(0);
+    expect(summary.directScores).toBe(0);
   });
 
   it('aggregates connections across repeated endpoints', () => {

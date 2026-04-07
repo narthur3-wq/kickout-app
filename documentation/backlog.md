@@ -616,3 +616,538 @@ Priority: nice
 Status: deferred
 
 Show Feature 1 and Feature 2 data together for one player in one view. Not required for any earlier phase.
+
+---
+
+## Possession Analysis Improvements (PA-series)
+
+UX improvements, score involvement feature, and outcome taxonomy expansion for the Possession Analysis panel. Ordered to eliminate rework — see ordering rationale below.
+
+Review outcome:
+- Accepted: PA-01, PA-02, PA-03, PA-06, PA-07, PA-08, PA-09, PA-10, PA-11, PA-11a, PA-12, PA-13, PA-14, PA-15, PA-16, PA-18, PA-19, PA-T01, PA-T02, PA-T03
+- Enhanced: PA-04, PA-05, PA-17
+- Pushback: none
+
+### Ordering rationale
+
+- Schema additions (PA-01 half tag, PA-02 assist field) done in Sprint 1 alongside the flip bug fix — avoids touching session and event shapes across multiple PRs
+- Outcome taxonomy (PA-09) done before the legend (PA-16) and before event editing (PA-17) — the legend must list the final outcomes; the edit UI must show the final outcome list from day one
+- Assist visual distinction (PA-14) and pressure treatment (PA-12) done before the legend (PA-16) — legend documents both indicators once they are settled
+- Score involvement metric (PA-11) done before the summary strip, filter, and cross-match surfaces — single computation point consumed in many places
+- Event editing (PA-17) done after assist field and taxonomy are stable — the edit UI includes all three metadata fields without a second pass
+
+Build order:
+```
+Sprint 1:  PA-01  PA-02  PA-03  PA-04  PA-05
+Sprint 2:  PA-06  PA-07  PA-08  PA-09
+Sprint 3:  PA-10
+Sprint 4:  PA-11 → PA-11a  PA-12  PA-13  PA-14  PA-15
+Sprint 5:  PA-16
+Sprint 6:  PA-17
+Sprint 7:  PA-18 → PA-19
+Sprint 8:  PA-T01  PA-T02 → PA-T03
+```
+
+---
+
+### Sprint 1 — Foundation
+
+All schema additions and the P1 correctness bug. Done together to avoid touching session and event shapes across multiple PRs.
+
+---
+
+**PA-01 — Fix dead flip button during draft session**
+Priority: must
+Status: done
+Depends on: none
+
+The "switch ends" button in the active draft UI changes `draftOurGoalAtTop` (a local variable) but the pitch renderer uses `draftSession.our_goal_at_top`, which is frozen at session creation. The button currently does nothing during a live session — the analyst believes they have switched ends and continues logging with incorrect orientation.
+
+Fix:
+- Remove the flip button from the active draft session controls entirely
+- Make orientation a pre-session configuration step, not an in-session one
+- In the "Start session" form, make the orientation selector prominent: `Attacking direction for this session` with options `Our goal at top / Our goal at bottom`
+- Add guidance note: "Create a separate session for each half if the attacking direction changes at half time"
+
+Mid-session flip capability, if needed in future, requires per-event orientation storage and is a separate backlog item. Do not attempt to update `draftSession.our_goal_at_top` reactively — that would silently mis-classify all events logged before the flip.
+
+File: `src/lib/PossessionAnalysisPanel.svelte`
+
+---
+
+**PA-02 — Add half tag to session schema**
+Priority: must
+Status: done
+Depends on: none
+
+Add `half` field to the session shape. Value: `'first' | 'second' | 'et' | null`. Default: `null`.
+
+Session shape addition:
+```json
+{ "half": "first" }
+```
+
+Backward compatibility: sessions without the field read as `half: null`. No migration needed. Field is set once at session creation alongside `our_goal_at_top`. Not editable post-finalise in this sprint (PA-17 covers that).
+
+Files: `src/lib/PossessionAnalysisPanel.svelte`, `src/lib/postMatchAnalysisStore.js`
+
+---
+
+**PA-03 — Add assist field to event schema**
+Priority: must
+Status: done
+Depends on: none
+
+Add `assist: false` (boolean, default false) to the possession event shape in `blankDraftEvent()` and any event factory in `postMatchAnalysis.js`.
+
+Event shape addition:
+```json
+{ "assist": false }
+```
+
+Backward compatibility: events without the field read as `assist: false`. No migration needed. The field is only meaningful when `outcome` is a pass type or `'Foul won'`. All other outcomes store `assist: false` and the value is ignored in metric calculations.
+
+Files: `src/lib/postMatchAnalysis.js`, `src/lib/PossessionAnalysisPanel.svelte`
+
+---
+
+**PA-04 — Pass Destination tab rename**
+Priority: should
+Status: done
+Depends on: none
+
+Rename the "Pass Impact" tab to "Pass Destination" in `App.svelte`. Add a one-line descriptor beneath the tab header in `PassImpactPanel.svelte`: "Where do this player's passes travel to — and do they progress the ball?"
+
+Removes the ambiguity identified in the UX review. No logic changes.
+
+Review note: keep the rename, but shorten the descriptor a little if it crowds the tab header on smaller screens.
+
+Files: `src/App.svelte`, `src/lib/PassImpactPanel.svelte`
+
+---
+
+**PA-05 — Sample size warning calibration**
+Priority: must
+Status: done
+Depends on: none
+
+Two issues:
+
+1. Cross-match condition fires incorrectly. Current: `if (matchCount < 3 || totalEvents < 5)`. The `||` means 20 events across 1 match triggers the warning. Fix: change to `&&` so it fires only when both are true.
+
+2. Single-match threshold too low. Five events is not meaningful in GAA. Raise to 8. Reword from "Small sample" to plain language.
+
+Updated logic:
+```js
+if (analysisMode === 'cross') {
+  if (matchCount < 3 && totalEvents < 15) {
+    return `Only ${matchCount} match${matchCount === 1 ? '' : 'es'} selected with ${totalEvents} events — treat these patterns cautiously.`;
+  }
+} else {
+  if (totalEvents < 8) {
+    return `${totalEvents} events — patterns are forming. Treat direction splits cautiously.`;
+  }
+}
+```
+
+Review note: centralize these thresholds in a shared helper or constants block so the wording stays in step with the logic in both analysis modes.
+
+File: `src/lib/PossessionAnalysisPanel.svelte`
+
+---
+
+### Sprint 2 — Capture UX
+
+Builds on Sprint 1 schema. All capture-time UI changes.
+
+---
+
+**PA-06 — Half selector in session start**
+Priority: must
+Status: done
+Depends on: PA-02
+
+When starting a new draft session, show a segmented control for half alongside the orientation selector:
+
+```
+Attacking direction:  [Our goal at top]  [Our goal at bottom]
+Half:                 [First half]  [Second half]  [Extra time]
+```
+
+Half defaults to unselected (stores `null`). Not required — analyst can skip it. The half and orientation selectors together replace the standalone flip button removed in PA-01.
+
+File: `src/lib/PossessionAnalysisPanel.svelte`
+
+---
+
+**PA-07 — Half filter in session review**
+Priority: must
+Status: done
+Depends on: PA-02, PA-06
+
+Add half filter pills above the session selector in the analysis view:
+
+```
+[All halves]  [First half]  [Second half]  [Extra time]
+```
+
+When a half is selected, `displayedSessions` is filtered to sessions where `session.half === selectedHalf`. Sessions with `half: null` appear only under "All halves". If a player has no sessions in the selected half, show empty state: "No sessions logged for this half."
+
+File: `src/lib/PossessionAnalysisPanel.svelte`
+
+---
+
+**PA-08 — Assist toggle in capture**
+Priority: must
+Status: done
+Depends on: PA-03
+
+Show an assist toggle in the capture form when the selected outcome is assist-eligible. Define eligible outcomes as a named constant (updated in PA-10 when taxonomy expands):
+
+```js
+const ASSIST_ELIGIBLE_OUTCOMES = new Set(['Passed / offloaded', 'Foul won']);
+```
+
+When outcome is eligible, render:
+```
+[✓] Assist — led directly to a score
+```
+
+Toggle is a checkbox, default unchecked. When the analyst changes outcome to a non-eligible type, `draftEvent.assist` resets to `false` silently.
+
+File: `src/lib/PossessionAnalysisPanel.svelte`
+
+---
+
+**PA-09 — Assist flag visible in draft event log**
+Priority: must
+Status: done
+Depends on: PA-03, PA-08
+
+In the numbered draft event log, append an "Assist" label to any event where `assist: true`:
+
+```
+3. Passed / offloaded — Forward · Under pressure · Assist
+```
+
+File: `src/lib/PossessionAnalysisPanel.svelte`
+
+---
+
+### Sprint 3 — Outcome taxonomy
+
+Done after capture UX is stable so `ASSIST_ELIGIBLE_OUTCOMES` (added in PA-08) only needs one update after the final taxonomy is known.
+
+---
+
+**PA-10 — Expand OUTCOMES taxonomy**
+Priority: should
+Status: done
+Depends on: PA-08
+
+Replace the current 7-outcome flat list with an expanded taxonomy:
+
+Scores (unchanged): Score point, Score goal
+
+Shots (unchanged): Shot wide, Shot short / saved / blocked
+
+Passes (split "Passed / offloaded"):
+- Hand pass ← new
+- Kick pass ← new
+
+Possession lost (expand):
+- Possession lost ← keep (unforced fumble)
+- Fouled the ball ← new (foul conceded)
+- Tackled / dispossessed ← new (lost to a tackle)
+
+Set play (unchanged): Foul won
+
+Backward compatibility: `'Passed / offloaded'` remains in `OUTCOME_COLORS` for rendering existing saved events but is removed from the `OUTCOMES` capture array. New captures must use Hand pass or Kick pass.
+
+New colours:
+```js
+'Hand pass': '#2563eb',
+'Kick pass': '#1d4ed8',
+'Fouled the ball': '#7c3aed',
+'Tackled / dispossessed': '#b91c1c',
+```
+
+Update `ASSIST_ELIGIBLE_OUTCOMES`:
+```js
+const ASSIST_ELIGIBLE_OUTCOMES = new Set([
+  'Passed / offloaded', // legacy
+  'Hand pass',
+  'Kick pass',
+  'Foul won',
+]);
+```
+
+Files: `src/lib/PossessionAnalysisPanel.svelte`, `src/lib/postMatchAnalysis.js`
+
+---
+
+### Sprint 4 — Analysis view
+
+Metric computation first (PA-11), then all display surfaces. Done after taxonomy is final so legend and event editing inherit the finished set without rework.
+
+---
+
+**PA-11 — Score involvement metric in buildPossessionSummary**
+Priority: must
+Status: done
+Depends on: PA-03
+
+Extend `buildPossessionSummary` in `postMatchAnalysis.js`:
+
+```js
+{
+  directScores: number,          // outcome === 'Score point' || 'Score goal'
+  assistCount: number,           // assist === true
+  scoreInvolvement: number,      // directScores + assistCount
+  scoreInvolvementRate: number | null,  // involvement / total, null if total === 0
+}
+```
+
+Rules:
+- `assist: true` on a pass or foul outcome → 1 assist
+- `assist: true` on a scoring outcome → not possible (mutually exclusive); if encountered, count only as directScore
+- `assist: true` on any other outcome → excluded from assistCount with `console.warn`
+- Legacy events without `assist` field → treated as `false`, no crash
+
+File: `src/lib/postMatchAnalysis.js`
+
+---
+
+**PA-11a — Score involvement in summary strip**
+Priority: must
+Status: done
+Depends on: PA-11
+
+Add score involvement as the first metric in the summary strip (most coaching-relevant number).
+
+Format:
+```
+Score involvement  14   (9 assists · 5 direct)
+Score involvement  0
+```
+
+When only one type exists: `(all assists)` or `(all direct)`. Show the metric even when zero — a player with 20 possessions and 0 involvements is a meaningful finding.
+
+File: `src/lib/PossessionAnalysisPanel.svelte`
+
+---
+
+**PA-12 — Pressure indicator visual improvement**
+Priority: should
+Status: done
+Depends on: none
+
+The current `marker_ring: 'target'` is too subtle on dense sessions or small screens.
+
+Replace with a high-contrast outer ring: white fill with red stroke (`rgba(220, 38, 38, 0.9)`) at 2px width, radius 1.4× the dot radius. Distinct from the assist gold fill (PA-14) and visible against all outcome colours.
+
+Also add a filter toggle: **"Under pressure only"** — reduces `displayedEvents` to `under_pressure === true`. Group with the score involvement filter (PA-13) under a "Show only:" row above the pitch.
+
+Files: `src/lib/PossessionAnalysisPanel.svelte`, `src/lib/Pitch.svelte` (if ring styling is in the renderer)
+
+---
+
+**PA-13 — Score involvement filter**
+Priority: should
+Status: done
+Depends on: PA-11
+
+Add filter toggle: **"Score involvements only"**. When active, `displayedEvents` reduces to events where outcome is a score type OR `assist === true`.
+
+Group with the pressure filter (PA-12) under "Show only:" above the pitch.
+
+File: `src/lib/PossessionAnalysisPanel.svelte`
+
+---
+
+**PA-14 — Assist visual distinction in dot view**
+Priority: must
+Status: done
+Depends on: PA-03
+
+Events with `assist: true` use gold fill (`#f59e0b`) in dot view regardless of outcome colour. A player with 20 possessions and 9 gold dots communicates their scoring contribution before the analyst reads a number.
+
+An event can be both assist and under pressure — gold fill and pressure ring (PA-12) apply together without conflict. No change to heat map mode (density is the signal there, not outcome identity).
+
+File: `src/lib/PossessionAnalysisPanel.svelte`
+
+---
+
+**PA-15 — Carry line toggle**
+Priority: nice
+Status: done
+Depends on: none
+
+In the dot view controls, add toggle: **"Show carry lines"** (default on). When off, `dotConnections` is suppressed. Useful for high-possession sessions where overlapping arrows obscure the receive point distribution.
+
+Toggle is session-local, not persisted to localStorage.
+
+File: `src/lib/PossessionAnalysisPanel.svelte`
+
+---
+
+### Sprint 5 — Legend
+
+Done after taxonomy (PA-10), pressure treatment (PA-12), and assist visual (PA-14) are all settled. Building the legend before those would require updating it again.
+
+---
+
+**PA-16 — Outcome, assist, and pressure legend**
+Priority: must
+Status: done
+Depends on: PA-10, PA-12, PA-14
+
+Add a collapsible legend below the pitch in dot view. Collapsed by default; state persists to localStorage so the analyst only opens it once.
+
+Sections:
+
+Outcomes — colour swatch + label for each entry in `OUTCOME_COLORS`, grouped:
+- Scores: point, goal
+- Shots: wide, short/saved/blocked
+- Passes: hand pass, kick pass, passed/offloaded (legacy — label as such)
+- Possession lost: lost, fouled, tackled
+- Set play: foul won
+
+Special markers:
+- Gold dot: Assist — led directly to a score
+- Red ring: Under pressure
+
+Carry arrows (hide when carry lines toggled off via PA-15):
+- Green: Forward carry
+- Amber: Lateral carry
+- Red: Backward carry
+
+Hidden entirely in heat map mode.
+
+File: `src/lib/PossessionAnalysisPanel.svelte`
+
+---
+
+### Sprint 6 — Event editing
+
+Done after taxonomy and assist field are stable so the edit UI ships with all three metadata fields and never needs a second pass.
+
+---
+
+**PA-17 — Metadata edit on finalised events**
+Priority: should
+Status: done
+Depends on: PA-03, PA-08, PA-10
+
+Allow the analyst to correct the metadata of a finalised event without re-logging the full session. Coordinate editing is out of scope — delete and re-log if the location is wrong. This covers 80% of correction cases (wrong outcome, missed pressure flag, missed assist flag).
+
+Entry point: tap a dot in the analysis view dot view → event detail popover.
+
+Popover contents:
+- Outcome selector (full OUTCOMES list from PA-10)
+- Under pressure toggle
+- Assist toggle (shown only when outcome is assist-eligible, same rules as PA-08)
+- Receive and release coordinates (read-only, for reference)
+- "Save changes" and "Cancel"
+
+On save: event updated in local state and localStorage. Supabase sync queue picks up the session-level upsert. Summary strip and dot view re-render immediately.
+
+Review note: treat the popover as a small local edit draft so Cancel can discard changes cleanly without mutating selection state.
+
+Constraints:
+- Outcome cannot be cleared — always require a valid value before saving
+- If outcome changes to a non-assist-eligible type, `assist` resets to `false` before saving
+- `selectedEventId` state variable already exists — wire it to this popover
+
+Files: `src/lib/PossessionAnalysisPanel.svelte`, `src/lib/postMatchAnalysisStore.js`
+
+---
+
+### Sprint 7 — Cross-match
+
+---
+
+**PA-18 — Score involvement in cross-match aggregate**
+Priority: must
+Status: done
+Depends on: PA-11
+
+Cross-match summary strip addition:
+```
+Score involvement: 34  (22 assists · 12 direct)  39% rate
+```
+
+Per-match breakdown table — add "Involvement" column:
+
+| Match | Date | Events | Fwd % | Involvement |
+|---|---|---|---|---|
+| Clontarf v Kilmacud | May 10 | 18 | 56% | 7 (39%) |
+| Clontarf v Ballymun | May 17 | 22 | 61% | 11 (50%) |
+
+Involvement rate per match = involvement / event count for that match.
+
+File: `src/lib/PossessionAnalysisPanel.svelte`
+
+---
+
+**PA-19 — Score involvement in trend comparison**
+Priority: should
+Status: done
+Depends on: PA-18
+
+In the trend view, add involvement rate as a trend metric:
+
+```
+Score involvement rate:   38% → 52%   (+14pp)  ▲
+```
+
+Use existing directional colouring (green positive, red negative, grey flat). Threshold for meaningful change: ±5pp. Changes below that show as grey regardless of direction.
+
+File: `src/lib/PossessionAnalysisPanel.svelte`
+
+---
+
+### Sprint 8 — Tests
+
+---
+
+**PA-T01 — Unit tests: score involvement calculation**
+Priority: must
+Status: done
+Depends on: PA-11
+
+Add to `postMatchAnalysis.test.js`:
+- Zero events → `scoreInvolvement: 0`, `scoreInvolvementRate: null`
+- All direct scores, no assists → involvement = directScores, assistCount = 0
+- All assists, no direct scores → involvement = assistCount, directScores = 0
+- Mixed → correct sum, no double-counting
+- `assist: true` on ineligible outcome → excluded from assistCount
+- Legacy events without `assist` field → treated as false, no crash
+- `scoreInvolvementRate` = involvement / total, null when total = 0
+
+File: `src/lib/postMatchAnalysis.test.js`
+
+---
+
+**PA-T02 — Unit tests: backward compatibility**
+Priority: must
+Status: done
+Depends on: PA-T01, PA-10
+
+Confirm that sessions and events stored before any PA-series change produce identical output from `buildPossessionSummary`. Use existing fixture data. No regressions from schema additions or taxonomy expansion.
+
+File: `src/lib/postMatchAnalysis.test.js`
+
+---
+
+**PA-T03 — E2E: capture → finalise → involvement metric**
+Priority: should
+Status: done
+Depends on: PA-08, PA-11a
+
+- Start session → log event: Kick pass, assist checked → add → finalise
+- Assert: summary strip shows `Score involvement: 1 (1 assist · 0 direct)`
+- Start second session same player → log: Score point → finalise
+- Assert (all sessions): `Score involvement: 2 (1 assist · 1 direct)`, rate = 50%
+
+File: `tests/e2e/possession-analysis.spec.js`

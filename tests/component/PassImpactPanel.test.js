@@ -73,7 +73,7 @@ describe('PassImpactPanel', () => {
     const playerInput = screen.getByPlaceholderText('Type a player');
     expect(playerInput).toBeEnabled();
 
-    expect(screen.getByText('Pass Impact')).toBeInTheDocument();
+    expect(screen.getByText('Pass Destination')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Aoife Kelly 1$/ })).toBeInTheDocument();
     expect(screen.getByText('Total passes')).toBeInTheDocument();
     expect(screen.getAllByText('100%', { selector: '.summary-grid strong' })).toHaveLength(2);

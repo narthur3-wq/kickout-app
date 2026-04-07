@@ -2,6 +2,7 @@
   import { createEventDispatcher, onMount } from 'svelte';
   import {
     analysisPointForSession,
+    ASSIST_ELIGIBLE_OUTCOMES,
     buildPlayerDirectory,
     buildPossessionSummary,
     buildPointSeries,
@@ -13,6 +14,7 @@
     movementDirectionColor,
     movementDirectionLabel,
     movementDirectionForSession,
+    isScoreOutcome,
     normalizePlayerKey,
     pointDistanceMeters,
     resolveSessionPlayerIdentity,
@@ -52,9 +54,19 @@
     'Score goal',
     'Shot wide',
     'Shot short / saved / blocked',
+    'Hand pass',
+    'Kick pass',
     'Possession lost',
-    'Passed / offloaded',
+    'Fouled the ball',
+    'Tackled / dispossessed',
     'Foul won',
+  ];
+
+  const HALF_OPTIONS = [
+    { value: null, label: 'All halves' },
+    { value: 'first', label: 'First half' },
+    { value: 'second', label: 'Second half' },
+    { value: 'et', label: 'Extra time' },
   ];
 
   let analysisState = createEmptyAnalysisState();
@@ -64,16 +76,23 @@
   let draftEvent = blankDraftEvent();
   let draftStep = 'receive';
   let draftOurGoalAtTop = defaultOurGoalAtTop;
+  let draftHalf = null;
   let selectedPlayerKey = '';
   let selectedSessionId = 'all';
   let selectedEventId = null;
+  let eventEditDraft = null;
   let analysisMode = 'match';
+  let selectedHalf = null;
   let selectedCrossMatchIds = [];
   let mergeTargetPlayerKey = '';
   let rosterPropSource = null;
   let playerInput = '';
   let notice = '';
   let viewMode = 'dots';
+  let showPressureOnly = false;
+  let showScoreInvolvementsOnly = false;
+  let showCarryLines = true;
+  let legendOpen = false;
   let trendMode = 'halves';
   let trendLastN = 3;
   let trendFocus = 'earlier';
@@ -104,8 +123,9 @@
     return {
       receive: point(),
       release: point(),
-      outcome: 'Passed / offloaded',
+      outcome: 'Hand pass',
       under_pressure: false,
+      assist: false,
     };
   }
 
@@ -137,6 +157,7 @@
       player_key: identity.key || normalizePlayerKey(player),
       squad_player_id: identity.squad_player_id || null,
       our_goal_at_top: !!draftOurGoalAtTop,
+      half: draftHalf,
       created_at: timestamp,
       updated_at: timestamp,
       notes: '',
@@ -197,6 +218,28 @@
     });
   }
 
+  function legendStorageKey() {
+    return `ko_possession_legend_${storageScope || 'local'}`;
+  }
+
+  function loadLegendPreference() {
+    try {
+      const stored = localStorage.getItem(legendStorageKey());
+      if (stored === '1') legendOpen = true;
+      else if (stored === '0') legendOpen = false;
+    } catch {
+      // Best-effort only.
+    }
+  }
+
+  function saveLegendPreference() {
+    try {
+      localStorage.setItem(legendStorageKey(), legendOpen ? '1' : '0');
+    } catch {
+      // Best-effort only.
+    }
+  }
+
   function loadScope(scope) {
     if (!scope) {
       analysisState = createEmptyAnalysisState();
@@ -226,6 +269,111 @@
     draftEvent = blankDraftEvent();
     draftStep = 'receive';
     selectedEventId = null;
+    eventEditDraft = null;
+  }
+
+  function setDraftOutcome(outcome) {
+    draftEvent = {
+      ...draftEvent,
+      outcome,
+      assist: ASSIST_ELIGIBLE_OUTCOMES.has(outcome) ? draftEvent.assist === true : false,
+    };
+  }
+
+  function setDraftAssist(nextValue) {
+    draftEvent = {
+      ...draftEvent,
+      assist: !!nextValue,
+    };
+  }
+
+  function setDraftHalf(nextHalf) {
+    draftHalf = nextHalf || null;
+  }
+
+  function setDraftOrientation(nextValue) {
+    draftOurGoalAtTop = !!nextValue;
+  }
+
+  function isHalfMatch(sessionHalf, filterHalf) {
+    if (!filterHalf) return true;
+    return sessionHalf === filterHalf;
+  }
+
+  function createEventEditDraft(event, session) {
+    if (!event || !session) return null;
+    return {
+      sessionId: session.id,
+      eventId: event.id,
+      outcome: event.outcome,
+      under_pressure: !!event.under_pressure,
+      assist: !!event.assist,
+      receive_x: event.receive_x,
+      receive_y: event.receive_y,
+      release_x: event.release_x,
+      release_y: event.release_y,
+    };
+  }
+
+  function openEventEditor(event) {
+    const session = displayedSessions.find((item) => item.id === event.session_id) || selectedPlayerSessions.find((item) => item.id === event.session_id) || null;
+    eventEditDraft = createEventEditDraft(event, session);
+    selectedEventId = event.id;
+  }
+
+  function cancelEventEditor() {
+    eventEditDraft = null;
+    selectedEventId = null;
+  }
+
+  function setEventEditOutcome(outcome) {
+    if (!eventEditDraft) return;
+    eventEditDraft = {
+      ...eventEditDraft,
+      outcome,
+      assist: ASSIST_ELIGIBLE_OUTCOMES.has(outcome) ? eventEditDraft.assist === true : false,
+    };
+  }
+
+  function setEventEditAssist(nextValue) {
+    if (!eventEditDraft) return;
+    eventEditDraft = {
+      ...eventEditDraft,
+      assist: !!nextValue,
+    };
+  }
+
+  function setEventEditPressure(nextValue) {
+    if (!eventEditDraft) return;
+    eventEditDraft = {
+      ...eventEditDraft,
+      under_pressure: !!nextValue,
+    };
+  }
+
+  function saveEventEditor() {
+    if (!eventEditDraft) return;
+    const sessionIndex = analysisState.possessionSessions.findIndex((session) => session.id === eventEditDraft.sessionId);
+    if (sessionIndex < 0) return;
+    const session = analysisState.possessionSessions[sessionIndex];
+    const updatedEvents = (session.events || []).map((event) => {
+      if (event.id !== eventEditDraft.eventId) return event;
+      return {
+        ...event,
+        outcome: eventEditDraft.outcome,
+        under_pressure: !!eventEditDraft.under_pressure,
+        assist: ASSIST_ELIGIBLE_OUTCOMES.has(eventEditDraft.outcome) ? !!eventEditDraft.assist : false,
+      };
+    });
+    const nextSession = {
+      ...session,
+      events: updatedEvents,
+      updated_at: nowIso(),
+    };
+    const nextState = replaceAnalysisSession(analysisState, nextSession);
+    saveState(nextState);
+    eventEditDraft = null;
+    selectedEventId = null;
   }
 
   function startDraftSession() {
@@ -235,7 +383,6 @@
       return;
     }
     draftSession = session;
-    draftOurGoalAtTop = defaultOurGoalAtTop;
     resetDraftEvent();
     selectedPlayerKey = session.player_key;
     selectedSessionId = 'all';
@@ -277,6 +424,7 @@
       release_y: Math.round(draftEvent.release.y * 100) / 100,
       outcome: draftEvent.outcome,
       under_pressure: draftEvent.under_pressure,
+      assist: draftEvent.assist,
       created_at: timestamp,
     };
     draftSession = {
@@ -341,6 +489,7 @@
     selectedSessionId = 'all';
     playerInput = player.label;
     selectedEventId = null;
+    eventEditDraft = null;
     mergeTargetPlayerKey = '';
     if (analysisMode === 'cross') {
       selectedCrossMatchIds = availableMatchIdsForPlayer(player.key);
@@ -350,10 +499,13 @@
   function selectSession(sessionId) {
     selectedSessionId = sessionId;
     selectedEventId = null;
+    eventEditDraft = null;
   }
 
   function selectEvent(eventId) {
     selectedEventId = eventId;
+    const event = displayedEvents.find((item) => item.id === eventId) || null;
+    if (event) openEventEditor(event);
   }
 
   function currentSelectedEvent(events = [], selectedId = null) {
@@ -380,11 +532,11 @@
       x: event.receive.x,
       y: event.receive.y,
       outcome: event.outcome,
-      label: `${event.outcome} - ${movementDirectionLabel(directionOf(event))}`,
+      label: `${event.outcome}${event.assist ? ' - Assist' : ''} - ${movementDirectionLabel(directionOf(event))}`,
       marker_shape: 'circle',
-      marker_fill: OUTCOME_COLORS[event.outcome] || '#1c3f8a',
+      marker_fill: event.assist ? '#f59e0b' : (OUTCOME_COLORS[event.outcome] || '#1c3f8a'),
       marker_ring: event.under_pressure ? 'target' : null,
-      marker_ring_color: 'rgba(255,255,255,0.95)',
+      marker_ring_color: 'rgba(220, 38, 38, 0.9)',
       clickable: true,
     };
   }
@@ -395,11 +547,11 @@
       x: event.receive_x,
       y: event.receive_y,
       outcome: event.outcome,
-      label: `Draft event ${index + 1}: ${event.outcome} - ${movementDirectionLabel(draftDirectionOf(event))}`,
+      label: `Draft event ${index + 1}: ${event.outcome}${event.assist ? ' - Assist' : ''} - ${movementDirectionLabel(draftDirectionOf(event))}`,
       marker_shape: 'circle',
-      marker_fill: OUTCOME_COLORS[event.outcome] || '#1c3f8a',
+      marker_fill: event.assist ? '#f59e0b' : (OUTCOME_COLORS[event.outcome] || '#1c3f8a'),
       marker_ring: event.under_pressure ? 'target' : null,
-      marker_ring_color: 'rgba(255,255,255,0.95)',
+      marker_ring_color: 'rgba(220, 38, 38, 0.9)',
       opacity: 0.34,
       draft: true,
       clickable: false,
@@ -456,15 +608,6 @@
     return `${label}${date}`;
   }
 
-  function availableMatchIdsForPlayer(playerKey) {
-    if (!playerKey) return [];
-    return uniqueValues(
-      sessionsForPlayer(analysisState, 'possession', playerKey)
-        .map((session) => session.match_id)
-        .filter(Boolean),
-    );
-  }
-
   function allSessionsForSelectedPlayer() {
     if (!selectedPlayerKey) return [];
     return sessionsForPlayer(analysisState, 'possession', selectedPlayerKey);
@@ -484,6 +627,7 @@
     }
     selectedSessionId = 'all';
     selectedEventId = null;
+    eventEditDraft = null;
   }
 
   function toggleCrossMatch(matchId) {
@@ -494,16 +638,19 @@
     }
     selectedSessionId = 'all';
     selectedEventId = null;
+    eventEditDraft = null;
   }
 
   function selectAllCrossMatches(matchIds = []) {
     selectedCrossMatchIds = uniqueValues(matchIds.filter(Boolean));
     selectedSessionId = 'all';
     selectedEventId = null;
+    eventEditDraft = null;
   }
 
   function buildCrossMatchRow(matchId) {
-    const sessions = sessionsForPlayer(analysisState, 'possession', selectedPlayerKey, [matchId]);
+    const sessions = sessionsForPlayer(analysisState, 'possession', selectedPlayerKey, [matchId])
+      .filter((session) => isHalfMatch(session?.half ?? null, selectedHalf));
     const events = sessions.flatMap((session) => (session.events || []).map((event) => ({
       ...event,
       session_id: session.id,
@@ -556,7 +703,8 @@
       };
     }
 
-    const sessions = sessionsForPlayer(analysisState, 'possession', selectedPlayerKey, ids);
+    const sessions = sessionsForPlayer(analysisState, 'possession', selectedPlayerKey, ids)
+      .filter((session) => isHalfMatch(session?.half ?? null, selectedHalf));
     const events = sessions.flatMap((session) => (session.events || []).map((event) => ({
       ...event,
       session_id: session.id,
@@ -574,6 +722,23 @@
       heatPoints: buildPointSeries(events, (event) => event.receive),
       dateRange: dateRangeLabel(ids, lookup),
     };
+  }
+
+  function availableMatchIdsForPlayer(playerKey, halfFilter = selectedHalf) {
+    if (!playerKey) return [];
+    const sessions = sessionsForPlayer(analysisState, 'possession', playerKey)
+      .filter((session) => isHalfMatch(session?.half ?? null, halfFilter));
+    return uniqueValues(sessions.map((session) => session.match_id).filter(Boolean));
+  }
+
+  function setSelectedHalf(nextHalf) {
+    selectedHalf = nextHalf || null;
+    selectedSessionId = 'all';
+    selectedEventId = null;
+    eventEditDraft = null;
+    if (analysisMode === 'cross') {
+      selectedCrossMatchIds = availableMatchIdsForPlayer(selectedPlayerKey, selectedHalf);
+    }
   }
 
   function mergeSelectedPlayerNames() {
@@ -597,6 +762,7 @@
 
   $: if (storageScope !== loadedScope) {
     loadScope(storageScope);
+    loadLegendPreference();
     draftSession = null;
     resetDraftEvent();
     selectedPlayerKey = '';
@@ -696,7 +862,10 @@
 
   onMount(() => {
     if (storageScope) loadScope(storageScope);
+    loadLegendPreference();
   });
+
+  $: saveLegendPreference();
 
   $: matchSessions = sessionsForMatch(analysisState, 'possession', activeMatchId)
     .slice()
@@ -710,10 +879,14 @@
   $: rosterPlayers = rosterList();
   $: activeRosterPlayers = activeRosterList();
   $: allPossessionSessions = sessionsForMatch(analysisState, 'possession', null);
+  $: halfFilteredPossessionSessions = selectedHalf
+    ? allPossessionSessions.filter((session) => isHalfMatch(session?.half ?? null, selectedHalf))
+    : allPossessionSessions;
 
   $: crossMatchIdsForPlayer = uniqueValues(
     selectedPlayerKey
       ? sessionsForPlayer(analysisState, 'possession', selectedPlayerKey)
+          .filter((session) => isHalfMatch(session?.half ?? null, selectedHalf))
           .map((session) => session.match_id)
           .filter(Boolean)
       : []
@@ -725,13 +898,16 @@
 
   $: selectedCrossMatchSessions = selectedPlayerKey && selectedCrossMatchIds.length > 0
     ? sessionsForPlayer(analysisState, 'possession', selectedPlayerKey, selectedCrossMatchIds)
+        .filter((session) => isHalfMatch(session?.half ?? null, selectedHalf))
     : [];
 
   $: crossMatchScopeSessions = analysisMode === 'cross' && selectedCrossMatchIds.length > 0
-    ? allPossessionSessions.filter((session) => selectedCrossMatchIds.includes(session.match_id))
+    ? halfFilteredPossessionSessions.filter((session) => selectedCrossMatchIds.includes(session.match_id))
     : [];
 
-  $: scopeSessions = analysisMode === 'cross' ? crossMatchScopeSessions : matchSessions;
+  $: scopeSessions = analysisMode === 'cross'
+    ? crossMatchScopeSessions
+    : matchSessions.filter((session) => isHalfMatch(session?.half ?? null, selectedHalf));
 
   $: playerDirectory = buildPlayerDirectory(scopeSessions, rosterPlayers);
 
@@ -740,7 +916,8 @@
   $: selectedPlayerSessions = selectedPlayerKey
     ? (analysisMode === 'cross'
       ? selectedCrossMatchSessions
-      : sessionsForPlayer(analysisState, 'possession', selectedPlayerKey, [activeMatchId]))
+      : sessionsForPlayer(analysisState, 'possession', selectedPlayerKey, [activeMatchId])
+        .filter((session) => isHalfMatch(session?.half ?? null, selectedHalf)))
     : scopeSessions;
 
   $: if (selectedSessionId !== 'all' && !selectedPlayerSessions.some((session) => session.id === selectedSessionId)) {
@@ -776,9 +953,13 @@
     ...playerOptions,
   ], ['player_name']);
 
-  $: possessionSummary = buildPossessionSummary(displayedEvents);
+  $: possessionSummary = buildPossessionSummary(displayedEventsVisible);
   $: outcomeBreakdown = possessionSummary.outcomeBreakdown;
-  $: totalEvents = possessionSummary.total ?? possessionSummary.totalEvents ?? displayedEvents.length;
+  $: totalEvents = possessionSummary.total ?? possessionSummary.totalEvents ?? displayedEventsVisible.length;
+  $: directScores = possessionSummary.directScores ?? 0;
+  $: assistCount = possessionSummary.assistCount ?? 0;
+  $: scoreInvolvement = possessionSummary.scoreInvolvement ?? 0;
+  $: scoreInvolvementRate = possessionSummary.scoreInvolvementRate ?? null;
   $: forwardCount = possessionSummary.forwardCount;
   $: lateralCount = possessionSummary.lateralCount;
   $: backwardCount = possessionSummary.backwardCount;
@@ -786,21 +967,39 @@
   $: forwardDisplay = analysisMode === 'cross' ? formatPercent(forwardCount, totalEvents) : forwardCount;
   $: lateralDisplay = analysisMode === 'cross' ? formatPercent(lateralCount, totalEvents) : lateralCount;
   $: backwardDisplay = analysisMode === 'cross' ? formatPercent(backwardCount, totalEvents) : backwardCount;
-  $: heatPoints = buildPointSeries(displayedEvents, (event) => event.receive);
-  $: dotOverlays = displayedEvents.map((event) => overlayFor(event));
-  $: dotConnections = displayedEvents.map((event) => lineFor(event));
+  $: scoreInvolvementDetail = scoreInvolvement > 0
+    ? (directScores > 0 && assistCount > 0
+      ? `(${assistCount} assist${assistCount === 1 ? '' : 's'} · ${directScores} direct)`
+      : directScores > 0
+        ? '(all direct)'
+        : '(all assists)')
+    : '';
+  $: scoreInvolvementRateLabel = analysisMode === 'cross' && Number.isFinite(scoreInvolvementRate)
+    ? `${Math.round(scoreInvolvementRate * 100)}% rate`
+    : '';
+  $: displayedEventsVisible = displayedEvents.filter((event) => {
+    if (showPressureOnly && !event.under_pressure) return false;
+    if (showScoreInvolvementsOnly) {
+      const outcome = String(event?.outcome ?? '').trim();
+      if (!isScoreOutcome(outcome) && event?.assist !== true) return false;
+    }
+    return true;
+  });
+  $: heatPoints = buildPointSeries(displayedEventsVisible, (event) => event.receive);
+  $: dotOverlays = displayedEventsVisible.map((event) => overlayFor(event));
+  $: dotConnections = showCarryLines ? displayedEventsVisible.map((event) => lineFor(event)) : [];
   $: sampleNote = (() => {
     if (totalEvents <= 0) return '';
     if (analysisMode === 'cross') {
       const matchCount = selectedCrossMatchIds.length;
-      if (matchCount < 3 || totalEvents < 5) {
+      if (matchCount < 3 && totalEvents < 15) {
         const matchLabel = matchCount === 1 ? 'match' : 'matches';
-        return `Small sample: ${matchCount} ${matchLabel}, ${totalEvents} events. Treat these patterns cautiously.`;
+        return `Only ${matchCount} ${matchLabel} selected with ${totalEvents} events — treat these patterns cautiously.`;
       }
       return '';
     }
-    if (totalEvents < 5) {
-      return `Small sample: ${totalEvents} events. Treat these patterns cautiously.`;
+    if (totalEvents < 8) {
+      return `${totalEvents} events — patterns are forming. Treat direction splits cautiously.`;
     }
     return '';
   })();
@@ -833,15 +1032,17 @@
   $: trendEarlier = buildTrendBucket(trendSplit.earlier, matchDateLookup);
   $: trendRecent = buildTrendBucket(trendSplit.recent, matchDateLookup);
 
-  $: trendForwardEarlier = percentOf(trendEarlier.summary.forwardCount, trendEarlier.summary.totalEvents ?? trendEarlier.eventCount);
-  $: trendForwardRecent = percentOf(trendRecent.summary.forwardCount, trendRecent.summary.totalEvents ?? trendRecent.eventCount);
-  $: trendForwardDelta = Number.isFinite(trendForwardEarlier) && Number.isFinite(trendForwardRecent)
-    ? trendForwardRecent - trendForwardEarlier
+  $: trendInvolvementEarlier = percentOf(trendEarlier.summary.scoreInvolvement, trendEarlier.summary.totalEvents ?? trendEarlier.eventCount);
+  $: trendInvolvementRecent = percentOf(trendRecent.summary.scoreInvolvement, trendRecent.summary.totalEvents ?? trendRecent.eventCount);
+  $: trendInvolvementDelta = Number.isFinite(trendInvolvementEarlier) && Number.isFinite(trendInvolvementRecent)
+    ? trendInvolvementRecent - trendInvolvementEarlier
     : null;
-  $: trendDeltaTone = trendForwardDelta > 0 ? 'up' : trendForwardDelta < 0 ? 'down' : 'flat';
-  $: trendDeltaLabel = Number.isFinite(trendForwardEarlier) && Number.isFinite(trendForwardRecent)
-    ? `Forward receives: ${formatPercentValue(trendForwardEarlier)} -> ${formatPercentValue(trendForwardRecent)} (${formatDeltaPercent(trendForwardDelta)})`
-    : 'Forward receives: n/a';
+  $: trendDeltaTone = Number.isFinite(trendInvolvementDelta)
+    ? (Math.abs(trendInvolvementDelta) < 5 ? 'flat' : (trendInvolvementDelta > 0 ? 'up' : 'down'))
+    : 'flat';
+  $: trendDeltaLabel = Number.isFinite(trendInvolvementEarlier) && Number.isFinite(trendInvolvementRecent)
+    ? `Score involvement rate: ${formatPercentValue(trendInvolvementEarlier)} -> ${formatPercentValue(trendInvolvementRecent)} (${formatDeltaPercent(trendInvolvementDelta)})`
+    : 'Score involvement rate: n/a';
 
   $: trendCompareRows = (() => {
     if (!trendEligible) return [];
@@ -849,9 +1050,22 @@
     const recentTotal = trendRecent.summary.totalEvents ?? trendRecent.eventCount;
     const earlierForward = percentOf(trendEarlier.summary.forwardCount, earlierTotal);
     const recentForward = percentOf(trendRecent.summary.forwardCount, recentTotal);
+    const earlierInvolvement = percentOf(trendEarlier.summary.scoreInvolvement, earlierTotal);
+    const recentInvolvement = percentOf(trendRecent.summary.scoreInvolvement, recentTotal);
     const earlierAvgCarry = trendEarlier.summary.averageCarry;
     const recentAvgCarry = trendRecent.summary.averageCarry;
     return [
+      {
+        label: 'Score involvement rate',
+        earlier: formatPercentValue(earlierInvolvement),
+        recent: formatPercentValue(recentInvolvement),
+        delta: formatDeltaPercent(Number.isFinite(earlierInvolvement) && Number.isFinite(recentInvolvement) ? recentInvolvement - earlierInvolvement : null),
+        deltaTone: Number.isFinite(earlierInvolvement) && Number.isFinite(recentInvolvement)
+          ? (Math.abs(recentInvolvement - earlierInvolvement) < 5
+            ? 'flat'
+            : (recentInvolvement - earlierInvolvement > 0 ? 'up' : 'down'))
+          : 'flat',
+      },
       {
         label: 'Total events',
         earlier: earlierTotal,
@@ -930,9 +1144,42 @@
         <div class="button-row">
           <button type="button" on:click={startDraftSession} disabled={!!draftSession || !playerInput.trim()}>Start draft session</button>
           <button type="button" on:click={cancelDraftSession} disabled={!draftSession}>Discard draft</button>
-          <button type="button" on:click={() => draftOurGoalAtTop = !draftOurGoalAtTop}>
-            {orientationLabel(draftOurGoalAtTop)}
-          </button>
+        </div>
+
+        <div class="session-config">
+          <div class="config-group">
+            <span>Attacking direction for this session</span>
+            <div class="segmented">
+              <button type="button" class:active={draftOurGoalAtTop} disabled={!!draftSession} on:click={() => setDraftOrientation(true)}>
+                Our goal at top
+              </button>
+              <button type="button" class:active={!draftOurGoalAtTop} disabled={!!draftSession} on:click={() => setDraftOrientation(false)}>
+                Our goal at bottom
+              </button>
+            </div>
+          </div>
+          <div class="config-group">
+            <span>Half</span>
+            <div class="segmented">
+              {#each HALF_OPTIONS.filter((option) => option.value !== null) as option (option.value)}
+                <button
+                  type="button"
+                  class:active={draftHalf === option.value}
+                  disabled={!!draftSession}
+                  on:click={() => setDraftHalf(option.value)}
+                >
+                  {option.label}
+                </button>
+              {/each}
+            </div>
+            <button type="button" class="link-button" disabled={!!draftSession || draftHalf === null} on:click={() => setDraftHalf(null)}>
+              Clear half
+            </button>
+          </div>
+        </div>
+
+        <div class="session-guidance">
+          Create a separate session for each half if the attacking direction changes at half time.
         </div>
 
         {#if draftSession}
@@ -977,7 +1224,12 @@
                   {#each draftSession.events as event, index (event.id)}
                     <div class="draft-log-row">
                       <div class="draft-log-main">
-                        <strong>{index + 1}. {event.outcome}</strong>
+                        <strong>
+                          {index + 1}. {event.outcome}
+                          {#if event.assist}
+                            <span class="event-badge assist">Assist</span>
+                          {/if}
+                        </strong>
                         <span>
                           {movementDirectionLabel(draftDirectionOf(event))}
                           {event.under_pressure ? ' - Under pressure' : ''}
@@ -997,12 +1249,19 @@
                 <button
                   type="button"
                   class:active={draftEvent.outcome === outcome}
-                  on:click={() => draftEvent = { ...draftEvent, outcome }}
+                  on:click={() => setDraftOutcome(outcome)}
                 >
                   {outcome}
                 </button>
               {/each}
             </div>
+
+            {#if ASSIST_ELIGIBLE_OUTCOMES.has(draftEvent.outcome)}
+              <label class="pressure">
+                <input type="checkbox" checked={draftEvent.assist} on:change={(e) => setDraftAssist(e.currentTarget.checked)} />
+                <span>Assist - led directly to a score</span>
+              </label>
+            {/if}
 
             <label class="pressure">
               <input type="checkbox" bind:checked={draftEvent.under_pressure} />
@@ -1082,6 +1341,17 @@
           {/if}
         {/if}
 
+        <div class="filter-row" aria-label="Half filter">
+          {#each HALF_OPTIONS as option (option.label)}
+            <button
+              type="button"
+              class:active={(selectedHalf ?? null) === option.value}
+              on:click={() => setSelectedHalf(option.value)}
+            >
+              {option.label}
+            </button>
+          {/each}
+        </div>
         <div class="player-strip">
           {#each playerDirectory as player (player.key)}
             <button type="button" class:selected={selectedPlayerKey === player.key} on:click={() => selectPlayer(player)}>
@@ -1129,14 +1399,37 @@
           </label>
         {/if}
 
+
+        <div class="filter-row show-only" aria-label="Analysis filters">
+          <span class="filter-label">Show only:</span>
+          <button type="button" class:active={showPressureOnly} on:click={() => showPressureOnly = !showPressureOnly}>
+            Under pressure only
+          </button>
+          <button type="button" class:active={showScoreInvolvementsOnly} on:click={() => showScoreInvolvementsOnly = !showScoreInvolvementsOnly}>
+            Score involvements only
+          </button>
+          <button type="button" class:active={showCarryLines} on:click={() => showCarryLines = !showCarryLines}>
+            Show carry lines
+          </button>
+        </div>
+
         {#if analysisMode === 'cross' && selectedCrossMatchIds.length === 0}
           <div class="empty-state">Choose one or more matches to view the aggregated profile.</div>
+        {:else if selectedHalf && selectedPlayerSessions.length === 0}
+          <div class="empty-state">No sessions logged for this half.</div>
         {:else if analysisMode === 'cross' && selectedPlayerSessions.length === 0}
           <div class="empty-state">This player has no saved sessions in the selected matches.</div>
         {:else if totalEvents === 0}
           <div class="empty-state">No saved possession events for the current selection.</div>
         {:else}
           <div class="summary-grid">
+            <div class="emphasis">
+              <span>Score involvement</span>
+              <strong>{scoreInvolvement}</strong>
+              {#if scoreInvolvementDetail || scoreInvolvementRateLabel}
+                <small>{scoreInvolvementDetail}{scoreInvolvementRateLabel ? ` ${scoreInvolvementRateLabel}` : ''}</small>
+              {/if}
+            </div>
             <div><span>Total events</span><strong>{totalEvents}</strong></div>
             <div><span>Forward</span><strong>{forwardDisplay}</strong></div>
             <div><span>Lateral</span><strong>{lateralDisplay}</strong></div>
@@ -1179,6 +1472,48 @@
               />
             {/if}
           </div>
+
+          {#if viewMode === 'dots'}
+            <div class="legend-card">
+              <button type="button" class="legend-toggle" on:click={() => legendOpen = !legendOpen}>
+                Legend
+              </button>
+              {#if legendOpen}
+                <div class="legend-grid">
+                  <div class="legend-section">
+                    <strong>Outcomes</strong>
+                    <div class="legend-list">
+                      {#each OUTCOMES as outcome (outcome)}
+                        <div class="legend-item">
+                          <span class="legend-swatch" style={`background:${OUTCOME_COLORS[outcome] || '#1c3f8a'}`}></span>
+                          <span>{outcome}</span>
+                        </div>
+                      {/each}
+                      <div class="legend-item">
+                        <span class="legend-swatch" style={`background:${OUTCOME_COLORS['Passed / offloaded']}`}></span>
+                        <span>Passed / offloaded (legacy)</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="legend-section">
+                    <strong>Markers</strong>
+                    <div class="legend-list">
+                      <div class="legend-item"><span class="legend-dot assist"></span><span>Assist - led directly to a score</span></div>
+                      <div class="legend-item"><span class="legend-ring"></span><span>Under pressure</span></div>
+                    </div>
+                  </div>
+                  <div class="legend-section">
+                    <strong>Carry arrows</strong>
+                    <div class="legend-list">
+                      <div class="legend-item"><span class="legend-arrow forward"></span><span>Forward carry</span></div>
+                      <div class="legend-item"><span class="legend-arrow lateral"></span><span>Lateral carry</span></div>
+                      <div class="legend-item"><span class="legend-arrow backward"></span><span>Backward carry</span></div>
+                    </div>
+                  </div>
+                </div>
+              {/if}
+            </div>
+          {/if}
 
           {#if analysisMode === 'cross'}
             <div class="trend-section">
@@ -1281,6 +1616,7 @@
             <div class="cross-table">
               <div class="cross-head">
                 <span>Match</span>
+                <span>Involvement</span>
                 <span>Events</span>
                 <span>Fwd</span>
                 <span>Back</span>
@@ -1288,6 +1624,7 @@
               </div>
               {#each crossMatchRows as row (row.matchId)}
                 {@const rowTotal = row.summary.total ?? row.summary.totalEvents ?? row.events.length}
+                {@const rowInvolvementRate = Number.isFinite(row.summary.scoreInvolvementRate) ? `${Math.round(row.summary.scoreInvolvementRate * 100)}%` : '—'}
                 <button
                   type="button"
                   class="cross-row"
@@ -1297,6 +1634,7 @@
                   }}
                 >
                   <strong>{row.label}</strong>
+                  <span>{row.summary.scoreInvolvement ?? 0} ({rowInvolvementRate})</span>
                   <span>{rowTotal}</span>
                   <span>{formatPercent(row.summary.forwardCount, rowTotal)}</span>
                   <span>{formatPercent(row.summary.backwardCount, rowTotal)}</span>
@@ -1306,14 +1644,39 @@
             </div>
           {/if}
 
-          {@const selectedEvent = currentSelectedEvent(displayedEvents, selectedEventId)}
-          {#if selectedEvent}
-            <div class="detail-card">
-              <div class="detail-title">{selectedEvent.outcome}</div>
+          {@const selectedEvent = currentSelectedEvent(displayedEventsVisible, selectedEventId)}
+          {#if selectedEvent && eventEditDraft}
+            <div class="detail-card popover">
+              <div class="detail-title">Edit event</div>
               <div class="detail-grid">
-                <span>Direction</span><strong>{movementDirectionLabel(directionOf(selectedEvent))}</strong>
-                <span>Carry</span><strong>{formatMetres(pointDistanceMeters(selectedEvent.receive, selectedEvent.release))}</strong>
-                <span>Pressure</span><strong>{selectedEvent.under_pressure ? 'Yes' : 'No'}</strong>
+                <span>Receive</span><strong>{Number.isFinite(selectedEvent.receive.x) ? `${selectedEvent.receive.x.toFixed(2)}, ${selectedEvent.receive.y.toFixed(2)}` : '—'}</strong>
+                <span>Release</span><strong>{Number.isFinite(selectedEvent.release.x) ? `${selectedEvent.release.x.toFixed(2)}, ${selectedEvent.release.y.toFixed(2)}` : '—'}</strong>
+              </div>
+
+              <label class="field edit-field">
+                <span>Outcome</span>
+                <select bind:value={eventEditDraft.outcome} on:change={(e) => setEventEditOutcome(e.currentTarget.value)}>
+                  {#each OUTCOMES as outcome (outcome)}
+                    <option value={outcome}>{outcome}</option>
+                  {/each}
+                </select>
+              </label>
+
+              {#if ASSIST_ELIGIBLE_OUTCOMES.has(eventEditDraft.outcome)}
+                <label class="pressure">
+                  <input type="checkbox" checked={eventEditDraft.assist} on:change={(e) => setEventEditAssist(e.currentTarget.checked)} />
+                  <span>Assist - led directly to a score</span>
+                </label>
+              {/if}
+
+              <label class="pressure">
+                <input type="checkbox" checked={eventEditDraft.under_pressure} on:change={(e) => setEventEditPressure(e.currentTarget.checked)} />
+                <span>Under pressure</span>
+              </label>
+
+              <div class="button-row">
+                <button type="button" class="primary" on:click={saveEventEditor}>Save changes</button>
+                <button type="button" on:click={cancelEventEditor}>Cancel</button>
               </div>
             </div>
           {/if}
@@ -1375,6 +1738,15 @@
   .primary { background: #1c3f8a; color: #fff; border-color: #1c3f8a; }
   .primary:hover:not(:disabled) { background: #163270; }
   .danger { border-color: #fecaca; color: #b91c1c; }
+  .link-button { padding: 0; border: none; background: transparent; color: #1d4ed8; font-size: 12px; font-weight: 700; text-align: left; }
+  .link-button:hover:not(:disabled) { background: transparent; text-decoration: underline; }
+  .session-config { display: grid; gap: 10px; margin-top: 12px; }
+  .config-group { display: grid; gap: 8px; }
+  .config-group span { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; }
+  .segmented { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+  .segmented button { border-radius: 999px; background: #f8fafc; }
+  .segmented button.active { background: #1c3f8a; color: #fff; border-color: #1c3f8a; }
+  .session-guidance { margin-top: 10px; font-size: 12px; line-height: 1.45; color: #6b7280; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; }
   .mode-toggle { display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 12px; border-radius: 999px; background: #eff6ff; border: 1px solid #dbeafe; }
   .mode-toggle button { border: none; background: transparent; border-radius: 999px; padding: 8px 12px; }
   .mode-toggle button.active { background: #1c3f8a; color: #fff; }
@@ -1404,12 +1776,19 @@
   .draft-log-main { display: grid; gap: 2px; min-width: 0; }
   .draft-log-main strong { font-size: 12px; color: #111827; }
   .draft-log-main span { font-size: 11px; color: #6b7280; }
+  .event-badge { display: inline-flex; align-items: center; margin-left: 6px; padding: 2px 6px; border-radius: 999px; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+  .event-badge.assist { background: #fef3c7; color: #92400e; border: 1px solid #f59e0b; }
   .draft-row-remove { border-color: #fecaca; color: #b91c1c; padding: 6px 10px; border-radius: 999px; font-size: 11px; }
   .outcomes { display: flex; flex-wrap: wrap; gap: 6px; }
   .outcomes button { border-radius: 999px; padding: 7px 10px; font-size: 12px; }
   .outcomes button.active { background: #1c3f8a; color: #fff; border-color: #1c3f8a; }
   .pressure { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #374151; text-transform: none; letter-spacing: 0; }
   .pressure input { width: 16px; height: 16px; accent-color: #1c3f8a; }
+  .filter-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+  .filter-row button { border-radius: 999px; background: #f8fafc; font-size: 12px; }
+  .filter-row button.active { background: #1c3f8a; color: #fff; border-color: #1c3f8a; }
+  .filter-row.show-only { margin-top: 8px; padding: 8px 10px; border-radius: 12px; background: #f8fafc; border: 1px solid #e5e7eb; }
+  .filter-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; }
   .view-toggle { display: inline-flex; background: #f3f4f6; border-radius: 999px; padding: 3px; gap: 3px; }
   .view-toggle button { border: none; background: transparent; border-radius: 999px; }
   .view-toggle button.active { background: #fff; color: #1c3f8a; }
@@ -1419,25 +1798,44 @@
   .player-strip span { opacity: 0.7; font-size: 11px; }
   .summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
   .summary-grid div { border: 1px solid #e5e7eb; background: #f9fafb; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .summary-grid .emphasis { background: #eff6ff; border-color: #bfdbfe; }
   .summary-grid span { font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.08em; }
   .summary-grid strong { font-size: 18px; font-weight: 900; color: #111827; }
+  .summary-grid small { font-size: 11px; font-weight: 700; line-height: 1.4; color: #1d4ed8; }
   .sample-note { margin-bottom: 12px; padding: 10px 12px; border-radius: 10px; border: 1px dashed #d1d5db; background: #fafafa; color: #6b7280; font-size: 12px; }
   .outcome-list { display: grid; gap: 6px; margin-bottom: 12px; }
   .outcome-list div { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid #f3f4f6; padding-bottom: 6px; font-size: 12px; }
   .outcome-list strong { display: inline-flex; align-items: baseline; gap: 4px; }
   .outcome-list small { color: #6b7280; font-size: 11px; font-weight: 700; }
+  .legend-card { margin-top: 10px; border: 1px solid #e5e7eb; border-radius: 12px; background: #fff; padding: 10px 12px; }
+  .legend-toggle { padding: 0; border: none; background: transparent; color: #1d4ed8; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+  .legend-grid { margin-top: 10px; display: grid; gap: 12px; }
+  .legend-section strong { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 800; color: #111827; text-transform: uppercase; letter-spacing: 0.08em; }
+  .legend-list { display: grid; gap: 6px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #374151; }
+  .legend-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(17, 24, 39, 0.12); flex-shrink: 0; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 999px; background: #f59e0b; border: 1px solid rgba(17, 24, 39, 0.14); display: inline-block; flex-shrink: 0; }
+  .legend-ring { width: 12px; height: 12px; border-radius: 999px; border: 2px solid rgba(220, 38, 38, 0.9); background: #fff; display: inline-block; flex-shrink: 0; }
+  .legend-arrow { width: 14px; height: 3px; border-radius: 999px; display: inline-block; flex-shrink: 0; }
+  .legend-arrow.forward { background: #16a34a; }
+  .legend-arrow.lateral { background: #d97706; }
+  .legend-arrow.backward { background: #dc2626; }
   .mismatch-note { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
   .mismatch-note strong { display: block; margin-bottom: 4px; }
   .mismatch-note small { display: block; margin-top: 4px; color: #6b7280; }
   .mismatch-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
   .mismatch-actions select { min-width: 180px; border: 1.5px solid #d1d5db; border-radius: 10px; padding: 8px 10px; font-family: inherit; font-size: 13px; color: #111827; background: #fff; }
   .detail-card { margin-top: 12px; background: #f8fafc; border: 1px solid #e5e7eb; padding: 12px; }
+  .detail-card.popover { background: #fff; border-color: #bfdbfe; box-shadow: 0 16px 40px rgba(28, 63, 138, 0.12); }
   .detail-title { font-size: 14px; font-weight: 800; margin-bottom: 10px; }
   .detail-grid { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 12px; }
   .detail-grid span { color: #6b7280; font-weight: 700; }
   .detail-grid strong { color: #111827; }
+  .edit-field { margin-top: 10px; text-transform: none; letter-spacing: 0; font-size: 12px; }
+  .edit-field span { text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; }
+  .edit-field select { border: 1.5px solid #d1d5db; border-radius: 10px; padding: 10px 12px; font-family: inherit; font-size: 13px; color: #111827; background: #fff; }
   .cross-table { display: grid; gap: 6px; margin-top: 12px; }
-  .cross-head, .cross-row { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(4, minmax(0, 0.6fr)); gap: 8px; align-items: center; }
+  .cross-head, .cross-row { display: grid; grid-template-columns: minmax(0, 1.3fr) repeat(5, minmax(0, 0.55fr)); gap: 8px; align-items: center; }
   .cross-head { color: #6b7280; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
   .cross-row { width: 100%; text-align: left; border: 1px solid #e5e7eb; background: #f9fafb; border-radius: 10px; padding: 8px 10px; }
   .cross-row strong { font-size: 12px; color: #111827; }
@@ -1485,11 +1883,12 @@
   @media (max-width: 640px) {
     .match-meta { text-align: left; }
     .mini-grid { grid-template-columns: 1fr; }
+    .summary-grid { grid-template-columns: 1fr; }
     .mode-toggle { width: 100%; justify-content: stretch; }
     .mode-toggle button { flex: 1; }
     .mismatch-note { flex-direction: column; }
     .mismatch-actions { width: 100%; justify-content: stretch; }
     .mismatch-actions select { width: 100%; min-width: 0; }
-    .cross-head, .cross-row { grid-template-columns: minmax(0, 1.1fr) repeat(4, minmax(0, 0.45fr)); }
+    .cross-head, .cross-row { grid-template-columns: minmax(0, 1.1fr) repeat(5, minmax(0, 0.42fr)); }
   }
 </style>

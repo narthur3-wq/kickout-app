@@ -3,6 +3,26 @@ export const PITCH_LENGTH_M = 145;
 export const DEFAULT_DIRECTION_THRESHOLD_M = 5;
 export const DEFAULT_SIDE_THRESHOLD_M = 4;
 
+export const POSSESSION_SCORE_OUTCOMES = new Set(['Score point', 'Score goal']);
+export const ASSIST_ELIGIBLE_OUTCOMES = new Set([
+  'Passed / offloaded',
+  'Hand pass',
+  'Kick pass',
+  'Foul won',
+]);
+
+function normalizeOutcomeLabel(value) {
+  return String(value ?? '').trim();
+}
+
+export function isScoreOutcome(outcome) {
+  return POSSESSION_SCORE_OUTCOMES.has(normalizeOutcomeLabel(outcome));
+}
+
+export function isAssistEligibleOutcome(outcome) {
+  return ASSIST_ELIGIBLE_OUTCOMES.has(normalizeOutcomeLabel(outcome));
+}
+
 function toFiniteNumber(value) {
   if (value === null || value === undefined || value === '') return NaN;
   const parsed = Number(value);
@@ -331,9 +351,31 @@ export function summarizePossessionEvents(events = [], options = {}) {
 
 export function buildPossessionSummary(events = [], options = {}) {
   const summary = summarizePossessionEvents(events, options);
+  let directScores = 0;
+  let assistCount = 0;
+  for (const event of events) {
+    const outcome = normalizeOutcomeLabel(event?.outcome);
+    if (isScoreOutcome(outcome)) {
+      directScores += 1;
+      continue;
+    }
+    if (event?.assist === true) {
+      if (isAssistEligibleOutcome(outcome)) {
+        assistCount += 1;
+      } else {
+        console.warn('Assist ignored for ineligible outcome', { outcome, eventId: event?.id });
+      }
+    }
+  }
+  const scoreInvolvement = directScores + assistCount;
+  const scoreInvolvementRate = summary.total > 0 ? scoreInvolvement / summary.total : null;
   return {
     ...summary,
     totalEvents: summary.total,
+    directScores,
+    assistCount,
+    scoreInvolvement,
+    scoreInvolvementRate,
   };
 }
 
