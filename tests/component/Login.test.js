@@ -81,6 +81,21 @@ describe('Login', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/allowed_users/i);
   });
 
+  it('surfaces thrown sign-in failures and clears the loading state', async () => {
+    const user = userEvent.setup();
+
+    mockState.signInWithPasswordMock.mockRejectedValue(new Error('Lock acquisition stalled'));
+
+    render(Login);
+
+    await user.type(screen.getByLabelText('Email'), 'analyst@example.com');
+    await user.type(screen.getByLabelText('Password'), 'temporary123');
+    await user.click(screen.getByRole('button', { name: /Sign in/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Lock acquisition stalled/i);
+    expect(screen.getByRole('button', { name: /Sign in/i })).toBeEnabled();
+  });
+
   it('sends a password reset link and shows the confirmation message', async () => {
     const user = userEvent.setup();
     mockState.resetPasswordForEmailMock.mockResolvedValue({ error: null });

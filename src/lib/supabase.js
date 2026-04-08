@@ -1,21 +1,32 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js';
+import { runWithoutBrowserLock, shouldBypassBrowserAuthLock } from './supabaseAuthLock.js';
 
-const url  = import.meta.env.VITE_SUPABASE_URL
-const key  = import.meta.env.VITE_SUPABASE_ANON_KEY
+const url = import.meta.env.VITE_SUPABASE_URL;
+const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const adminEmails = String(import.meta.env.VITE_ADMIN_EMAILS || '')
   .split(',')
   .map((value) => value.trim().toLowerCase())
-  .filter(Boolean)
+  .filter(Boolean);
 
-/** Supabase client — null when env vars are not set (offline-only mode) */
-export const supabase = (url && key) ? createClient(url, key) : null
+export function getSupabaseClientOptions(browser = globalThis) {
+  if (!shouldBypassBrowserAuthLock(browser)) return undefined;
+
+  return {
+    auth: {
+      lock: runWithoutBrowserLock,
+    },
+  };
+}
+
+/** Supabase client - null when env vars are not set (offline-only mode) */
+export const supabase = (url && key) ? createClient(url, key, getSupabaseClientOptions()) : null;
 
 /** True when Supabase is configured and network features are available */
-export const supabaseConfigured = !!(url && key)
+export const supabaseConfigured = !!(url && key);
 
 /** Client-side convenience only; the Edge Function enforces admin access server-side. */
 export function isConfiguredAdmin(email) {
-  return adminEmails.includes(String(email || '').trim().toLowerCase())
+  return adminEmails.includes(String(email || '').trim().toLowerCase());
 }
 
 /**
@@ -58,11 +69,11 @@ export async function getUserTeamDetails() {
 
 /**
  * Returns true if the currently signed-in user's email is in the
- * allowed_users allowlist table.  Returns true unconditionally when
+ * allowed_users allowlist table. Returns true unconditionally when
  * Supabase is not configured (offline / dev mode).
  */
 export async function userHasAccess() {
-  if (!supabase) return true; // offline mode — no gate
+  if (!supabase) return true; // offline mode - no gate
   try {
     const { data, error } = await supabase
       .from('allowed_users')
@@ -71,7 +82,7 @@ export async function userHasAccess() {
     if (error) return false;
     return Array.isArray(data) && data.length > 0;
   } catch {
-    // Network error — fail open so a transient connectivity blip (e.g., mobile signal
+    // Network error - fail open so a transient connectivity blip (e.g., mobile signal
     // drop mid-match) does not sign the user out. The next successful check will deny
     // access if the user has genuinely been removed from allowed_users.
     return true;

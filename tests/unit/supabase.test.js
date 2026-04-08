@@ -76,7 +76,8 @@ describe('supabase helpers', () => {
 
     expect(supabaseState.createClientMock).toHaveBeenCalledWith(
       'https://project.supabase.co',
-      'anon-key'
+      'anon-key',
+      undefined
     );
     expect(mod.supabaseConfigured).toBe(true);
     expect(mod.supabase).toBe(supabaseState.mockClient);

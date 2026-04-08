@@ -41,7 +41,7 @@ export default defineConfig({
       use: {
         browserName: 'webkit',
       },
-      testMatch: ['**/navigation.spec.js', '**/capture-flow.spec.js', '**/possession-analysis.spec.js'],
+      testMatch: ['**/navigation.spec.js', '**/capture-flow.spec.js', '**/possession-analysis.spec.js', '**/ipad-auth.spec.js'],
     },
   ],
   webServer: {
