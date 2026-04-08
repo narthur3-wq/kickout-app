@@ -121,6 +121,20 @@ test.describe('touch navigation', () => {
     await expect(kickoutsTab).toHaveClass(/active/);
     await expect(page.getByText(/Showing all periods in this view/i)).toBeVisible();
   });
+
+  test('touch users see shot outcomes as selected immediately', async ({ page }) => {
+    await openFreshApp(page);
+    await setUpMatch(page, { opponent: 'Crokes' });
+
+    const formPanel = page.locator('.form-panel');
+    await formPanel.getByRole('button', { name: /^Shot$/i }).tap();
+
+    const pointButton = formPanel.getByRole('button', { name: /^Point$/i });
+    await pointButton.tap();
+
+    await expect(pointButton).toHaveClass(/active/);
+    await expect(pointButton.locator('.seg-selected-indicator')).toBeVisible();
+  });
 });
 
 test('captures a turnover with explicit loser and winner players', async ({ page }) => {

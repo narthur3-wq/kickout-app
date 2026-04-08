@@ -58,6 +58,9 @@
   $: activeOutcomes = eventType === 'kickout'
     ? [selectedTeamName, opposingTeamName]
     : (OUTCOME_MAP[`${eventType}-${direction}`] || ['Retained']);
+  $: selectedOutcomeOption = eventType === 'kickout'
+    ? (outcome === 'Retained' ? selectedTeamName : opposingTeamName)
+    : outcome;
 
   $: if (eventType === 'kickout') {
     if (outcome !== 'Retained' && outcome !== 'Lost') {
@@ -80,19 +83,6 @@
       return 'outcome-kickout';
     }
     return `outcome-${String(value || '').toLowerCase().replace(/\s+/g, '-')}`;
-  }
-
-  function outcomeLabel(value) {
-    if (eventType === 'kickout') {
-      return value === 'Retained' ? selectedTeamName : opposingTeamName;
-    }
-    return value;
-  }
-
-  function outcomeMatches(option) {
-    return eventType === 'kickout'
-      ? outcomeLabel(outcome) === option
-      : outcome === option;
   }
 
   function chooseOutcome(option) {
@@ -205,9 +195,13 @@
     {#each activeOutcomes as option (option)}
       <button
         type="button"
-        class="seg-btn {outcomeMatches(option) ? `active ${outcomeClass(option)}` : ''}"
+        class="seg-btn {outcomeClass(option)}"
+        class:active={selectedOutcomeOption === option}
         on:click={() => chooseOutcome(option)}
       >
+        {#if selectedOutcomeOption === option}
+          <span class="seg-selected-indicator" aria-hidden="true">Selected</span>
+        {/if}
         {option}
       </button>
     {/each}
@@ -519,6 +513,7 @@
   }
 
   .seg-btn {
+    position: relative;
     flex: 1;
     min-width: 52px;
     padding: 9px 6px;
@@ -531,7 +526,9 @@
     color: #374151;
     font-family: inherit;
     text-align: center;
-    transition: all 0.12s;
+    transition: background 0.12s, border-color 0.12s, color 0.12s, box-shadow 0.12s, transform 0.12s;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
 
   .seg-btn:hover:not(.active),
@@ -545,6 +542,30 @@
     background: #0a5;
     color: #fff;
     border-color: #0a5;
+    font-weight: 700;
+    box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+    transform: translateY(-1px);
+  }
+
+  .seg-selected-indicator {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.2);
+    color: inherit;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    line-height: 1;
+    pointer-events: none;
   }
 
   .seg-btn.active.review-score,

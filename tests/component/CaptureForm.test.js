@@ -26,9 +26,11 @@ describe('CaptureForm', () => {
 
     expect(screen.getByText(/Goal attempt\?/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Point' }));
+    await user.click(screen.getByRole('button', { name: /^Point$/i }));
 
     expect(screen.queryByText(/Goal attempt\?/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Point$/i })).toHaveClass('active');
+    expect(screen.getByRole('button', { name: /^Point$/i }).querySelector('.seg-selected-indicator')).not.toBeNull();
   });
 
   it('dispatches a period change event when the analyst switches phase', async () => {
