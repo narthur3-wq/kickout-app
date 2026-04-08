@@ -1,9 +1,14 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
   export let summaryStats = null;
   export let title = 'Summary';
   export let subtitle = '';
   const dispatch = createEventDispatcher();
+  let modalEl;
+
+  onMount(() => {
+    modalEl?.focus();
+  });
 
   function retColor(pct) {
     if (pct == null) return '#6b7280';
@@ -11,17 +16,32 @@
     if (pct >= 45)   return '#fbbf24';
     return '#f87171';
   }
+
+  function handleKeydown(event) {
+    if (event.key !== 'Escape') return;
+    event.stopPropagation();
+    dispatch('close');
+  }
 </script>
 
 {#if summaryStats}
   <div class="backdrop" role="presentation">
     <button class="backdrop-dismiss" aria-label="Close summary" on:click={() => dispatch('close')}></button>
-    <div class="modal" role="dialog" aria-modal="true" tabindex="0" on:click|stopPropagation on:keydown|stopPropagation>
+    <div
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="summary-modal-title"
+      tabindex="0"
+      bind:this={modalEl}
+      on:click|stopPropagation
+      on:keydown={handleKeydown}
+    >
 
       <!-- Dark header matching app chrome -->
       <div class="modal-header">
         <div class="header-left">
-          <div class="header-title">{title}</div>
+          <div class="header-title" id="summary-modal-title">{title}</div>
           <div class="header-sub">{subtitle || `${summaryStats.total} kickouts in view`}</div>
         </div>
         <button class="close-btn" on:click={() => dispatch('close')} aria-label="Close">✕</button>

@@ -60,6 +60,35 @@
     return parts.length ? parts.join(' / ') : '-';
   }
 
+  function retrospectiveReviewValue(event) {
+    const type = String(event.event_type || 'kickout').toLowerCase();
+    if (type === 'shot') {
+      return String(event.score_source || 'unreviewed').toLowerCase() || 'unreviewed';
+    }
+    return String(event.conversion_result || 'unreviewed').toLowerCase() || 'unreviewed';
+  }
+
+  function retrospectiveReviewLabel(event) {
+    switch (retrospectiveReviewValue(event)) {
+      case 'score':
+        return 'Score';
+      case 'no_score':
+        return 'No score';
+      case 'kickout':
+        return 'Kickout';
+      case 'turnover':
+        return 'Turnover';
+      case 'settled':
+        return 'Settled';
+      case 'free':
+        return 'Free';
+      case 'other':
+        return 'Other';
+      default:
+        return 'Unreviewed';
+    }
+  }
+
   function clearFilters() {
     search = '';
     fPeriod = 'ALL';
@@ -97,7 +126,10 @@
           event.contest_type,
           event.break_outcome,
           event.shot_type,
+          event.conversion_result,
+          event.score_source,
           event.match_date,
+          retrospectiveReviewLabel(event),
           event.flag ? 'flag flagged' : '',
         ]
           .map((value) => String(value ?? '').toLowerCase())
@@ -141,12 +173,15 @@
   </div>
 
   <div class="filters-row">
-    <input
-      class="search-input"
-      type="search"
-      placeholder="Search type, opponent, clock, player, zone..."
-      bind:value={search}
-    />
+    <label class="search-field">
+      <span class="search-label">Search events</span>
+      <input
+        class="search-input"
+        type="search"
+        placeholder="Search type, opponent, clock, player, zone, review..."
+        bind:value={search}
+      />
+    </label>
 
     <div class="filter-group">
       {#each PERIODS as value (value)}
@@ -198,6 +233,7 @@
           <th>Depth m</th>
           <th>Opponent</th>
           <th>Score</th>
+          <th>Review</th>
           <th>Players</th>
           <th>Flag</th>
         </tr>
@@ -205,7 +241,7 @@
       <tbody>
         {#if filtered.length === 0}
           <tr>
-            <td colspan="15" class="empty-state">
+            <td colspan="16" class="empty-state">
               {#if events.length === 0}
                 No events recorded yet - use the Capture tab to add your first event.
               {:else}
@@ -234,6 +270,11 @@
             <td class="num">{event.depth_from_own_goal_m?.toFixed?.(0) ?? '-'}</td>
             <td>{event.opponent || '-'}</td>
             <td class="mono">{event.score_us ? `${event.score_us} / ${event.score_them ?? '?'}` : '-'}</td>
+            <td>
+              <span class="review-badge" data-review={retrospectiveReviewValue(event)}>
+                {retrospectiveReviewLabel(event)}
+              </span>
+            </td>
             <td class="players-cell">{turnoverPlayersLabel(event)}</td>
             <td class="center">{event.flag ? 'Flag' : ''}</td>
           </tr>
@@ -332,6 +373,20 @@
     margin-bottom: 0;
     padding: 10px 0 12px;
     border-bottom: 1px solid #f3f4f6;
+  }
+
+  .search-field {
+    display: flex;
+    flex: 1;
+    min-width: 180px;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .search-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #475569;
   }
 
   .search-input {
@@ -498,6 +553,63 @@
     min-width: 220px;
     white-space: normal;
     line-height: 1.4;
+  }
+
+  .review-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+    color: #4b5563;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .review-badge[data-review='score'] {
+    background: #ecfdf5;
+    border-color: #86efac;
+    color: #166534;
+  }
+
+  .review-badge[data-review='no_score'] {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #b91c1c;
+  }
+
+  .review-badge[data-review='kickout'] {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+  }
+
+  .review-badge[data-review='turnover'] {
+    background: #fff7ed;
+    border-color: #fed7aa;
+    color: #c2410c;
+  }
+
+  .review-badge[data-review='settled'] {
+    background: #eef2ff;
+    border-color: #c7d2fe;
+    color: #4338ca;
+  }
+
+  .review-badge[data-review='free'] {
+    background: #f5f3ff;
+    border-color: #ddd6fe;
+    color: #6d28d9;
+  }
+
+  .review-badge[data-review='other'],
+  .review-badge[data-review='unreviewed'] {
+    background: #f3f4f6;
+    border-color: #e5e7eb;
+    color: #6b7280;
   }
 
   .actions-col {

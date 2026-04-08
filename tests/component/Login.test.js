@@ -49,8 +49,8 @@ describe('Login', () => {
 
     render(Login, { events: { login: onLogin } });
 
-    await user.type(screen.getByPlaceholderText('Email'), 'analyst@example.com');
-    await user.type(screen.getByPlaceholderText('Password'), 'temporary123');
+    await user.type(screen.getByLabelText('Email'), 'analyst@example.com');
+    await user.type(screen.getByLabelText('Password'), 'temporary123');
     await user.click(screen.getByRole('button', { name: /Sign in/i }));
 
     expect(mockState.signInWithPasswordMock).toHaveBeenCalledWith({
@@ -60,13 +60,34 @@ describe('Login', () => {
     expect(onLogin).toHaveBeenCalled();
   });
 
+  it('blocks sign-in when the account is not in the beta allowlist', async () => {
+    const user = userEvent.setup();
+    const onLogin = vi.fn();
+
+    mockState.signInWithPasswordMock.mockResolvedValue({
+      data: { session: { user: { email: 'smoke@yourapp.com' } } },
+      error: null,
+    });
+    mockState.userHasAccessMock.mockResolvedValue(false);
+
+    render(Login, { events: { login: onLogin } });
+
+    await user.type(screen.getByLabelText('Email'), 'smoke@yourapp.com');
+    await user.type(screen.getByLabelText('Password'), 'temporary123');
+    await user.click(screen.getByRole('button', { name: /Sign in/i }));
+
+    expect(mockState.signOutMock).toHaveBeenCalledTimes(1);
+    expect(onLogin).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).toHaveTextContent(/allowed_users/i);
+  });
+
   it('sends a password reset link and shows the confirmation message', async () => {
     const user = userEvent.setup();
     mockState.resetPasswordForEmailMock.mockResolvedValue({ error: null });
 
     render(Login);
 
-    await user.type(screen.getByPlaceholderText('Email'), 'analyst@example.com');
+    await user.type(screen.getByLabelText('Email'), 'analyst@example.com');
     await user.click(screen.getByRole('button', { name: /Send password reset email/i }));
 
     expect(mockState.resetPasswordForEmailMock).toHaveBeenCalled();
@@ -78,8 +99,8 @@ describe('Login', () => {
 
     render(Login, { recoveryMode: true });
 
-    await user.type(screen.getByPlaceholderText('New password'), 'temporary123');
-    await user.type(screen.getByPlaceholderText('Confirm new password'), 'different123');
+    await user.type(screen.getByLabelText('New password'), 'temporary123');
+    await user.type(screen.getByLabelText('Confirm new password'), 'different123');
     await user.click(screen.getByRole('button', { name: /Set password/i }));
 
     expect(screen.getByText(/Passwords do not match/i)).toBeInTheDocument();
@@ -94,8 +115,8 @@ describe('Login', () => {
 
     render(Login, { props: { recoveryMode: true }, events: { login: onLogin } });
 
-    await user.type(screen.getByPlaceholderText('New password'), 'temporary123');
-    await user.type(screen.getByPlaceholderText('Confirm new password'), 'temporary123');
+    await user.type(screen.getByLabelText('New password'), 'temporary123');
+    await user.type(screen.getByLabelText('Confirm new password'), 'temporary123');
     await user.click(screen.getByRole('button', { name: /Set password/i }));
 
     expect(mockState.updateUserMock).toHaveBeenCalledWith({ password: 'temporary123' });

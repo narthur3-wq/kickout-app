@@ -13,6 +13,7 @@
 --   supabase/migrations/20260329000200_add_event_match_id.sql
 --   supabase/migrations/20260330000100_add_event_indexes.sql
 --   supabase/migrations/20260406000100_add_analysis_tables.sql
+--   supabase/migrations/20260407000100_add_review_tags.sql
 -- ============================================================
 
 -- Teams
@@ -112,9 +113,13 @@ create table if not exists events (
   break_displacement_m  numeric,
   score_us              text,
   score_them            text,
+  conversion_result     text,
+  score_source          text,
   flag                  boolean     default false,
   ko_sequence           integer,
-  updated_at            timestamptz default now()
+  updated_at            timestamptz default now(),
+  constraint events_conversion_result_check check (conversion_result in ('score', 'no_score', 'unreviewed') or conversion_result is null),
+  constraint events_score_source_check check (score_source in ('kickout', 'turnover', 'settled', 'free', 'other', 'unreviewed') or score_source is null)
 );
 
 -- Post-match possession analysis sessions

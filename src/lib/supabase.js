@@ -2,16 +2,17 @@ import { createClient } from '@supabase/supabase-js'
 
 const url  = import.meta.env.VITE_SUPABASE_URL
 const key  = import.meta.env.VITE_SUPABASE_ANON_KEY
+const e2eOfflineMode = import.meta.env.VITE_E2E_OFFLINE_MODE === 'true'
 const adminEmails = String(import.meta.env.VITE_ADMIN_EMAILS || '')
   .split(',')
   .map((value) => value.trim().toLowerCase())
   .filter(Boolean)
 
 /** Supabase client — null when env vars are not set (offline-only mode) */
-export const supabase = (url && key) ? createClient(url, key) : null
+export const supabase = (!e2eOfflineMode && url && key) ? createClient(url, key) : null
 
 /** True when Supabase is configured and network features are available */
-export const supabaseConfigured = !!(url && key)
+export const supabaseConfigured = !e2eOfflineMode && !!(url && key)
 
 /** Client-side convenience only; the Edge Function enforces admin access server-side. */
 export function isConfiguredAdmin(email) {

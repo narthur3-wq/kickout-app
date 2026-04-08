@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it } from 'vitest';
 import PassImpactPanel from '../../src/lib/PassImpactPanel.svelte';
+import { saveAnalysisUiState } from '../../src/lib/analysisUiState.js';
 import { STORAGE_KEYS, storageKey } from '../../src/lib/storageScope.js';
 
 describe('PassImpactPanel', () => {
@@ -82,6 +83,7 @@ describe('PassImpactPanel', () => {
     if (!line) throw new Error('Missing pass connection line');
     await fireEvent.click(line);
 
+    await waitFor(() => expect(screen.getByText('Direction')).toBeInTheDocument());
     expect(screen.getByText('Direction')).toBeInTheDocument();
     expect(screen.getByText('Forward')).toBeInTheDocument();
     expect(screen.getByText('+43.5m', { selector: '.detail-grid strong' })).toBeInTheDocument();
@@ -120,5 +122,78 @@ describe('PassImpactPanel', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: /Finalize session/i }));
     expect(await screen.findByText('Session finalized.')).toBeInTheDocument();
+  });
+
+  it('restores the last player and pass detail selection from stored UI preferences', async () => {
+    localStorage.setItem(
+      storageKey(STORAGE_KEYS.analysis, 'test'),
+      JSON.stringify({
+        version: 1,
+        possessionSessions: [],
+        squadPlayers: [
+          {
+            id: 'player-1',
+            name: 'Aoife Kelly',
+            name_key: 'aoife kelly',
+            active: true,
+            created_at: '2026-04-01T12:00:00.000Z',
+            updated_at: '2026-04-01T12:00:00.000Z',
+          },
+        ],
+        passSessions: [
+          {
+            id: 'pass-session-1',
+            mode: 'pass',
+            match_id: 'match-1',
+            player_name: 'aoife kelly',
+            player_key: 'squad:player-1',
+            squad_player_id: 'player-1',
+            our_goal_at_top: false,
+            created_at: '2026-04-01T12:00:00.000Z',
+            updated_at: '2026-04-01T12:00:00.000Z',
+            notes: '',
+            events: [
+              {
+                id: 'pass-1',
+                from_x: 0.2,
+                from_y: 0.8,
+                to_x: 0.4,
+                to_y: 0.5,
+                pass_type: 'Kickpass',
+                completed: true,
+                created_at: '2026-04-01T12:00:00.000Z',
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    saveAnalysisUiState('pass', 'test', {
+      selectedPlayerKey: 'squad:player-1',
+      selectedSessionId: 'pass-session-1',
+      selectedConnectionId: '0.2|0.2|0.4|0.5',
+      playerInput: 'Aoife Kelly',
+    });
+
+    render(PassImpactPanel, {
+      props: {
+        storageScope: 'test',
+        activeMatchId: 'match-1',
+        activeMatch: {
+          id: 'match-1',
+          match_date: '2026-04-01',
+          team: 'Clontarf',
+          opponent: 'Vincents',
+        },
+        teamName: 'Clontarf',
+        opponentName: 'Vincents',
+        playerOptions: [['8', '#8']],
+        defaultOurGoalAtTop: true,
+      },
+    });
+
+    await waitFor(() => expect(screen.getByText('Direction')).toBeInTheDocument());
+    expect(screen.getByText('Direction')).toBeInTheDocument();
+    expect(screen.getByText('Forward')).toBeInTheDocument();
   });
 });

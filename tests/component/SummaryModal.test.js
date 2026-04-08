@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/svelte';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/svelte';
+import { describe, expect, it, vi } from 'vitest';
 import SummaryModal from '../../src/lib/SummaryModal.svelte';
 
 const summaryStats = {
@@ -16,16 +16,22 @@ const summaryStats = {
 
 describe('SummaryModal', () => {
   it('frames the modal explicitly as a kickout summary', () => {
+    const onClose = vi.fn();
     render(SummaryModal, {
       props: {
         summaryStats,
         title: 'Filtered Kickout Summary',
         subtitle: '12 kickouts in the current filtered view',
       },
+      events: { close: onClose },
     });
 
     expect(screen.getByText('Filtered Kickout Summary')).toBeInTheDocument();
     expect(screen.getByText('Kickout Retention')).toBeInTheDocument();
     expect(screen.getByText(/Most targeted kickout option/i)).toBeInTheDocument();
+
+    const dialog = screen.getByRole('dialog', { name: 'Filtered Kickout Summary' });
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });

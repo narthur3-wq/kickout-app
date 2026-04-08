@@ -19,6 +19,8 @@ export function buildDraftSignature(source = {}) {
     eventType: source.eventType || 'kickout',
     direction: source.direction || 'ours',
     shotType: source.shotType || 'point',
+    conversionResult: source.conversionResult || 'unreviewed',
+    scoreSource: source.scoreSource || 'unreviewed',
     flagEvent: !!source.flagEvent,
     restartReason: source.restartReason || '',
     editingId: source.editingId || null,

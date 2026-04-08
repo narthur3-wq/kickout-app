@@ -5,6 +5,7 @@
   export let recoveryMode = false
 
   const dispatch = createEventDispatcher()
+  const accessDeniedMessage = 'This account has not been granted beta access. Ask an admin to add this email through the Admin onboarding flow or into `allowed_users`.'
 
   let email = '', password = '', nextPassword = '', confirmPassword = '', error = '', info = '', loading = false
   let mode = 'signIn'
@@ -19,7 +20,7 @@
     loading = false
     if (!allowed) {
       await supabase.auth.signOut()
-      error = 'This account has not been granted beta access.'
+      error = accessDeniedMessage
       return
     }
     dispatch('login', data.session)
@@ -62,7 +63,7 @@
     if (!allowed) {
       await supabase.auth.signOut()
       loading = false
-      error = 'This account has not been granted beta access.'
+      error = accessDeniedMessage
       return
     }
     const { data: { session } } = await supabase.auth.getSession()
@@ -96,43 +97,59 @@
     <div class="form-body">
       {#if mode === 'updatePassword'}
         <p class="mode-note">Set a password for your account on this device.</p>
-        <input
-          type="password"
-          placeholder="New password"
-          bind:value={nextPassword}
-          on:keydown={handleKey}
-          autocomplete="new-password"
-        />
-        <input
-          type="password"
-          placeholder="Confirm new password"
-          bind:value={confirmPassword}
-          on:keydown={handleKey}
-          autocomplete="new-password"
-        />
+        <div class="field">
+          <label class="field-label" for="new-password">New password</label>
+          <input
+            id="new-password"
+            type="password"
+            placeholder="New password"
+            bind:value={nextPassword}
+            on:keydown={handleKey}
+            autocomplete="new-password"
+          />
+        </div>
+        <div class="field">
+          <label class="field-label" for="confirm-password">Confirm new password</label>
+          <input
+            id="confirm-password"
+            type="password"
+            placeholder="Confirm new password"
+            bind:value={confirmPassword}
+            on:keydown={handleKey}
+            autocomplete="new-password"
+          />
+        </div>
       {:else}
-        <input
-          type="email"
-          placeholder="Email"
-          bind:value={email}
-          on:keydown={handleKey}
-          autocomplete="email"
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          bind:value={password}
-          on:keydown={handleKey}
-          autocomplete="current-password"
-        />
+        <div class="field">
+          <label class="field-label" for="login-email">Email</label>
+          <input
+            id="login-email"
+            type="email"
+            placeholder="Email"
+            bind:value={email}
+            on:keydown={handleKey}
+            autocomplete="email"
+          />
+        </div>
+        <div class="field">
+          <label class="field-label" for="login-password">Password</label>
+          <input
+            id="login-password"
+            type="password"
+            placeholder="Password"
+            bind:value={password}
+            on:keydown={handleKey}
+            autocomplete="current-password"
+          />
+        </div>
       {/if}
 
       {#if error}
-        <p class="error">{error}</p>
+        <p class="error" role="alert">{error}</p>
       {/if}
 
       {#if info}
-        <p class="info">{info}</p>
+        <p class="info" aria-live="polite">{info}</p>
       {/if}
 
       {#if mode === 'updatePassword'}
@@ -146,7 +163,7 @@
         <button class="secondary" on:click={sendResetLink} disabled={loading || !email}>
           Send password reset email
         </button>
-        <p class="invite-note">Access is admin-managed. Ask your administrator for your email and password, or for a reset link.</p>
+        <p class="invite-note">Access is admin-managed. Have an admin onboard the account first; a Supabase Auth user alone will not pass login.</p>
       {/if}
     </div>
   </div>
@@ -185,6 +202,16 @@
     background: #fff;
     display: flex; flex-direction: column; gap: 10px;
     padding: 24px 24px 28px;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .field-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #334155;
   }
   input {
     padding: 11px 13px; border: 1.5px solid #e2e8f0; border-radius: 8px;

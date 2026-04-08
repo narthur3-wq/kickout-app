@@ -21,6 +21,7 @@
   let showAdvancedDelivery = false;
   let loading = false;
   let result = null;
+  let partialResult = null;
   let error = '';
   let analysisState = createEmptyAnalysisState();
   let loadedScope = null;
@@ -154,12 +155,29 @@
     return String(a.name || '').localeCompare(String(b.name || ''));
   });
 
+  function buildOnboardingPayload() {
+    const cleanedEmail = email.trim().toLowerCase();
+    const cleanedTeamName = newTeamName.trim();
+
+    return {
+      cleanedEmail,
+      cleanedTeamName,
+      payload: {
+        email: cleanedEmail,
+        teamName: teamMode === 'named' ? cleanedTeamName : null,
+        delivery: authMode,
+        password: authMode === 'password' ? password : null,
+        redirectTo: authMode === 'invite' ? window.location.origin : null,
+      },
+    };
+  }
+
   async function onboardUser() {
     error = '';
     result = null;
+    partialResult = null;
 
-    const cleanedEmail = email.trim().toLowerCase();
-    const cleanedTeamName = newTeamName.trim();
+    const { cleanedEmail, cleanedTeamName, payload } = buildOnboardingPayload();
 
     if (!cleanedEmail) {
       error = 'Enter an email address.';
@@ -178,27 +196,25 @@
 
     loading = true;
     try {
-      const payload = {
-        email: cleanedEmail,
-        teamName: teamMode === 'named' ? cleanedTeamName : null,
-        delivery: authMode,
-        password: authMode === 'password' ? password : null,
-        redirectTo: authMode === 'invite' ? window.location.origin : null,
-      };
-
       const { data, error: fnError } = await supabase.functions.invoke('onboard-user', {
         body: payload,
       });
 
       if (fnError) throw fnError;
-      if (!data?.ok) throw new Error(data?.error || 'Onboarding failed.');
+      if (!data?.ok) {
+        const failure = new Error(data?.error || 'Onboarding failed.');
+        failure.payload = data;
+        throw failure;
+      }
 
       result = data;
       email = '';
       password = '';
       if (teamMode === 'named') newTeamName = '';
     } catch (err) {
+      const failurePayload = err?.payload ?? null;
       error = err?.message || 'Onboarding failed.';
+      partialResult = failurePayload?.assignmentSaved ? failurePayload : null;
       appendDiagnostic({
         kind: 'onboarding',
         message: error,
@@ -207,6 +223,9 @@
           teamMode,
           teamName: teamMode === 'named' ? cleanedTeamName : null,
           authMode,
+          assignmentSaved: !!failurePayload?.assignmentSaved,
+          teamId: failurePayload?.team?.id || null,
+          resolvedTeamName: failurePayload?.team?.name || null,
         },
       });
       dispatch('diagnostic');
@@ -340,6 +359,15 @@
 
     {#if error}
       <div class="notice error">{error}</div>
+    {/if}
+
+    {#if partialResult}
+      <div class="notice warning">
+        <strong>{partialResult.email}</strong> is already assigned to <strong>{partialResult.team?.name || 'the selected team'}</strong>, but the sign-in step did not finish.
+        <div class="credential-note warning-note">
+          Team assignment was saved. Retry this user later to finish the {partialResult.auth?.delivery === 'invite' ? 'invite email' : 'sign-in account'} step.
+        </div>
+      </div>
     {/if}
 
     {#if result}
@@ -608,6 +636,11 @@
     border: 1px solid #fecaca;
     color: #991b1b;
   }
+  .notice.warning {
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    color: #92400e;
+  }
   .actions {
     margin-top: 16px;
   }
@@ -615,6 +648,9 @@
     margin-top: 6px;
     font-size: 12px;
     color: #166534;
+  }
+  .warning-note {
+    color: #92400e;
   }
   .primary {
     padding: 12px 18px;

@@ -34,6 +34,10 @@
     sessionsForMatch,
     sessionsForPlayer,
   } from './postMatchAnalysisStore.js';
+  import {
+    loadAnalysisUiState,
+    saveAnalysisUiState,
+  } from './analysisUiState.js';
 
   const dispatch = createEventDispatcher();
 
@@ -68,6 +72,23 @@
     { value: 'second', label: 'Second half' },
     { value: 'et', label: 'Extra time' },
   ];
+
+  const ANALYSIS_VIEW_DEFAULTS = Object.freeze({
+    analysisMode: 'match',
+    selectedHalf: null,
+    viewMode: 'dots',
+    showPressureOnly: false,
+    showScoreInvolvementsOnly: false,
+    showCarryLines: true,
+    legendOpen: false,
+    trendMode: 'halves',
+    trendLastN: 3,
+    trendFocus: 'earlier',
+    selectedPlayerKey: '',
+    selectedSessionId: 'all',
+    selectedCrossMatchIds: [],
+    playerInput: '',
+  });
 
   let analysisState = createEmptyAnalysisState();
   let loadedScope = null;
@@ -110,6 +131,44 @@
     'Passed / offloaded': '#2563eb',
     'Foul won': '#db2777',
   };
+
+  function applyViewState(state = {}) {
+    analysisMode = state.analysisMode ?? ANALYSIS_VIEW_DEFAULTS.analysisMode;
+    selectedHalf = state.selectedHalf ?? ANALYSIS_VIEW_DEFAULTS.selectedHalf;
+    viewMode = state.viewMode ?? ANALYSIS_VIEW_DEFAULTS.viewMode;
+    showPressureOnly = state.showPressureOnly ?? ANALYSIS_VIEW_DEFAULTS.showPressureOnly;
+    showScoreInvolvementsOnly = state.showScoreInvolvementsOnly ?? ANALYSIS_VIEW_DEFAULTS.showScoreInvolvementsOnly;
+    showCarryLines = state.showCarryLines ?? ANALYSIS_VIEW_DEFAULTS.showCarryLines;
+    legendOpen = state.legendOpen ?? ANALYSIS_VIEW_DEFAULTS.legendOpen;
+    trendMode = state.trendMode ?? ANALYSIS_VIEW_DEFAULTS.trendMode;
+    trendLastN = state.trendLastN ?? ANALYSIS_VIEW_DEFAULTS.trendLastN;
+    trendFocus = state.trendFocus ?? ANALYSIS_VIEW_DEFAULTS.trendFocus;
+    selectedPlayerKey = state.selectedPlayerKey ?? ANALYSIS_VIEW_DEFAULTS.selectedPlayerKey;
+    selectedSessionId = state.selectedSessionId ?? ANALYSIS_VIEW_DEFAULTS.selectedSessionId;
+    selectedCrossMatchIds = Array.isArray(state.selectedCrossMatchIds)
+      ? uniqueValues(state.selectedCrossMatchIds.filter(Boolean))
+      : [...ANALYSIS_VIEW_DEFAULTS.selectedCrossMatchIds];
+    playerInput = state.playerInput ?? ANALYSIS_VIEW_DEFAULTS.playerInput;
+  }
+
+  function storedViewState() {
+    return {
+      analysisMode,
+      selectedHalf,
+      viewMode,
+      showPressureOnly,
+      showScoreInvolvementsOnly,
+      showCarryLines,
+      legendOpen,
+      trendMode,
+      trendLastN,
+      trendFocus,
+      selectedPlayerKey,
+      selectedSessionId,
+      selectedCrossMatchIds: [...selectedCrossMatchIds],
+      playerInput,
+    };
+  }
 
   function nowIso() {
     return new Date().toISOString();
@@ -218,35 +277,15 @@
     });
   }
 
-  function legendStorageKey() {
-    return `ko_possession_legend_${storageScope || 'local'}`;
-  }
-
-  function loadLegendPreference() {
-    try {
-      const stored = localStorage.getItem(legendStorageKey());
-      if (stored === '1') legendOpen = true;
-      else if (stored === '0') legendOpen = false;
-    } catch {
-      // Best-effort only.
-    }
-  }
-
-  function saveLegendPreference() {
-    try {
-      localStorage.setItem(legendStorageKey(), legendOpen ? '1' : '0');
-    } catch {
-      // Best-effort only.
-    }
-  }
-
   function loadScope(scope) {
     if (!scope) {
       analysisState = createEmptyAnalysisState();
       loadedScope = null;
+      applyViewState(ANALYSIS_VIEW_DEFAULTS);
       return;
     }
     analysisState = loadAnalysisState(scope);
+    applyViewState(loadAnalysisUiState('possession', scope, ANALYSIS_VIEW_DEFAULTS));
     loadedScope = scope;
   }
 
@@ -255,6 +294,9 @@
       if (!preserveMissing) {
         selectedPlayerKey = '';
         selectedSessionId = 'all';
+        if (analysisMode === 'cross') {
+          selectedCrossMatchIds = [];
+        }
       }
       return;
     }
@@ -262,6 +304,9 @@
       selectedPlayerKey = players[0].key;
       selectedSessionId = 'all';
       playerInput = players[0].label;
+      if (analysisMode === 'cross') {
+        selectedCrossMatchIds = availableMatchIdsForPlayer(selectedPlayerKey, selectedHalf);
+      }
     }
   }
 
@@ -762,14 +807,10 @@
 
   $: if (storageScope !== loadedScope) {
     loadScope(storageScope);
-    loadLegendPreference();
     draftSession = null;
     resetDraftEvent();
-    selectedPlayerKey = '';
-    selectedSessionId = 'all';
     selectedEventId = null;
     mergeTargetPlayerKey = '';
-    playerInput = '';
     notice = '';
   }
 
@@ -862,10 +903,11 @@
 
   onMount(() => {
     if (storageScope) loadScope(storageScope);
-    loadLegendPreference();
   });
 
-  $: saveLegendPreference();
+  $: if (storageScope && loadedScope === storageScope) {
+    saveAnalysisUiState('possession', storageScope, storedViewState());
+  }
 
   $: matchSessions = sessionsForMatch(analysisState, 'possession', activeMatchId)
     .slice()

@@ -44,7 +44,7 @@ describe('EventsTable', () => {
       },
     });
 
-    await user.type(screen.getByPlaceholderText(/Search type, opponent, clock, player, zone/i), 'Crokes');
+    await user.type(screen.getByLabelText(/Search events/i), 'Crokes');
 
     expect(screen.getByText('1 / 2')).toBeInTheDocument();
 
@@ -63,7 +63,7 @@ describe('EventsTable', () => {
       },
     });
 
-    await user.type(screen.getByPlaceholderText(/Search type, opponent, clock, player, zone/i), 'Na Fianna');
+    await user.type(screen.getByLabelText(/Search events/i), 'Na Fianna');
 
     expect(screen.getByText(/No events match the current filters/i)).toBeInTheDocument();
 
@@ -83,7 +83,7 @@ describe('EventsTable', () => {
       },
     });
 
-    await user.type(screen.getByPlaceholderText(/Search type, opponent, clock, player, zone/i), '12:34');
+    await user.type(screen.getByLabelText(/Search events/i), '12:34');
 
     expect(screen.getByText('12:34')).toBeInTheDocument();
     expect(screen.getByText(/These filters only change the Events table/i)).toBeInTheDocument();
@@ -120,5 +120,19 @@ describe('EventsTable', () => {
     await user.type(screen.getByPlaceholderText(/Search type, opponent, clock, player, zone/i), '#14');
 
     expect(screen.getByText(/Lost Crokes #2 \/ Won Clontarf #14/i)).toBeInTheDocument();
+  });
+
+  it('shows retrospective review labels for kickouts and scored shots', () => {
+    render(EventsTable, {
+      props: {
+        events: [
+          makeEvent({ id: 'kickout-1', conversion_result: 'score' }),
+          makeEvent({ id: 'shot-1', event_type: 'shot', outcome: 'Goal', score_source: 'kickout', score_us: '1-0', score_them: '0-0' }),
+        ],
+      },
+    });
+
+    expect(screen.getByText('Score', { selector: '.review-badge' })).toBeInTheDocument();
+    expect(screen.getByText('Kickout', { selector: '.review-badge' })).toBeInTheDocument();
   });
 });

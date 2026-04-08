@@ -74,7 +74,7 @@ describe('AnalyticsPanel legends', () => {
     });
 
     expect(screen.getByRole('button', { name: /Summary/i })).toBeInTheDocument();
-    expect(screen.getByText(/small sample/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/small sample/i).length).toBeGreaterThan(0);
   });
 
   it('renders richer shot outcome legends and heat labels', async () => {
@@ -193,6 +193,31 @@ describe('AnalyticsPanel legends', () => {
 
     expect(screen.getByText('Total turnovers')).toBeInTheDocument();
     expect(screen.getByText('Net')).toBeInTheDocument();
+  });
+
+  it('renders the retrospective review section for conversion and score-source tags', () => {
+    render(AnalyticsPanel, {
+      props: {
+        analyticsEventType: 'ALL',
+        vizEvents: [
+          { id: 'ko-1', event_type: 'kickout', direction: 'ours', outcome: 'Retained', contest_type: 'clean', conversion_result: 'score', period: 'H1' },
+          { id: 'ko-2', event_type: 'kickout', direction: 'ours', outcome: 'Lost', contest_type: 'break', conversion_result: 'no_score', period: 'H2' },
+          { id: 'to-1', event_type: 'turnover', direction: 'ours', outcome: 'Won', zone_code: 'L-S', conversion_result: 'score', period: 'H1' },
+          { id: 'to-2', event_type: 'turnover', direction: 'theirs', outcome: 'Lost', zone_code: 'R-L', conversion_result: 'no_score', period: 'H2' },
+          { id: 's-1', event_type: 'shot', direction: 'ours', outcome: 'Goal', score_source: 'kickout', period: 'H1' },
+          { id: 's-2', event_type: 'shot', direction: 'ours', outcome: 'Point', score_source: 'settled', period: 'H2' },
+        ],
+      },
+    });
+
+    expect(screen.getByText('Retrospective Review')).toBeInTheDocument();
+    expect(screen.getByText('Kickout to Score')).toBeInTheDocument();
+    expect(screen.getByText('Turnover Punishment')).toBeInTheDocument();
+    expect(screen.getByText('Score Source Mix')).toBeInTheDocument();
+    expect(screen.getByText('Clean')).toBeInTheDocument();
+    expect(screen.getByText('L-S')).toBeInTheDocument();
+    expect(screen.getByText(/Kickout:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Settled:/i)).toBeInTheDocument();
   });
 
   it('uses the rendered event set to resolve the legend when the incoming tab type is stale', () => {

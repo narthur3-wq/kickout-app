@@ -1,5 +1,6 @@
 <script>
   import { createEventDispatcher } from 'svelte';
+  import { KICKOUT_REVIEW_RESULTS, SHOT_SCORE_SOURCES } from './eventRecord.js';
 
   const dispatch = createEventDispatcher();
 
@@ -13,6 +14,8 @@
   export let turnoverLostPlayer = '';
   export let turnoverWonPlayer = '';
   export let flagEvent = false;
+  export let conversionResult = 'unreviewed';
+  export let scoreSource = 'unreviewed';
 
   export let team = '';
   export let opponent = '';
@@ -99,6 +102,27 @@
     }
     outcome = option;
   }
+
+  function labelForReviewResult(value) {
+    switch (value) {
+      case 'score': return 'Score';
+      case 'no_score': return 'No score';
+      default: return 'Unreviewed';
+    }
+  }
+
+  function labelForScoreSource(value) {
+    switch (value) {
+      case 'kickout': return 'Kickout';
+      case 'turnover': return 'Turnover';
+      case 'settled': return 'Settled';
+      case 'free': return 'Free';
+      case 'other': return 'Other';
+      default: return 'Unreviewed';
+    }
+  }
+
+  $: scoredShotOutcome = ['Goal', 'Point', 'Two Point'].includes(outcome);
 </script>
 
 <div class="form-content">
@@ -236,6 +260,38 @@
           on:click={() => (restartReason = restartReason === reason ? '' : reason)}
         >
           {reason}
+        </button>
+      {/each}
+    </div>
+  {/if}
+
+  {#if editingId && (eventType === 'kickout' || eventType === 'turnover')}
+    <div class="field-label">Retrospective review</div>
+    <p class="field-helper">Tag this after the match, not during live capture.</p>
+    <div class="btn-group review-grid">
+      {#each KICKOUT_REVIEW_RESULTS as option (option)}
+        <button
+          type="button"
+          class="seg-btn {conversionResult === option ? `active review-${option}` : ''}"
+          on:click={() => (conversionResult = option)}
+        >
+          {labelForReviewResult(option)}
+        </button>
+      {/each}
+    </div>
+  {/if}
+
+  {#if editingId && eventType === 'shot' && scoredShotOutcome}
+    <div class="field-label">Score source</div>
+    <p class="field-helper">Tag where this score came from after review.</p>
+    <div class="btn-group review-grid review-grid-wide">
+      {#each SHOT_SCORE_SOURCES as option (option)}
+        <button
+          type="button"
+          class="seg-btn {scoreSource === option ? `active source-${option}` : ''}"
+          on:click={() => (scoreSource = option)}
+        >
+          {labelForScoreSource(option)}
         </button>
       {/each}
     </div>
@@ -452,6 +508,16 @@
     grid-template-columns: repeat(2, 1fr);
   }
 
+  .review-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .review-grid-wide {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .seg-btn {
     flex: 1;
     min-width: 52px;
@@ -479,6 +545,39 @@
     background: #0a5;
     color: #fff;
     border-color: #0a5;
+  }
+
+  .seg-btn.active.review-score,
+  .seg-btn.active.source-kickout {
+    background: #16a34a;
+    border-color: #16a34a;
+  }
+
+  .seg-btn.active.review-no_score {
+    background: #dc2626;
+    border-color: #dc2626;
+  }
+
+  .seg-btn.active.review-unreviewed,
+  .seg-btn.active.source-unreviewed,
+  .seg-btn.active.source-other {
+    background: #6b7280;
+    border-color: #6b7280;
+  }
+
+  .seg-btn.active.source-turnover {
+    background: #b45309;
+    border-color: #b45309;
+  }
+
+  .seg-btn.active.source-settled {
+    background: #1c3f8a;
+    border-color: #1c3f8a;
+  }
+
+  .seg-btn.active.source-free {
+    background: #7c3aed;
+    border-color: #7c3aed;
   }
 
   .seg-btn.active.outcome-lost {

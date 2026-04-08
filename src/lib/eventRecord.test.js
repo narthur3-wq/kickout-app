@@ -25,6 +25,8 @@ describe('normalizeEventRecord', () => {
     expect(record.contest_type).toBe('clean');
     expect(record.period).toBe('H2');
     expect(record.restart_reason).toBeNull();
+    expect(record.conversion_result).toBe('unreviewed');
+    expect(record.score_source).toBeNull();
     expect(record.schema_version).toBe(CURRENT_EVENT_SCHEMA_VERSION);
     expect(record.shot_type).toBeNull();
   });
@@ -49,6 +51,31 @@ describe('normalizeEventRecord', () => {
     expect(shot.break_outcome).toBeNull();
     expect(shot.pickup_x).toBeNull();
     expect(shot.shot_type).toBe('goal');
+    expect(shot.conversion_result).toBeNull();
+    expect(shot.score_source).toBeNull();
     expect(shot.schema_version).toBe(CURRENT_EVENT_SCHEMA_VERSION);
+  });
+
+  it('keeps score source only on scored shot outcomes', () => {
+    const scoredShot = normalizeEventRecord({
+      id: 'shot-2',
+      outcome: 'Goal',
+      x: 0.5,
+      y: 0.5,
+      event_type: 'Shot',
+      score_source: 'kickout',
+    });
+
+    const missedShot = normalizeEventRecord({
+      id: 'shot-3',
+      outcome: 'Wide',
+      x: 0.5,
+      y: 0.5,
+      event_type: 'Shot',
+      score_source: 'kickout',
+    });
+
+    expect(scoredShot.score_source).toBe('kickout');
+    expect(missedShot.score_source).toBeNull();
   });
 });

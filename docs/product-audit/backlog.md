@@ -1,4 +1,4 @@
-# Go-Live Backlog
+# Backlog
 
 Priority order is based on launch risk first, then user value, then engineering cost.
 
@@ -9,12 +9,6 @@ Priority order is based on launch risk first, then user value, then engineering 
 3. Reduce shell density through progressive disclosure and targeted component splits.
 4. Keep supportability and multi-analyst guardrails in the product flow, not just in docs.
 5. Expand browser coverage with one non-Chromium lane before broad launch.
-
-## Current Delivery Status
-
-- Phase 1 is complete in this pass: `AUD-MH-01` through `AUD-MH-04`, plus `AUD-CP-01` through `AUD-CP-03`, are now delivered.
-- Phase 2 is partially delivered: the analysis tabs are lazy-loaded, analysis UI state now persists per scope, and the WebKit smoke lane is wired into CI. The remaining shell decomposition, explicit preset flow, and coach-export polish stay open below.
-- The backlog below remains the complete target map for the product, but the completed items above should not be treated as still needing immediate work.
 
 ## Launch Blockers
 
@@ -43,17 +37,6 @@ Priority order is based on launch risk first, then user value, then engineering 
 | AUD-FU-03 | Add saved views / presets for common analysis states | 68 | medium | UX | Cuts repetitive filter setup. | Analysts repeat the same views often. | M | Product / frontend | Stable baseline | User can restore a preferred state quickly. | Component tests for preset restore. | Keep scope narrow. | analysis panels |
 | AUD-FU-04 | Improve coach handoff exports | 66 | medium | product | Makes the app more valuable after the live period ends. | The coach handoff is a monetizable moment. | M | Product / frontend | Digest flow stability | A coach-ready summary can be produced with less manual effort. | E2E for export/share path. | Extend, do not replace, the current digest. | `src/lib/DigestPanel.svelte`, export helpers |
 
-## Analysis Follow-Ups
-
-These depend on the retrospective tagging backbone described in `docs/go-live/roadmap.md`.
-
-| ID | Title | Priority score | Severity | Category | Impact | Why now | Effort | Owner type | Dependencies | Acceptance criteria | Test requirements | Rollout notes | File / module refs |
-| --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| AUD-AN-01 | Attack speed vs score rate | 64 | medium | analysis | Shows whether quicker attacks are more efficient. | Useful once conversion and source tags are consistent. | M | Product / frontend | Phase 1 retrospective tagging | Analysts can compare score rate across fast, medium, and slow attack bands. | Unit/component tests for banding and summaries. | Keep it as a retrospective view only. | `src/lib/PossessionAnalysisPanel.svelte`, `src/lib/postMatchAnalysis.js` |
-| AUD-AN-02 | Transition vs settled attack | 63 | medium | analysis | Shows whether regains or recycled play create better chances. | Depends on a clear regain/source split. | M | Product / frontend | Phase 1 retrospective tagging | Analysts can compare conversion for transition and settled possessions. | Component tests for split summaries. | Define transition explicitly in the help text. | `src/lib/PossessionAnalysisPanel.svelte`, `src/lib/liveInsights.js` |
-| AUD-AN-03 | Entry-to-shot conversion | 62 | medium | analysis | Measures whether dangerous entries actually turn into shots. | Useful once zone-based turnover danger is already tagged. | M | Product / frontend | Phase 1 retrospective tagging | Analysts can compare entry counts against eventual shots and scores. | Unit tests for zone and shot aggregation. | Avoid inferring from sparse or broken sequences. | `src/lib/PossessionAnalysisPanel.svelte`, `src/lib/postMatchAnalysis.js` |
-| AUD-AN-04 | Time-to-shot after regain | 61 | medium | analysis | Measures how quickly a regain becomes a shot. | Needs possession timing that is better handled after the first slice lands. | M | Product / frontend | Phase 1 retrospective tagging | Analysts can view median or banded time-to-shot after regain. | Component tests for time buckets and summaries. | Use recorded timestamps only. | `src/lib/PossessionAnalysisPanel.svelte`, `src/lib/liveInsights.js` |
-
 ## Cleanup and Polish
 
 | ID | Title | Priority score | Severity | Category | Impact | Why now | Effort | Owner type | Dependencies | Acceptance criteria | Test requirements | Rollout notes | File / module refs |
@@ -76,13 +59,12 @@ These depend on the retrospective tagging backbone described in `docs/go-live/ro
 2. AUD-BL-02
 3. AUD-BL-03
 4. AUD-BL-04
-5. AUD-FU-01
-6. AUD-FU-02
-7. AUD-FU-03
-8. AUD-FU-04
-9. AUD-FUT-01 if video strategy changes
-10. AUD-FUT-02 if GPS strategy changes
-11. AUD-FUT-03 if the team has a large labeled dataset and a real product reason for ML assistance
+5. AUD-MH-01
+6. AUD-MH-02
+7. AUD-MH-03
+8. AUD-MH-04
+9. AUD-FU-01
+10. AUD-FU-02
 
 ## Quick Wins Under Half a Day
 

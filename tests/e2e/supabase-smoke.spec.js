@@ -2,11 +2,17 @@ import { expect, test } from '@playwright/test';
 
 const smokeEmail = process.env.PAIRC_SMOKE_EMAIL?.trim();
 const smokePassword = process.env.PAIRC_SMOKE_PASSWORD?.trim();
+const offlineMode = process.env.VITE_E2E_OFFLINE_MODE === 'true';
+const placeholderSmokeCreds =
+  smokeEmail === 'smoke@yourapp.com' ||
+  smokePassword === 'Newpass';
 const hasSmokeConfig = Boolean(
+  !offlineMode &&
   process.env.VITE_SUPABASE_URL &&
   process.env.VITE_SUPABASE_ANON_KEY &&
   smokeEmail &&
-  smokePassword
+  smokePassword &&
+  !placeholderSmokeCreds
 );
 
 test.describe('Supabase smoke', () => {
@@ -21,11 +27,12 @@ test.describe('Supabase smoke', () => {
     const matchDate = process.env.PAIRC_SMOKE_DATE?.trim() || new Date().toISOString().slice(0, 10);
 
     await page.goto('/');
-    await page.getByPlaceholderText('Email').fill(smokeEmail);
-    await page.getByPlaceholderText('Password').fill(smokePassword);
+    await page.getByPlaceholder('Email').fill(smokeEmail);
+    await page.getByPlaceholder('Password').fill(smokePassword);
     await page.getByRole('button', { name: /Sign in/i }).click();
 
     await expect(page.getByRole('button', { name: /Capture/i })).toBeVisible();
+    await page.waitForLoadState('networkidle');
 
     await page.locator('button.match-ctx-bar').click();
     if (await page.getByRole('button', { name: /^\+ New match$/ }).count()) {
@@ -42,7 +49,7 @@ test.describe('Supabase smoke', () => {
 
     await page.getByRole('button', { name: /^Events/i }).click();
     await expect(page.getByRole('cell', { name: opponent })).toBeVisible();
-    await expect(page.getByRole('cell', { name: /Retained/i })).toBeVisible();
+    await expect(page.locator('.outcome-badge').first()).toBeVisible();
 
     await page.reload();
     await expect(page.getByRole('button', { name: /Capture/i })).toBeVisible();

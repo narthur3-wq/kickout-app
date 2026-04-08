@@ -1,4 +1,6 @@
 export const CURRENT_EVENT_SCHEMA_VERSION = 1;
+export const KICKOUT_REVIEW_RESULTS = ['score', 'no_score', 'unreviewed'];
+export const SHOT_SCORE_SOURCES = ['kickout', 'turnover', 'settled', 'free', 'other', 'unreviewed'];
 
 function normalizeLower(value, fallback = '') {
   return String(value ?? fallback).trim().toLowerCase();
@@ -19,6 +21,13 @@ export function normalizeEventRecord(event, { teamIdFallback = null } = {}) {
   const period = ['H1', 'H2', 'ET'].includes(periodRaw) ? periodRaw : 'H1';
   const shotTypeRaw = normalizeLower(raw.shot_type, 'point') || 'point';
   const shotType = type === 'shot' ? (['goal', 'point'].includes(shotTypeRaw) ? shotTypeRaw : 'point') : null;
+  const outcome = normalizeLower(raw.outcome, '') || '';
+  const reviewResultRaw = normalizeLower(raw.conversion_result, 'unreviewed') || 'unreviewed';
+  const conversionResult = KICKOUT_REVIEW_RESULTS.includes(reviewResultRaw) ? reviewResultRaw : 'unreviewed';
+  const scoreSourceRaw = normalizeLower(raw.score_source, 'unreviewed') || 'unreviewed';
+  const scoreSource = type === 'shot' && ['goal', 'point', 'two point', 'two-point'].includes(outcome)
+    ? (SHOT_SCORE_SOURCES.includes(scoreSourceRaw) ? scoreSourceRaw : 'unreviewed')
+    : null;
 
   return {
     ...raw,
@@ -37,6 +46,8 @@ export function normalizeEventRecord(event, { teamIdFallback = null } = {}) {
     break_displacement_m: isBreak ? (raw.break_displacement_m ?? null) : null,
     restart_reason: type === 'kickout' ? (raw.restart_reason || null) : null,
     shot_type: shotType,
+    conversion_result: type === 'kickout' || type === 'turnover' ? conversionResult : null,
+    score_source: type === 'shot' ? scoreSource : null,
     period,
     flag: !!raw.flag,
     schema_version: raw.schema_version ?? CURRENT_EVENT_SCHEMA_VERSION,

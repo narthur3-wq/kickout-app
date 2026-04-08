@@ -49,6 +49,8 @@ Current migrations in order:
 6. `20260329000100_add_matches_table.sql`
 7. `20260329000200_add_event_match_id.sql`
 8. `20260330000100_add_event_indexes.sql` — adds indexes on `events.team_id` and `events.match_id`
+9. `20260406000100_add_analysis_tables.sql` — adds the analysis session/event tables
+10. `20260406000200_add_possession_analysis_metadata.sql` — adds `half` and `assist` to possession analysis rows
 
 ## Admin Onboarding Automation
 
@@ -67,6 +69,8 @@ Once deployed, configured admin emails will see an **Admin** tab in the app wher
 - create the user's Supabase sign-in account with a password in the same flow
 
 The function upserts the user's row in `allowed_users` and creates the Supabase Auth user in the same step. If the auth user already exists, it simply updates the club assignment.
+
+Creating a user in Supabase Auth alone is not enough for login. The email must also exist in `allowed_users`, which is why the Admin onboarding flow creates both records together.
 
 If you later want email invites, the function also supports them. For that path to work in production:
 

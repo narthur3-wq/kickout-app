@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildKickoutClockTrend,
+  buildRetrospectiveConversionSummary,
   buildShotSummary,
   buildTurnoverSummary,
 } from '../../src/lib/analyticsHelpers.js';
@@ -109,5 +110,64 @@ describe('analyticsHelpers', () => {
       { label: '80-90', tot: 2, pct: 50 },
     ]);
     expect(trend.find((bucket) => bucket.label === '20-30')).toBeUndefined();
+  });
+
+  it('summarizes reviewed conversion tags and score sources', () => {
+    const summary = buildRetrospectiveConversionSummary([
+      { event_type: 'kickout', period: 'H1', contest_type: 'clean', conversion_result: 'score' },
+      { event_type: 'kickout', period: 'H1', contest_type: 'break', conversion_result: 'no_score' },
+      { event_type: 'kickout', period: 'H2', contest_type: 'clean', conversion_result: 'unreviewed' },
+      { event_type: 'turnover', period: 'H1', zone_code: 'L-S', conversion_result: 'score' },
+      { event_type: 'turnover', period: 'H1', zone_code: 'L-S', conversion_result: 'no_score' },
+      { event_type: 'shot', period: 'H1', outcome: 'Goal', score_source: 'kickout' },
+      { event_type: 'shot', period: 'H2', outcome: 'Point', score_source: 'settled' },
+      { event_type: 'shot', period: 'H2', outcome: 'Point', score_source: 'unreviewed' },
+    ]);
+
+    expect(summary.kickout).toMatchObject({
+      total: 3,
+      reviewed: 2,
+      scored: 1,
+      noScore: 1,
+      unreviewed: 1,
+      reviewedPct: 67,
+      scorePct: 50,
+    });
+    expect(summary.kickout.byField).toEqual([
+      expect.objectContaining({ key: 'clean', label: 'Clean', total: 2, reviewed: 1, scored: 1, pct: 100 }),
+      expect.objectContaining({ key: 'break', label: 'Break', total: 1, reviewed: 1, scored: 0, pct: 0 }),
+    ]);
+    expect(summary.kickout.byPeriod).toEqual([
+      expect.objectContaining({ period: 'H1', total: 2, reviewed: 2, scored: 1, pct: 50 }),
+      expect.objectContaining({ period: 'H2', total: 1, reviewed: 0, scored: 0, pct: null }),
+    ]);
+
+    expect(summary.turnover).toMatchObject({
+      total: 2,
+      reviewed: 2,
+      scored: 1,
+      noScore: 1,
+      unreviewed: 0,
+      scorePct: 50,
+    });
+    expect(summary.turnover.byField[0]).toMatchObject({
+      key: 'L-S',
+      label: 'L-S',
+      total: 2,
+      reviewed: 2,
+      scored: 1,
+      pct: 50,
+    });
+
+    expect(summary.scoreSource).toMatchObject({
+      total: 3,
+      reviewed: 2,
+      unreviewed: 1,
+      small: true,
+    });
+    expect(summary.scoreSource.rows).toEqual([
+      expect.objectContaining({ key: 'kickout', label: 'Kickout', count: 1, pct: 50 }),
+      expect.objectContaining({ key: 'settled', label: 'Settled', count: 1, pct: 50 }),
+    ]);
   });
 });

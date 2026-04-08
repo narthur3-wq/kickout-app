@@ -67,3 +67,43 @@ export function formatDiagnostics(entries = []) {
     return lines.join('\n');
   }).join('\n\n');
 }
+
+export function summarizeDiagnostics(entries = []) {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return {
+      total: 0,
+      byKind: {},
+      latestAt: null,
+    };
+  }
+
+  const byKind = {};
+  let latestAt = null;
+
+  for (const entry of entries) {
+    const kind = entry?.kind || 'info';
+    byKind[kind] = (byKind[kind] || 0) + 1;
+
+    if (entry?.ts && (!latestAt || String(entry.ts) > latestAt)) {
+      latestAt = String(entry.ts);
+    }
+  }
+
+  return {
+    total: entries.length,
+    byKind,
+    latestAt,
+  };
+}
+
+export function buildDiagnosticsExport(entries = [], meta = {}) {
+  const safeEntries = Array.isArray(entries) ? entries : [];
+
+  return {
+    version: 1,
+    exported_at: new Date().toISOString(),
+    summary: summarizeDiagnostics(safeEntries),
+    meta: meta && typeof meta === 'object' ? meta : {},
+    entries: safeEntries,
+  };
+}

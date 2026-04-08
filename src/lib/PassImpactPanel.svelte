@@ -31,6 +31,10 @@
     sessionsForMatch,
     sessionsForPlayer,
   } from './postMatchAnalysisStore.js';
+  import {
+    loadAnalysisUiState,
+    saveAnalysisUiState,
+  } from './analysisUiState.js';
 
   const dispatch = createEventDispatcher();
 
@@ -65,6 +69,13 @@
   let analysisCardEl;
   let exportingSnapshot = false;
   let exportFeedback = null;
+
+  const ANALYSIS_VIEW_DEFAULTS = Object.freeze({
+    selectedPlayerKey: '',
+    selectedSessionId: 'all',
+    selectedConnectionId: null,
+    playerInput: '',
+  });
 
   function nowIso() {
     return new Date().toISOString();
@@ -124,6 +135,22 @@
     return rosterList().filter((player) => player?.active !== false);
   }
 
+  function applyViewState(state = {}) {
+    selectedPlayerKey = state.selectedPlayerKey ?? ANALYSIS_VIEW_DEFAULTS.selectedPlayerKey;
+    selectedSessionId = state.selectedSessionId ?? ANALYSIS_VIEW_DEFAULTS.selectedSessionId;
+    selectedConnectionId = state.selectedConnectionId ?? ANALYSIS_VIEW_DEFAULTS.selectedConnectionId;
+    playerInput = state.playerInput ?? ANALYSIS_VIEW_DEFAULTS.playerInput;
+  }
+
+  function storedViewState() {
+    return {
+      selectedPlayerKey,
+      selectedSessionId,
+      selectedConnectionId,
+      playerInput,
+    };
+  }
+
   function saveState(nextState) {
     const previousState = analysisState;
     analysisState = nextState;
@@ -139,9 +166,11 @@
     if (!scope) {
       analysisState = createEmptyAnalysisState();
       loadedScope = null;
+      applyViewState(ANALYSIS_VIEW_DEFAULTS);
       return;
     }
     analysisState = loadAnalysisState(scope);
+    applyViewState(loadAnalysisUiState('pass', scope, ANALYSIS_VIEW_DEFAULTS));
     loadedScope = scope;
   }
 
@@ -406,11 +435,7 @@
     loadScope(storageScope);
     draftSession = null;
     resetDraftEvent();
-    selectedPlayerKey = '';
-    selectedSessionId = 'all';
-    selectedConnectionId = null;
     mergeTargetPlayerKey = '';
-    playerInput = '';
     notice = '';
   }
 
@@ -504,6 +529,10 @@
   onMount(() => {
     if (storageScope) loadScope(storageScope);
   });
+
+  $: if (storageScope && loadedScope === storageScope) {
+    saveAnalysisUiState('pass', storageScope, storedViewState());
+  }
 
   $: matchSessions = sessionsForMatch(analysisState, 'pass', activeMatchId)
     .slice()

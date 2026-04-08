@@ -6,19 +6,23 @@ Use this as the PR description checklist before merging a production-ready chang
 
 - [ ] `npm run lint`
 - [ ] `npm run test:unit`
-- [ ] `npm run test:e2e`
+- [ ] `npm run test:e2e` including the WebKit smoke lane
 - [ ] `npm run build`
-- [ ] Supabase-backed smoke path verified or explicitly waived
+- [x] Supabase-backed smoke path verified or explicitly waived
 - [ ] `supabase/migrations/20260330000100_add_event_indexes.sql` applied for existing projects
+- [ ] If analysis tabs are in launch scope, `supabase/migrations/20260406000100_add_analysis_tables.sql` and `supabase/migrations/20260406000200_add_possession_analysis_metadata.sql` are applied
 - [ ] Docs updated so the explicit match model and `Events` log behavior match reality
 - [ ] Diagnostics snapshot can be copied from the account menu after a sync or onboarding failure
+- [ ] Browser matrix checked on at least Chromium and WebKit for the release-critical flows
 
 ## P1 - Supabase Smoke
 
-- [ ] Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for the test environment
-- [ ] Set `PAIRC_SMOKE_EMAIL` and `PAIRC_SMOKE_PASSWORD` for a dedicated smoke account
-- [ ] Run `npm run test:smoke`
-- [ ] Sign in, create a match, save an event, reload, and confirm the event is still present
+- [x] Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for the test environment
+- [x] Set `PAIRC_SMOKE_EMAIL` and `PAIRC_SMOKE_PASSWORD` for a dedicated smoke account
+- [x] Run `npm run test:smoke`
+- [x] Sign in, create a match, save an event, reload, and confirm the event is still present
+
+Last verified: 2026-04-06 — 1 passed (9.8s), Chromium
 
 ## P2 - Docs
 

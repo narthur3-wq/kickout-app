@@ -209,9 +209,16 @@ Deno.serve(async (req) => {
       targetTeamName = team.name
     }
 
+    const { error: upsertError } = await supabaseAdmin
+      .from('allowed_users')
+      .upsert({ email: targetEmail, team_id: targetTeamId }, { onConflict: 'email' })
+
+    if (upsertError) {
+      return json({ ok: false, error: upsertError.message }, 500, origin, allowedOrigin)
+    }
+
     const existingAuthUser = await findAuthUserByEmail(supabaseAdmin, targetEmail)
     let invited = false
-    let createdAuthUser = false
 
     if (!existingAuthUser) {
       if (delivery === 'invite') {
@@ -224,13 +231,24 @@ Deno.serve(async (req) => {
         if (inviteError) {
           return json({
             ok: false,
-            provisioned: true,
+            assignmentSaved: true,
+            email: targetEmail,
+            team: {
+              id: targetTeamId,
+              name: targetTeamName,
+              created,
+            },
+            auth: {
+              delivery,
+              invited: false,
+              existing: false,
+              redirectTo: redirectTo || null,
+            },
             error: `Team assignment saved, but the invite email could not be sent: ${inviteError.message}`,
           }, 500, origin, allowedOrigin)
         }
 
         invited = true
-        createdAuthUser = true
       } else {
         const { error: createUserError } = await supabaseAdmin.auth.admin.createUser({
           email: targetEmail,
@@ -239,30 +257,25 @@ Deno.serve(async (req) => {
         })
 
         if (createUserError) {
-          return json({ ok: false, error: `Could not create sign-in user: ${createUserError.message}` }, 500, origin, allowedOrigin)
-        }
-
-        createdAuthUser = true
-      }
-    }
-
-    const { error: upsertError } = await supabaseAdmin
-      .from('allowed_users')
-      .upsert({ email: targetEmail, team_id: targetTeamId }, { onConflict: 'email' })
-
-    if (upsertError) {
-      if (!existingAuthUser && createdAuthUser) {
-        try {
-          const invitedUser = await findAuthUserByEmail(supabaseAdmin, targetEmail)
-          if (invitedUser?.id) {
-            await supabaseAdmin.auth.admin.deleteUser(invitedUser.id)
-          }
-        } catch {
-          // Best-effort cleanup only; keep the original database error for the operator.
+          return json({
+            ok: false,
+            assignmentSaved: true,
+            email: targetEmail,
+            team: {
+              id: targetTeamId,
+              name: targetTeamName,
+              created,
+            },
+            auth: {
+              delivery,
+              invited: false,
+              existing: false,
+              redirectTo: redirectTo || null,
+            },
+            error: `Team assignment saved, but the sign-in user could not be created: ${createUserError.message}`,
+          }, 500, origin, allowedOrigin)
         }
       }
-
-      return json({ ok: false, error: upsertError.message }, 500, origin, allowedOrigin)
     }
 
     return json({

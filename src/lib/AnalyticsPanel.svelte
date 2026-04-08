@@ -3,7 +3,11 @@
 import Heatmap from './Heatmap.svelte';
 import { createEventDispatcher } from 'svelte';
 import { SvelteSet } from 'svelte/reactivity';
-import { buildShotSummary, buildTurnoverSummary } from './analyticsHelpers.js';
+import {
+  buildRetrospectiveConversionSummary,
+  buildShotSummary,
+  buildTurnoverSummary,
+} from './analyticsHelpers.js';
 import {
   kickoutOutcomeDisplayLabelOf,
   kickoutOutcomeFilterLabels,
@@ -126,6 +130,18 @@ import {
     }
   }
 
+  function scoreSourceColor(value) {
+    switch ((value || '').toLowerCase()) {
+      case 'kickout': return '#16a34a';
+      case 'turnover': return '#b45309';
+      case 'settled': return '#1c3f8a';
+      case 'free': return '#7c3aed';
+      case 'other': return '#64748b';
+      case 'unreviewed':
+      default: return '#9ca3af';
+    }
+  }
+
   const TEAM_LEGEND = [
     { label: 'Ours', shape: 'circle', color: '#f8fafc' },
     { label: 'Theirs', shape: 'square', color: '#f8fafc' },
@@ -202,6 +218,10 @@ import {
 
   $: hasBreakEvents = vizEvents.some(e => e.contest_type === 'break');
   $: zoneRetTotal = zoneTableRet.reduce((s, row) => s + row.cells.reduce((rs, c) => rs + c.tot, 0), 0);
+  $: retrospectiveSummary = buildRetrospectiveConversionSummary(vizEvents);
+  $: hasRetrospectiveData = retrospectiveSummary.kickout.total > 0
+    || retrospectiveSummary.turnover.total > 0
+    || retrospectiveSummary.scoreSource.total > 0;
 
   const TYPE_LABELS = { 'kickout': 'Kickouts', 'shot': 'Shots', 'turnover': 'Turnovers', 'ALL': 'Analytics' };
   $: inferredEventType = (() => {
@@ -414,6 +434,151 @@ import {
         </div>
         {#if turnoverSummary.small}<p class="small-sample-notice">(small sample — interpret with caution)</p>{/if}
       {/if}
+    {/if}
+
+    {#if hasRetrospectiveData}
+      <details class="section-card full-width retro-review">
+        <summary class="section-hd">Retrospective Review</summary>
+        <p class="hint">Manual tags only. No event-order inference.</p>
+        <div class="kpi-grid">
+          {#if retrospectiveSummary.kickout.total > 0}
+            {@const kickoutReview = retrospectiveSummary.kickout}
+            <div class="kpi">
+              <div class="kpi-title">Kickout to Score</div>
+              <div class="summary-kpi-row summary-kpi-small">
+                <div class="summary-chip">
+                  <span class="summary-chip-val">{kickoutReview.reviewed}/{kickoutReview.total}</span>
+                  <span class="summary-chip-lbl">Reviewed</span>
+                </div>
+                <div class="summary-chip">
+                  <span class="summary-chip-val">{kickoutReview.scorePct == null ? 'â€”' : `${kickoutReview.scorePct}%`}</span>
+                  <span class="summary-chip-lbl">Score rate</span>
+                </div>
+                <div class="summary-chip">
+                  <span class="summary-chip-val">{kickoutReview.noScore}</span>
+                  <span class="summary-chip-lbl">No score</span>
+                </div>
+              </div>
+              {#if kickoutReview.byField.length > 0}
+                <div class="clock-bars">
+                  {#each kickoutReview.byField as row (row.key)}
+                    {@const color = row.pct >= 60 ? '#16a34a' : row.pct >= 45 ? '#d97706' : '#dc2626'}
+                    <div class="clock-row">
+                      <span class="clock-lbl">{row.label}</span>
+                      <div class="clock-track">
+                        <div class="clock-fill" style="width:{row.pct}%;background:{color}"></div>
+                      </div>
+                      <span class="clock-pct" style="color:{color}">{row.pct}%</span>
+                      <span class="clock-n">n={row.reviewed}</span>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <p class="hint">{kickoutReview.reviewed === 0 ? 'Tag kickout reviews to see contest effectiveness.' : 'Kickout review tags are still settling.'}</p>
+              {/if}
+              {#if kickoutReview.byPeriod.length > 0}
+                <div class="clock-bars" style="margin-top:8px">
+                  {#each kickoutReview.byPeriod as row (row.period)}
+                    {@const color = row.pct == null ? '#9ca3af' : row.pct >= 60 ? '#16a34a' : row.pct >= 45 ? '#d97706' : '#dc2626'}
+                    <div class="clock-row">
+                      <span class="clock-lbl">{row.period}</span>
+                      <div class="clock-track">
+                        <div class="clock-fill" style="width:{row.pct ?? 0}%;background:{color}"></div>
+                      </div>
+                      <span class="clock-pct" style="color:{color}">{row.pct == null ? 'â€”' : `${row.pct}%`}</span>
+                      <span class="clock-n">n={row.reviewed}</span>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+              {#if kickoutReview.small}<p class="small-sample-notice">(small sample â€” interpret with caution)</p>{/if}
+            </div>
+          {/if}
+
+          {#if retrospectiveSummary.turnover.total > 0}
+            {@const turnoverReview = retrospectiveSummary.turnover}
+            <div class="kpi">
+              <div class="kpi-title">Turnover Punishment</div>
+              <div class="summary-kpi-row summary-kpi-small">
+                <div class="summary-chip">
+                  <span class="summary-chip-val">{turnoverReview.reviewed}/{turnoverReview.total}</span>
+                  <span class="summary-chip-lbl">Reviewed</span>
+                </div>
+                <div class="summary-chip">
+                  <span class="summary-chip-val">{turnoverReview.scorePct == null ? 'â€”' : `${turnoverReview.scorePct}%`}</span>
+                  <span class="summary-chip-lbl">Score rate</span>
+                </div>
+                <div class="summary-chip">
+                  <span class="summary-chip-val">{turnoverReview.noScore}</span>
+                  <span class="summary-chip-lbl">No score</span>
+                </div>
+              </div>
+              {#if turnoverReview.byField.length > 0}
+                <div class="clock-bars">
+                  {#each turnoverReview.byField.slice(0, 8) as row (row.key)}
+                    {@const color = row.pct >= 60 ? '#16a34a' : row.pct >= 45 ? '#d97706' : '#dc2626'}
+                    <div class="clock-row">
+                      <span class="clock-lbl">{row.label}</span>
+                      <div class="clock-track">
+                        <div class="clock-fill" style="width:{row.pct}%;background:{color}"></div>
+                      </div>
+                      <span class="clock-pct" style="color:{color}">{row.pct}%</span>
+                      <span class="clock-n">n={row.reviewed}</span>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <p class="hint">{turnoverReview.reviewed === 0 ? 'Tag turnover reviews to see danger by zone.' : 'Turnover zone review tags are still settling.'}</p>
+              {/if}
+              {#if turnoverReview.byPeriod.length > 0}
+                <div class="clock-bars" style="margin-top:8px">
+                  {#each turnoverReview.byPeriod as row (row.period)}
+                    {@const color = row.pct == null ? '#9ca3af' : row.pct >= 60 ? '#16a34a' : row.pct >= 45 ? '#d97706' : '#dc2626'}
+                    <div class="clock-row">
+                      <span class="clock-lbl">{row.period}</span>
+                      <div class="clock-track">
+                        <div class="clock-fill" style="width:{row.pct ?? 0}%;background:{color}"></div>
+                      </div>
+                      <span class="clock-pct" style="color:{color}">{row.pct == null ? 'â€”' : `${row.pct}%`}</span>
+                      <span class="clock-n">n={row.reviewed}</span>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+              {#if turnoverReview.small}<p class="small-sample-notice">(small sample â€” interpret with caution)</p>{/if}
+            </div>
+          {/if}
+
+          {#if retrospectiveSummary.scoreSource.total > 0}
+            {@const sourceMix = retrospectiveSummary.scoreSource}
+            <div class="kpi">
+              <div class="kpi-title">Score Source Mix</div>
+              <div class="summary-kpi-row summary-kpi-small">
+                <div class="summary-chip">
+                  <span class="summary-chip-val">{sourceMix.reviewed}/{sourceMix.total}</span>
+                  <span class="summary-chip-lbl">Tagged</span>
+                </div>
+                <div class="summary-chip">
+                  <span class="summary-chip-val">{sourceMix.unreviewed}</span>
+                  <span class="summary-chip-lbl">Untagged</span>
+                </div>
+              </div>
+              {#if sourceMix.rows.length > 0}
+                <div class="outcome-chips">
+                  {#each sourceMix.rows as row (row.key)}
+                    <div class="outcome-chip" style="border-color:{scoreSourceColor(row.key)};color:{scoreSourceColor(row.key)}">
+                      {row.label}: {row.count} ({row.pct}%)
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <p class="hint">Tag scored shots to build the source mix.</p>
+              {/if}
+              {#if sourceMix.small}<p class="small-sample-notice">(small sample â€” interpret with caution)</p>{/if}
+            </div>
+          {/if}
+        </div>
+      </details>
     {/if}
 
     <div class="panel-sections">
@@ -852,6 +1017,13 @@ import {
     border-radius: 12px; padding: 16px 18px; margin-bottom: 16px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   }
+  .retro-review > summary {
+    list-style: none;
+    cursor: pointer;
+  }
+  .retro-review > summary::-webkit-details-marker {
+    display: none;
+  }
   .section-hd {
     font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
     color: #374151;
@@ -891,7 +1063,7 @@ import {
     overflow: hidden;
     box-shadow: 0 4px 20px rgba(0,50,0,0.18), 0 1px 6px rgba(0,0,0,0.08);
     aspect-ratio: 145 / 90;
-    width: min(100%, calc(47svh * 145 / 90));
+    width: min(100%, calc(39svh * 145 / 90));
     max-width: 1280px;
   }
   .pitch-viz-legend {

@@ -56,9 +56,30 @@ describe('CaptureForm', () => {
     renderForm({ editingId: 'event-1', undoStack: [] });
 
     expect(screen.getByText(/Editing event/i)).toBeInTheDocument();
+    expect(screen.getByText(/Retrospective review/i)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Score' }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'No score' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unreviewed' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Clear points/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Cancel/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Undo last change/i })).toBeDisabled();
+  });
+
+  it('shows score source controls only when editing a scored shot', () => {
+    renderForm({
+      editingId: 'event-1',
+      eventType: 'shot',
+      outcome: 'Goal',
+      scoreSource: 'kickout',
+    });
+
+    expect(screen.getByText(/Score source/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Kickout' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Turnover' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Settled' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Free' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Other' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unreviewed' })).toBeInTheDocument();
   });
 
   it('labels team ownership clearly without implying pitch direction', () => {

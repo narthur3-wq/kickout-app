@@ -8,8 +8,6 @@
   import DigestPanel from './lib/DigestPanel.svelte';
   import LivePanel from './lib/LivePanel.svelte';
   import CaptureForm from './lib/CaptureForm.svelte';
-  import PossessionAnalysisPanel from './lib/PossessionAnalysisPanel.svelte';
-  import PassImpactPanel from './lib/PassImpactPanel.svelte';
   import AdminPanel from './lib/AdminPanel.svelte';
   import {
     analyticsMarkerFill,
@@ -22,7 +20,7 @@
     normText,
   } from './lib/appShellHelpers.js';
   import { buildDraftSignature, isSetupDraftDirty } from './lib/captureDraft.js';
-  import { normalizeEventRecord } from './lib/eventRecord.js';
+  import { CURRENT_EVENT_SCHEMA_VERSION, normalizeEventRecord } from './lib/eventRecord.js';
   import {
     describeMatchImportSummary,
     extractImportedEvents,
@@ -32,9 +30,11 @@
   } from './lib/importMerge.js';
 import {
   appendDiagnostic,
+  buildDiagnosticsExport,
   clearDiagnostics,
   formatDiagnostics,
   loadDiagnostics,
+  summarizeDiagnostics,
 } from './lib/diagnostics.js';
 import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisStore.js';
 import {
@@ -122,6 +122,9 @@ import {
   let shotType = 'point';
   let flagEvent = false;
   let restartReason = '';
+  let conversionResult = 'unreviewed';
+  let scoreSource = 'unreviewed';
+  let scoredShotOutcome = false;
 
   // ── UI state ──────────────────────────────────────────────────────────────
   let events = [];
@@ -136,6 +139,13 @@ import {
   let notice = null;
   let noticeTimer = null;
   let diagnostics = loadDiagnostics();
+  let diagnosticsActionBusy = false;
+  let PossessionAnalysisPanel = null;
+  let PassImpactPanel = null;
+  let loadingPossessionAnalysisPanel = false;
+  let loadingPassImpactPanel = false;
+  let possessionAnalysisPanelError = '';
+  let passImpactPanelError = '';
   let confirmState = null;
   let activeTab = 'capture';
   let savedFlash = false;
@@ -271,6 +281,7 @@ import {
   const depthBandFromMeters = d => d < 20 ? 'Short' : (d < 45 ? 'Medium' : (d < 65 ? 'Long' : 'Very Long'));
   const zoneCode = (nx, ny) => `${sideBand(nx)[0]}-${depthBandFromMeters(depthMetersFromOwnGoal(ny))[0]}`;
   const breakDispM = (x1,y1,x2,y2) => Math.hypot((x2-x1)*WIDTH_M, (y2-y1)*LENGTH_M);
+  const isScoringShotOutcome = (value) => ['goal', 'point', 'two point'].includes(String(value || '').toLowerCase());
   let draftPristineSignature = '';
 
   // YTD: compare year strings to avoid UTC-vs-local timezone edge cases
@@ -294,6 +305,8 @@ import {
       eventType,
       direction,
       shotType,
+      conversionResult,
+      scoreSource,
       flagEvent,
       restartReason,
       editingId,
@@ -369,6 +382,8 @@ import {
     shotType = 'point';
     flagEvent = false;
     restartReason = '';
+    conversionResult = 'unreviewed';
+    scoreSource = 'unreviewed';
     editingId = null;
     pitchError = false;
     editReturnContext = null;
@@ -424,6 +439,8 @@ import {
       eventType,
       direction,
       shotType,
+      conversionResult,
+      scoreSource,
       flagEvent,
       restartReason,
       draftPristineSignature,
@@ -453,6 +470,8 @@ import {
     eventType = snapshot.eventType;
     direction = snapshot.direction;
     shotType = snapshot.shotType;
+    conversionResult = snapshot.conversionResult ?? 'unreviewed';
+    scoreSource = snapshot.scoreSource ?? 'unreviewed';
     flagEvent = snapshot.flagEvent;
     restartReason = snapshot.restartReason;
     editingId = null;
@@ -469,6 +488,8 @@ import {
     editingId = null;
     clearPoints();
     targetPlayer = '';
+    conversionResult = 'unreviewed';
+    scoreSource = 'unreviewed';
     markDraftPristine();
   }
 
@@ -922,8 +943,35 @@ import {
     ];
     return lines.join('\n');
   }
+  function buildDiagnosticsMeta() {
+    const currentDiagnostics = loadDiagnostics();
+    diagnostics = currentDiagnostics;
+    return {
+      app: 'Pairc',
+      user_email: user?.email || null,
+      storage_scope: storageScope || null,
+      active_tab: activeTab,
+      online: !!isOnline,
+      sync_status: syncStatus || 'idle',
+      sync_message: syncMessage || null,
+      active_match: activeMatch ? {
+        id: activeMatch.id,
+        team: activeMatch.team || null,
+        opponent: activeMatch.opponent || null,
+        match_date: activeMatch.match_date || null,
+        status: activeMatch.status || null,
+      } : null,
+      pending: {
+        events: pendingSync.size,
+        matches: pendingMatchSync.size,
+        analysis_deletes: pendingAnalysisDeletes.size,
+      },
+      diagnostics_summary: summarizeDiagnostics(currentDiagnostics),
+    };
+  }
   async function copyDiagnosticsSummary() {
     const text = buildSupportReport();
+    diagnosticsActionBusy = true;
     try {
       if (!globalThis.navigator?.clipboard?.writeText) throw new Error('Clipboard unavailable');
       await globalThis.navigator.clipboard.writeText(text);
@@ -931,6 +979,30 @@ import {
     } catch (error) {
       recordDiagnostic('support', 'Failed to copy diagnostics summary', { error: error?.message || String(error) });
       showNotice('error', 'Could not copy diagnostics to clipboard.', 5000);
+    } finally {
+      diagnosticsActionBusy = false;
+    }
+  }
+  function exportDiagnosticsReport() {
+    diagnosticsActionBusy = true;
+    try {
+      const currentDiagnostics = loadDiagnostics();
+      diagnostics = currentDiagnostics;
+      const payload = buildDiagnosticsExport(currentDiagnostics, buildDiagnosticsMeta());
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      a.href = url;
+      a.download = `pairc-diagnostics-${stamp}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showNotice('success', 'Diagnostics export downloaded.', 4000);
+    } catch (error) {
+      recordDiagnostic('support', 'Failed to export diagnostics report', { error: error?.message || String(error) });
+      showNotice('error', 'Could not export diagnostics report.', 5000);
+    } finally {
+      diagnosticsActionBusy = false;
     }
   }
   function clearDiagnosticsLog() {
@@ -1691,6 +1763,16 @@ import {
     pickup = { x: NaN, y: NaN };
   }
 
+  $: scoredShotOutcome = eventType === 'shot' && isScoringShotOutcome(outcome);
+
+  $: if (eventType === 'shot' && conversionResult !== 'unreviewed') {
+    conversionResult = 'unreviewed';
+  }
+
+  $: if (!scoredShotOutcome && scoreSource !== 'unreviewed') {
+    scoreSource = 'unreviewed';
+  }
+
   function validate() {
     if (!activeMatchId) {
       openMatchPicker({ startInCreateMode: matches.length === 0 });
@@ -1787,8 +1869,10 @@ import {
       flag:        !!flagEvent,
       restart_reason: eventType === 'kickout' ? (restartReason || null) : null,
       shot_type: eventType === 'shot' ? shotType : null,
+      conversion_result: eventType === 'kickout' || eventType === 'turnover' ? conversionResult : null,
+      score_source: scoredShotOutcome ? scoreSource : null,
       ko_sequence: koSequence,
-      schema_version: 1,
+      schema_version: CURRENT_EVENT_SCHEMA_VERSION,
     });
   }
 
@@ -1829,6 +1913,8 @@ import {
       flagEvent = false;
       restartReason = '';
       shotType = 'point';
+      conversionResult = 'unreviewed';
+      scoreSource = 'unreviewed';
     }
     markDraftPristine();
 
@@ -2040,6 +2126,8 @@ import {
     eventType      = e.event_type  || 'kickout';
     direction      = e.direction   || 'ours';
     shotType       = e.shot_type || 'point';
+    conversionResult = e.conversion_result || 'unreviewed';
+    scoreSource    = e.score_source || 'unreviewed';
     activeTab = 'capture';
     markDraftPristine({
       period,
@@ -2055,6 +2143,8 @@ import {
       eventType,
       direction,
       shotType,
+      conversionResult,
+      scoreSource,
       flagEvent,
       restartReason,
       editingId,
@@ -2069,7 +2159,7 @@ import {
       'x','y','x_m','y_m','depth_from_own_goal_m','side_band','depth_band','zone_code','our_goal_at_top',
       'pickup_x','pickup_y','pickup_x_m','pickup_y_m','break_displacement_m',
       'score_us','score_them','flag','ko_sequence','event_type','direction',
-      'restart_reason','shot_type','schema_version',
+      'restart_reason','shot_type','conversion_result','score_source','schema_version',
     ];
     const rows = [headers.join(',')].concat(
       subset.map(e => headers.map(h => {
@@ -2106,7 +2196,7 @@ import {
     );
     if (invalid.length > 0) throw new Error(`${invalid.length} record(s) are missing required fields (id, outcome, x, y). Import aborted.`);
 
-    const unknownVer = imported.filter(e => e.schema_version != null && e.schema_version > 1);
+    const unknownVer = imported.filter(e => e.schema_version != null && e.schema_version > CURRENT_EVENT_SCHEMA_VERSION);
     if (!skipSchemaCheck && unknownVer.length > 0) {
       askConfirm(
         `${unknownVer.length} record(s) use a newer schema version. Import them anyway?`,
@@ -2190,6 +2280,53 @@ import {
     activeTab = nextTab;
   }
 
+  async function loadAnalysisPanel(kind) {
+    if (kind === 'possession') {
+      if (PossessionAnalysisPanel || loadingPossessionAnalysisPanel) return;
+      loadingPossessionAnalysisPanel = true;
+      possessionAnalysisPanelError = '';
+      try {
+        const module = await import('./lib/PossessionAnalysisPanel.svelte');
+        PossessionAnalysisPanel = module.default;
+      } catch (error) {
+        possessionAnalysisPanelError = 'Could not load the possession analysis view. Please reload and try again.';
+        recordDiagnostic('support', 'Failed to load possession analysis panel', {
+          error: error?.message || String(error),
+        });
+        showNotice('error', possessionAnalysisPanelError, 7000);
+      } finally {
+        loadingPossessionAnalysisPanel = false;
+      }
+      return;
+    }
+
+    if (kind === 'pass') {
+      if (PassImpactPanel || loadingPassImpactPanel) return;
+      loadingPassImpactPanel = true;
+      passImpactPanelError = '';
+      try {
+        const module = await import('./lib/PassImpactPanel.svelte');
+        PassImpactPanel = module.default;
+      } catch (error) {
+        passImpactPanelError = 'Could not load the pass destination view. Please reload and try again.';
+        recordDiagnostic('support', 'Failed to load pass impact panel', {
+          error: error?.message || String(error),
+        });
+        showNotice('error', passImpactPanelError, 7000);
+      } finally {
+        loadingPassImpactPanel = false;
+      }
+    }
+  }
+
+  $: if (activeTab === 'analysis-possession') {
+    void loadAnalysisPanel('possession');
+  }
+
+  $: if (activeTab === 'analysis-pass') {
+    void loadAnalysisPanel('pass');
+  }
+
   function importJSON() {
     if (isMatchClosed) { showNotice('error', 'This match is closed. Reopen it before importing.'); return; }
     if (supabaseConfigured && user && !teamId) {
@@ -2234,6 +2371,8 @@ import {
       eventType,
       direction,
       shotType,
+      conversionResult,
+      scoreSource,
       flagEvent,
       restartReason,
       editingId,
@@ -2599,8 +2738,9 @@ import {
                     : 'No issues recorded yet.'}
                 </p>
                 <div class="account-diagnostics-actions">
-                  <button class="account-diagnostics-btn" on:click={copyDiagnosticsSummary}>Copy summary</button>
-                  <button class="account-diagnostics-btn" on:click={clearDiagnosticsLog} disabled={diagnostics.length === 0}>Clear log</button>
+                  <button class="account-diagnostics-btn" on:click={copyDiagnosticsSummary} disabled={diagnosticsActionBusy}>Copy summary</button>
+                  <button class="account-diagnostics-btn" on:click={exportDiagnosticsReport} disabled={diagnosticsActionBusy}>Export report</button>
+                  <button class="account-diagnostics-btn" on:click={clearDiagnosticsLog} disabled={diagnostics.length === 0 || diagnosticsActionBusy}>Clear log</button>
                 </div>
               </div>
             </div>
@@ -2749,6 +2889,8 @@ import {
         bind:targetPlayer
         bind:turnoverLostPlayer
         bind:turnoverWonPlayer
+        bind:conversionResult
+        bind:scoreSource
         bind:flagEvent
         bind:period
         bind:restartReason
@@ -2900,42 +3042,56 @@ import {
   <!-- ══ ANALYTICS TABS (Kickouts / Shots / Turnovers) ══ -->
   {:else if activeTab === 'analysis-possession'}
   <div class="full-panel">
-    <PossessionAnalysisPanel
-      {storageScope}
-      {analysisRefreshToken}
-      {activeMatchId}
-      {activeMatch}
-      {matches}
-      {squadPlayers}
-      teamName={activeMatch?.team || team || ''}
-      opponentName={activeMatch?.opponent || opponent || ''}
-      matchLabel={activeMatch
-        ? `${activeMatch.team || team || 'Team'} v ${activeMatch.opponent || opponent || 'Opposition'}${activeMatch.match_date ? ` (${activeMatch.match_date})` : ''}`
-        : ''}
-      playerOptions={playerChoices}
-      defaultOurGoalAtTop={ourGoalAtTop}
-      on:selectMatch={(e) => switchActiveMatch(e.detail)}
-      on:analysischange={(e) => handleAnalysisChange(e.detail)}
-    />
+    {#if possessionAnalysisPanelError}
+      <div class="empty-state">{possessionAnalysisPanelError}</div>
+    {:else if loadingPossessionAnalysisPanel || !PossessionAnalysisPanel}
+      <div class="empty-state">Loading possession analysis…</div>
+    {:else}
+      <svelte:component
+        this={PossessionAnalysisPanel}
+        {storageScope}
+        {analysisRefreshToken}
+        {activeMatchId}
+        {activeMatch}
+        {matches}
+        {squadPlayers}
+        teamName={activeMatch?.team || team || ''}
+        opponentName={activeMatch?.opponent || opponent || ''}
+        matchLabel={activeMatch
+          ? `${activeMatch.team || team || 'Team'} v ${activeMatch.opponent || opponent || 'Opposition'}${activeMatch.match_date ? ` (${activeMatch.match_date})` : ''}`
+          : ''}
+        playerOptions={playerChoices}
+        defaultOurGoalAtTop={ourGoalAtTop}
+        on:selectMatch={(e) => switchActiveMatch(e.detail)}
+        on:analysischange={(e) => handleAnalysisChange(e.detail)}
+      />
+    {/if}
   </div>
 
   {:else if activeTab === 'analysis-pass'}
   <div class="full-panel">
-    <PassImpactPanel
-      {storageScope}
-      {analysisRefreshToken}
-      {activeMatchId}
-      {activeMatch}
-      {squadPlayers}
-      teamName={activeMatch?.team || team || ''}
-      opponentName={activeMatch?.opponent || opponent || ''}
-      matchLabel={activeMatch
-        ? `${activeMatch.team || team || 'Team'} v ${activeMatch.opponent || opponent || 'Opposition'}${activeMatch.match_date ? ` (${activeMatch.match_date})` : ''}`
-        : ''}
-      playerOptions={playerChoices}
-      defaultOurGoalAtTop={ourGoalAtTop}
-      on:analysischange={(e) => handleAnalysisChange(e.detail)}
-    />
+    {#if passImpactPanelError}
+      <div class="empty-state">{passImpactPanelError}</div>
+    {:else if loadingPassImpactPanel || !PassImpactPanel}
+      <div class="empty-state">Loading pass destination analysis…</div>
+    {:else}
+      <svelte:component
+        this={PassImpactPanel}
+        {storageScope}
+        {analysisRefreshToken}
+        {activeMatchId}
+        {activeMatch}
+        {squadPlayers}
+        teamName={activeMatch?.team || team || ''}
+        opponentName={activeMatch?.opponent || opponent || ''}
+        matchLabel={activeMatch
+          ? `${activeMatch.team || team || 'Team'} v ${activeMatch.opponent || opponent || 'Opposition'}${activeMatch.match_date ? ` (${activeMatch.match_date})` : ''}`
+          : ''}
+        playerOptions={playerChoices}
+        defaultOurGoalAtTop={ourGoalAtTop}
+        on:analysischange={(e) => handleAnalysisChange(e.detail)}
+      />
+    {/if}
   </div>
 
   {:else if activeTab === 'kickouts' || activeTab === 'shots' || activeTab === 'turnovers'}

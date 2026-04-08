@@ -69,6 +69,8 @@ const diagnosticsMock = vi.hoisted(() => ({
   loadDiagnostics: vi.fn(() => []),
   clearDiagnostics: vi.fn(),
   formatDiagnostics: vi.fn((entries = []) => entries.map((entry) => `${entry.kind}: ${entry.message}`).join('\n')),
+  buildDiagnosticsExport: vi.fn((entries = [], meta = {}) => ({ version: 1, entries, meta })),
+  summarizeDiagnostics: vi.fn((entries = []) => ({ total: entries.length, byKind: {}, latestAt: null })),
 }));
 
 vi.mock('../../src/lib/supabase.js', () => ({
@@ -191,6 +193,8 @@ describe('App shell auth and sync', () => {
     diagnosticsMock.formatDiagnostics.mockImplementation((entries = []) =>
       entries.map((entry) => `${entry.kind}: ${entry.message}`).join('\n')
     );
+    diagnosticsMock.buildDiagnosticsExport.mockImplementation((entries = [], meta = {}) => ({ version: 1, entries, meta }));
+    diagnosticsMock.summarizeDiagnostics.mockImplementation((entries = []) => ({ total: entries.length, byKind: {}, latestAt: null }));
   });
 
   it('shows the login screen when Supabase is configured but there is no active session', async () => {
@@ -576,6 +580,44 @@ describe('App shell auth and sync', () => {
         message: 'Network lost',
       }));
     });
+  });
+
+  it('exports a diagnostics report from the account menu', async () => {
+    const session = { user: { id: 'user-support-export', email: 'analyst@example.com' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+    diagnosticsMock.loadDiagnostics.mockReturnValue([
+      { ts: '2026-04-07T10:00:00.000Z', kind: 'sync', message: 'Sync failed' },
+    ]);
+
+    const user = userEvent.setup();
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:diagnostics');
+    const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+
+    try {
+      await renderApp();
+
+      await waitFor(() => {
+        expect(document.querySelector('.avatar-btn')).not.toBeNull();
+      });
+
+      const avatarButton = document.querySelector('.avatar-btn');
+      if (!(avatarButton instanceof HTMLButtonElement)) throw new Error('Missing account menu button');
+      await user.click(avatarButton);
+
+      await user.click(screen.getByRole('button', { name: /Export report/i }));
+
+      expect(diagnosticsMock.buildDiagnosticsExport).toHaveBeenCalled();
+      expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+      expect(revokeObjectURLSpy).toHaveBeenCalledTimes(1);
+      expect(await screen.findByText(/Diagnostics export downloaded/i)).toBeInTheDocument();
+    } finally {
+      clickSpy.mockRestore();
+      createObjectURLSpy.mockRestore();
+      revokeObjectURLSpy.mockRestore();
+    }
   });
 
   it('blocks saving until a match exists and opens the match picker in create mode', async () => {
@@ -980,6 +1022,62 @@ describe('App shell auth and sync', () => {
 
     expect(await screen.findByText(/Editing event - tap Update when done/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Update Event/i })).toBeInTheDocument();
+  });
+
+  it('persists retrospective conversion tags when editing a kickout', async () => {
+    const session = { user: { id: 'user-review', email: 'analyst@example.com' } };
+    const userScope = 'user:user-review';
+    const matchId = 'match-review';
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches(userScope, [{
+      id: matchId,
+      team: 'Clontarf',
+      opponent: 'Boden',
+      match_date: '2026-03-29',
+      status: 'open',
+      created_at: '2026-03-29T09:00:00.000Z',
+      updated_at: '2026-03-29T09:00:00.000Z',
+      last_event_at: '2026-03-29T09:10:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, matchId);
+    seedScopedEvents(userScope, [{
+      id: 'review-1',
+      match_id: matchId,
+      created_at: '2026-03-29T09:01:00.000Z',
+      updated_at: '2026-03-29T09:01:00.000Z',
+      match_date: '2026-03-29',
+      team: 'Clontarf',
+      opponent: 'Boden',
+      period: 'H1',
+      clock: '01:00',
+      event_type: 'kickout',
+      direction: 'ours',
+      outcome: 'Retained',
+      contest_type: 'clean',
+      x: 0.4,
+      y: 0.3,
+      conversion_result: 'unreviewed',
+      schema_version: 1,
+    }]);
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Events/i });
+    await user.click(screen.getByRole('button', { name: /Events/i }));
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(await screen.findByText(/Retrospective review/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'No score' }));
+    await user.click(screen.getByRole('button', { name: /Update Event/i }));
+
+    await waitFor(() => {
+      const storedEvents = JSON.parse(localStorage.getItem(storageKey(STORAGE_KEYS.events, userScope)));
+      expect(storedEvents.find((event) => event.id === 'review-1')?.conversion_result).toBe('no_score');
+    });
   });
 
   it('shows the break pickup preview after landing and pickup points are set', async () => {

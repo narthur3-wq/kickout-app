@@ -118,6 +118,41 @@ describe('AdminPanel', () => {
     }));
   });
 
+  it('surfaces partial onboarding failures when the team assignment was saved first', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockResolvedValue({
+      data: {
+        ok: false,
+        assignmentSaved: true,
+        email: 'analyst@example.com',
+        team: { id: 'team-1', name: 'Clontarf', created: false },
+        auth: { delivery: 'password', existing: false, invited: false },
+        error: 'Team assignment saved, but the sign-in user could not be created: Auth API unavailable',
+      },
+      error: null,
+    });
+
+    render(AdminPanel, {
+      props: {
+        user: { email: 'admin@example.com' },
+        teamName: 'Clontarf',
+      },
+    });
+
+    await user.type(screen.getByPlaceholderText('analyst@example.com'), 'analyst@example.com');
+    await user.type(screen.getByPlaceholderText('Minimum 8 characters'), 'temporary123');
+    await user.click(screen.getByRole('button', { name: /Onboard user/i }));
+
+    expect(await screen.findByText(/Team assignment saved, but the sign-in user could not be created/i)).toBeInTheDocument();
+    expect(screen.getByText(/Retry this user later to finish the sign-in account step/i)).toBeInTheDocument();
+    expect(appendDiagnosticMock).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({
+        assignmentSaved: true,
+        resolvedTeamName: 'Clontarf',
+      }),
+    }));
+  });
+
   it('adds roster players and toggles their active state', async () => {
     const user = userEvent.setup();
 
