@@ -1,18 +1,13 @@
 import { expect, test } from '@playwright/test';
+import { setUpMatch } from './appSession.js';
 
 const smokeEmail = process.env.PAIRC_SMOKE_EMAIL?.trim();
 const smokePassword = process.env.PAIRC_SMOKE_PASSWORD?.trim();
-const offlineMode = process.env.VITE_E2E_OFFLINE_MODE === 'true';
-const placeholderSmokeCreds =
-  smokeEmail === 'smoke@yourapp.com' ||
-  smokePassword === 'Newpass';
 const hasSmokeConfig = Boolean(
-  !offlineMode &&
   process.env.VITE_SUPABASE_URL &&
   process.env.VITE_SUPABASE_ANON_KEY &&
   smokeEmail &&
-  smokePassword &&
-  !placeholderSmokeCreds
+  smokePassword
 );
 
 test.describe('Supabase smoke', () => {
@@ -34,15 +29,7 @@ test.describe('Supabase smoke', () => {
     await expect(page.getByRole('button', { name: /Capture/i })).toBeVisible();
     await page.waitForLoadState('networkidle');
 
-    await page.locator('button.match-ctx-bar').click();
-    if (await page.getByRole('button', { name: /^\+ New match$/ }).count()) {
-      await page.getByRole('button', { name: /^\+ New match$/ }).click();
-    }
-
-    await page.getByLabel('Team').fill(team);
-    await page.getByLabel('Opponent').fill(opponent);
-    await page.getByLabel('Date').fill(matchDate);
-    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await setUpMatch(page, { team, opponent, date: matchDate });
 
     await page.locator('svg[aria-label*="GAA pitch"]').click({ position: { x: 220, y: 120 } });
     await page.getByRole('button', { name: /Save Event/i }).click();

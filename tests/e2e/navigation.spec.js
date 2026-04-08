@@ -1,18 +1,5 @@
 import { expect, test } from '@playwright/test';
-
-async function openFreshApp(page) {
-  await page.goto('/');
-  await page.evaluate(() => window.localStorage.clear());
-  await page.reload();
-}
-
-async function setUpMatch(page, { team = 'Clontarf', opponent = 'Crokes', date = '2026-03-25' } = {}) {
-  await page.getByRole('button', { name: /Tap to (set up|create)/i }).click();
-  await page.getByLabel('Team').fill(team);
-  await page.getByLabel('Opponent').fill(opponent);
-  await page.getByLabel('Date').fill(date);
-  await page.getByRole('dialog', { name: 'Match picker' }).getByRole('button', { name: 'Create', exact: true }).click();
-}
+import { openFreshApp, setUpMatch } from './appSession.js';
 
 test('moving between tabs keeps Kickouts reachable from every main screen', async ({ page }) => {
   await openFreshApp(page);

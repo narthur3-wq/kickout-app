@@ -13,14 +13,6 @@ try {
   }
 } catch { /* .env.e2e is optional */ }
 
-const usingPlaceholderSmokeCreds =
-  process.env.PAIRC_SMOKE_EMAIL?.trim() === 'smoke@yourapp.com' &&
-  process.env.PAIRC_SMOKE_PASSWORD?.trim() === 'Newpass';
-
-if (usingPlaceholderSmokeCreds) {
-  process.env.VITE_E2E_OFFLINE_MODE = 'true';
-}
-
 const commonUse = {
   baseURL: 'http://127.0.0.1:4173',
   headless: true,

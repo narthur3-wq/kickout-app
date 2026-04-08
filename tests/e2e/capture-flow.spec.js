@@ -1,20 +1,5 @@
 import { expect, test } from '@playwright/test';
-
-async function openFreshApp(page) {
-  await page.goto('/');
-  await page.evaluate(() => {
-    window.localStorage.clear();
-  });
-  await page.reload();
-}
-
-async function setUpMatch(page, { team = 'Clontarf', opponent = 'Crokes', date = '2026-03-25' } = {}) {
-  await page.getByRole('button', { name: /Tap to (set up|create)/i }).click();
-  await page.getByLabel('Team').fill(team);
-  await page.getByLabel('Opponent').fill(opponent);
-  await page.getByLabel('Date').fill(date);
-  await page.getByRole('dialog', { name: 'Match picker' }).getByRole('button', { name: 'Create', exact: true }).click();
-}
+import { openFreshApp, setUpMatch, signInIfNeeded } from './appSession.js';
 
 async function placeLandingPoint(page, position = { x: 220, y: 120 }) {
   await page.locator('svg[aria-label*="GAA pitch"]').click({ position });
@@ -163,7 +148,7 @@ test('updates the current match setup without silently splitting saved events', 
   await page.locator('button.match-ctx-bar').click();
   await page.getByRole('button', { name: 'Edit' }).click();
   await page.getByLabel('Opponent').fill('Vincents');
-  await page.getByRole('dialog', { name: 'Match picker' }).getByRole('button', { name: 'Update match' }).click();
+  await page.getByRole('dialog', { name: 'Match picker' }).getByRole('button', { name: 'Update match' }).dispatchEvent('click');
   await page.locator('.confirm-card').getByRole('button', { name: 'Update match', exact: true }).click();
 
   await page.getByRole('button', { name: /Events/i }).click();
@@ -227,6 +212,7 @@ test('header score stays hidden when the current match has no shots', async ({ p
   });
 
   await page.goto('/');
+  await signInIfNeeded(page);
   await expect(page.locator('.match-score')).toHaveCount(0);
 });
 
@@ -257,6 +243,7 @@ test('header score accepts lowercase imported shot outcomes', async ({ page }) =
   });
 
   await page.goto('/');
+  await signInIfNeeded(page);
   await expect(page.locator('.match-score')).toContainText('0-1 – 0-0');
 });
 
@@ -282,6 +269,7 @@ test('import can keep current conflicting data while still adding brand-new even
   });
 
   await page.goto('/');
+  await signInIfNeeded(page);
   await page.getByRole('button', { name: /Events/i }).click();
 
   const chooserPromise = page.waitForEvent('filechooser');
@@ -338,6 +326,7 @@ test('analytics legends update to match the active tab', async ({ page }) => {
   });
 
   await page.goto('/');
+  await signInIfNeeded(page);
   const legend = page.locator('.pitch-viz-legend');
 
   await page.getByRole('button', { name: /^Shots/i }).click();

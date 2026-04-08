@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openFreshApp, setUpMatch, signInIfNeeded } from './appSession.js';
 
 function storedEvent(id, overrides = {}) {
   return {
@@ -21,20 +22,6 @@ function storedEvent(id, overrides = {}) {
     ko_sequence: 1,
     ...overrides,
   };
-}
-
-async function openFreshApp(page) {
-  await page.goto('/');
-  await page.evaluate(() => window.localStorage.clear());
-  await page.reload();
-}
-
-async function setUpMatch(page, { team = 'Clontarf', opponent = 'Crokes', date = '2026-03-25' } = {}) {
-  await page.getByRole('button', { name: /Tap to (set up|create)/i }).click();
-  await page.getByLabel('Team').fill(team);
-  await page.getByLabel('Opponent').fill(opponent);
-  await page.getByLabel('Date').fill(date);
-  await page.getByRole('dialog', { name: 'Match picker' }).getByRole('button', { name: 'Create', exact: true }).click();
 }
 
 test.use({ viewport: { width: 1366, height: 768 } });
@@ -73,6 +60,7 @@ test('analytics pitch stays fully in view in landscape on Kickouts, Shots, and T
   });
 
   await page.goto('/');
+  await signInIfNeeded(page);
 
   const tabs = [/^Kickouts/i, /^Shots/i, /^Turnovers/i];
   for (const tab of tabs) {

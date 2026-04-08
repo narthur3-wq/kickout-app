@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
+import { signInIfNeeded } from './appSession.js';
 import { buildSimulatedMatchState } from '../fixtures/simulatedMatch.js';
 
 test('simulates a match and exports the coach digest as a PNG', async ({ page }) => {
@@ -14,6 +15,7 @@ test('simulates a match and exports the coach digest as a PNG', async ({ page })
   }, simulatedState);
 
   await page.goto('/');
+  await signInIfNeeded(page);
 
   await expect(page.getByText('Clontarf v Vincents')).toBeVisible();
   await page.getByRole('button', { name: 'Live' }).click();
@@ -55,6 +57,7 @@ test('live deep-analysis shortcuts open the matching detailed tabs', async ({ pa
   }, simulatedState);
 
   await page.goto('/');
+  await signInIfNeeded(page);
 
   await page.getByRole('button', { name: 'Live' }).click();
   await expect(page.getByText('Live Match State')).toBeVisible();
