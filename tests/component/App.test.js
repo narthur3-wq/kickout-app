@@ -1080,6 +1080,80 @@ describe('App shell auth and sync', () => {
     });
   });
 
+  it('retries event sync without review-tag columns when Supabase schema cache is behind', async () => {
+    const session = { user: { id: 'user-review-compat', email: 'analyst@example.com' } };
+    const userScope = 'user:user-review-compat';
+    const matchId = 'match-review-compat';
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    seedScopedMatches(userScope, [{
+      id: matchId,
+      team: 'Clontarf',
+      opponent: 'Boden',
+      match_date: '2026-03-29',
+      status: 'open',
+      created_at: '2026-03-29T09:00:00.000Z',
+      updated_at: '2026-03-29T09:00:00.000Z',
+      last_event_at: '2026-03-29T09:10:00.000Z',
+      closed_at: null,
+    }]);
+    seedScopedActiveMatchId(userScope, matchId);
+    seedScopedEvents(userScope, [{
+      id: 'review-compat-1',
+      match_id: matchId,
+      created_at: '2026-03-29T09:01:00.000Z',
+      updated_at: '2026-03-29T09:01:00.000Z',
+      match_date: '2026-03-29',
+      team: 'Clontarf',
+      opponent: 'Boden',
+      period: 'H1',
+      clock: '01:00',
+      event_type: 'kickout',
+      direction: 'ours',
+      outcome: 'Retained',
+      contest_type: 'clean',
+      x: 0.4,
+      y: 0.3,
+      conversion_result: 'unreviewed',
+      schema_version: 1,
+    }]);
+
+    mockState.upsertMock.mockImplementation((payload) => {
+      if (payload?.id === 'review-compat-1' && Object.prototype.hasOwnProperty.call(payload, 'conversion_result')) {
+        return Promise.resolve({
+          error: {
+            code: 'PGRST204',
+            message: "Could not find the 'conversion_result' column of 'events' in the schema cache",
+          },
+        });
+      }
+      return Promise.resolve({ error: null });
+    });
+
+    await renderApp();
+    mockState.upsertMock.mockClear();
+
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Events/i });
+    await user.click(screen.getByRole('button', { name: /Events/i }));
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.click(await screen.findByRole('button', { name: 'No score' }));
+    await user.click(screen.getByRole('button', { name: /Update Event/i }));
+
+    await waitFor(() => {
+      const eventPayloads = mockState.upsertMock.mock.calls
+        .map(([payload]) => payload)
+        .filter((payload) => payload?.id === 'review-compat-1');
+
+      expect(eventPayloads.some((payload) => payload.conversion_result === 'no_score')).toBe(true);
+      expect(eventPayloads.some((payload) => !Object.prototype.hasOwnProperty.call(payload, 'conversion_result'))).toBe(true);
+    });
+
+    expect(await screen.findByText(/missing the latest review-tag columns in Supabase/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Some saves are blocked from syncing/i)).not.toBeInTheDocument();
+  });
+
   it('shows the break pickup preview after landing and pickup points are set', async () => {
     const session = { user: { id: 'user-break-preview', email: 'analyst@example.com' } };
     const userScope = 'user:user-break-preview';

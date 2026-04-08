@@ -22,6 +22,11 @@
   import { buildDraftSignature, isSetupDraftDirty } from './lib/captureDraft.js';
   import { CURRENT_EVENT_SCHEMA_VERSION, normalizeEventRecord } from './lib/eventRecord.js';
   import {
+    describeEventSyncCompatibility,
+    parseMissingEventSyncColumn,
+    stripUnsupportedEventSyncColumns,
+  } from './lib/eventSyncCompat.js';
+  import {
     describeMatchImportSummary,
     extractImportedEvents,
     mergeImportedEvents,
@@ -157,6 +162,7 @@ import {
   let forceAnalysisFullSync = false;
   let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
   let syncMessage = '';
+  let eventSyncCompatibilityDiagnosticRecorded = false;
   let metaReady = false;
   let authSubscription = null;
   let realtimeChannel = null;
@@ -881,6 +887,14 @@ import {
       showNotice('error', message, 7000);
     }
   }
+  function setSyncWarning(message, details = {}) {
+    if (syncStatus === 'error') syncStatus = '';
+    syncMessage = message;
+    showNotice('warning', message, 7000);
+    if (eventSyncCompatibilityDiagnosticRecorded) return;
+    recordDiagnostic('sync', message, details);
+    eventSyncCompatibilityDiagnosticRecorded = true;
+  }
   function clearSyncMessage() {
     syncMessage = '';
   }
@@ -1048,6 +1062,41 @@ import {
       refreshSyncStateFromQueues();
     }
   }
+
+  async function upsertEventsToSupabase(nextEvents) {
+    const rows = (Array.isArray(nextEvents) ? nextEvents : [nextEvents])
+      .filter(Boolean)
+      .map(normalizeEventForStorage);
+    if (!supabase || rows.length === 0) return { error: null };
+
+    /** @type {Array<'conversion_result'|'score_source'>} */
+    const missingColumns = [];
+
+    while (true) {
+      const payloadRows = missingColumns.length === 0
+        ? rows
+        : rows.map((row) => stripUnsupportedEventSyncColumns(row, missingColumns));
+      const payload = payloadRows.length === 1 ? payloadRows[0] : payloadRows;
+      const { error } = await supabase.from('events').upsert(payload);
+
+      if (!error) {
+        if (missingColumns.length > 0) {
+          setSyncWarning(
+            describeEventSyncCompatibility(missingColumns),
+            { missing_event_columns: [...missingColumns] },
+          );
+        }
+        return { error: null };
+      }
+
+      const missingColumn = parseMissingEventSyncColumn(error);
+      if (!missingColumn || missingColumns.includes(missingColumn)) {
+        return { error };
+      }
+      missingColumns.push(missingColumn);
+    }
+  }
+
   async function flushSyncQueue() {
     if (!supabase || !user || !teamId || (!pendingSync.size && !pendingMatchSync.size) || !isOnline) return;
     for (const [id] of [...pendingMatchSync]) {
@@ -1080,7 +1129,7 @@ import {
         continue;
       }
       if (ev.match_id && pendingMatchSync.has(ev.match_id)) continue;
-      const { error } = await supabase.from('events').upsert(normalizeEventForStorage(ev));
+      const { error } = await upsertEventsToSupabase(ev);
       if (!error) {
         clearPendingSync(id);
       } else {
@@ -1323,7 +1372,7 @@ import {
           for (const match of remoteBackfill.matches) queuePendingMatchSync(match.id);
           throw matchBackfillError;
         }
-        const { error: eventBackfillError } = await supabase.from('events').upsert(remoteBackfill.events.map(normalizeEventForStorage));
+        const { error: eventBackfillError } = await upsertEventsToSupabase(remoteBackfill.events);
         if (eventBackfillError) {
           for (const event of remoteBackfill.events) queuePendingSync(event.id, 'upsert');
           throw eventBackfillError;
@@ -1366,7 +1415,7 @@ import {
       // Push local-only events up to Supabase. If this fails, keep those
       // records queued locally so the UI does not imply they are safely synced.
       if (localOnly.length > 0) {
-        const { error: upsertError } = await supabase.from('events').upsert(localOnly);
+        const { error: upsertError } = await upsertEventsToSupabase(localOnly);
         if (upsertError) {
           for (const ev of localOnly) queuePendingSync(ev.id, 'upsert');
           throw upsertError;
@@ -1385,7 +1434,7 @@ import {
             for (const match of remoteBackfill.matches) queuePendingMatchSync(match.id);
             throw matchBackfillError;
           }
-          const { error: eventBackfillError } = await supabase.from('events').upsert(remoteBackfill.events.map(normalizeEventForStorage));
+          const { error: eventBackfillError } = await upsertEventsToSupabase(remoteBackfill.events);
           if (eventBackfillError) {
             for (const event of remoteBackfill.events) queuePendingSync(event.id, 'upsert');
             throw eventBackfillError;
@@ -1427,7 +1476,7 @@ import {
         return;
       }
     }
-    const { error } = await supabase.from('events').upsert(normalizeEventForStorage(ev));
+    const { error } = await upsertEventsToSupabase(ev);
     if (error) {
       console.error('Supabase upsert failed', ev.id, error.message);
       queuePendingSync(ev.id, 'upsert');
@@ -3410,6 +3459,7 @@ import {
   }
   .notice-success { background: #f0fdf4; color: #166534; border-bottom-color: #bbf7d0; }
   .notice-error { background: #fef2f2; color: #991b1b; border-bottom-color: #fecaca; }
+  .notice-warning { background: #fffbeb; color: #92400e; border-bottom-color: #fcd34d; }
   .notice-dismiss {
     padding: 4px 10px; border-radius: 7px; font-size: 12px;
     background: rgba(255,255,255,0.75); border: 1px solid rgba(0,0,0,0.08);
