@@ -15,6 +15,25 @@ function renderPitch(props = {}, events = {}) {
   });
 }
 
+function installSvgPointMocks(svg) {
+  Object.defineProperty(svg, 'createSVGPoint', {
+    configurable: true,
+    value: () => ({
+      x: 0,
+      y: 0,
+      matrixTransform() {
+        return { x: this.x, y: this.y };
+      },
+    }),
+  });
+  Object.defineProperty(svg, 'getScreenCTM', {
+    configurable: true,
+    value: () => ({
+      inverse: () => ({}),
+    }),
+  });
+}
+
 describe('Pitch', () => {
   it('resets the break capture step when the reset token changes', async () => {
     const onLanded = vi.fn();
@@ -92,5 +111,99 @@ describe('Pitch', () => {
 
     goalBand = container.querySelector('line[stroke="#c41230"]');
     expect(goalBand?.getAttribute('x1')).toBe('145');
+  });
+
+  it('dispatches handle events without falling through to pitch placement', async () => {
+    const onHandleClick = vi.fn();
+    const onHandleDrag = vi.fn();
+    const onLanded = vi.fn();
+
+    renderPitch(
+      {
+        editHandles: [
+          { id: 'release', x: 0.25, y: 0.4, label: 'Drag release point' },
+        ],
+      },
+      { handleclick: onHandleClick, handledrag: onHandleDrag, landed: onLanded }
+    );
+
+    const handle = screen.getByRole('button', { name: /Drag release point/i });
+    await fireEvent.keyDown(handle, { key: 'ArrowRight' });
+
+    expect(onHandleClick).toHaveBeenCalledTimes(1);
+    expect(onHandleDrag).toHaveBeenCalledTimes(1);
+    expect(onLanded).not.toHaveBeenCalled();
+    expect(onHandleDrag.mock.calls[0][0].detail.id).toBe('release');
+    expect(onHandleDrag.mock.calls[0][0].detail.point.x).toBeCloseTo(0.25, 6);
+    expect(onHandleDrag.mock.calls[0][0].detail.point.y).toBeCloseTo(0.41, 6);
+  });
+
+  it('renders a smooth SVG path for connections with a points array', () => {
+    const { container } = renderPitch({
+      connections: [
+        {
+          id: 'carry-smooth',
+          points: [{ x: 0.3, y: 0.2 }, { x: 0.5, y: 0.6 }, { x: 0.7, y: 0.4 }],
+          color: '#2563eb',
+          arrow: true,
+          clickable: true,
+          label: 'Smooth carry path',
+        },
+      ],
+    });
+
+    // Expects a <path> element (not a <line>) for the smooth render
+    const paths = container.querySelectorAll('path[stroke="#2563eb"]');
+    expect(paths.length).toBeGreaterThan(0);
+    // The path data should start with M and include at least one C (cubic bezier)
+    const pathD = paths[0].getAttribute('d') || '';
+    expect(pathD).toMatch(/^M\s/);
+    expect(pathD).toMatch(/C\s/);
+  });
+
+  it('renders a straight line for connections with only from/to (no waypoints)', () => {
+    const { container } = renderPitch({
+      connections: [
+        {
+          id: 'ball-path',
+          from: { x: 0.3, y: 0.2 },
+          to: { x: 0.7, y: 0.8 },
+          color: '#16a34a',
+          arrow: true,
+          label: 'Ball path',
+        },
+      ],
+    });
+
+    const lines = container.querySelectorAll('line[stroke="#16a34a"]');
+    expect(lines.length).toBeGreaterThan(0);
+  });
+
+  it('updates the dragged handle position from pointer movement', async () => {
+    const onHandleClick = vi.fn();
+    const onHandleDrag = vi.fn();
+
+    renderPitch(
+      {
+        editHandles: [
+          { id: 'receive', x: 0.2, y: 0.2, label: 'Drag receive point' },
+        ],
+      },
+      { handleclick: onHandleClick, handledrag: onHandleDrag }
+    );
+
+    const pitch = screen.getByRole('application', { name: /GAA pitch/i });
+    installSvgPointMocks(pitch);
+
+    const handle = screen.getByRole('button', { name: /Drag receive point/i });
+    await fireEvent.pointerDown(handle, { clientX: 29, clientY: 18 });
+    await fireEvent.pointerMove(window, { clientX: 58, clientY: 18 });
+    await fireEvent.pointerUp(window);
+
+    expect(onHandleClick).toHaveBeenCalledTimes(1);
+    expect(onHandleDrag).toHaveBeenCalledTimes(1);
+    expect(onHandleDrag.mock.calls[0][0].detail.id).toBe('receive');
+    expect(onHandleDrag.mock.calls[0][0].detail.point.x).toBeCloseTo(0.2, 6);
+    expect(onHandleDrag.mock.calls[0][0].detail.point.y).toBeCloseTo(0.4, 6);
   });
 });

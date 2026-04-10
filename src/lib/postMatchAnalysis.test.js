@@ -6,6 +6,9 @@ import {
   buildPossessionSummary,
   buildPointSeries,
   buildPlayerDirectory,
+  ballDistanceMeters,
+  carryDistanceMeters,
+  carryPathPoints,
   collectPlayerOptions,
   depthDeltaMeters,
   formatMetres,
@@ -13,9 +16,14 @@ import {
   movementDirectionForSession,
   movementDirectionColor,
   movementDirectionLabel,
+  normalizeOptionalPoint,
+  normalizePointList,
   pointDistanceMeters,
+  possessionActionFamily,
+  possessionOutcomeNeedsTarget,
   resolveSessionPlayerIdentity,
   sessionLabel,
+  storagePointForSession,
   splitMatchIdsForTrend,
   summarizePossessionEvents,
 } from './postMatchAnalysis.js';
@@ -38,10 +46,60 @@ describe('postMatchAnalysis helpers', () => {
     expect(movementDirectionColor('backward')).toBe('#dc2626');
   });
 
+  it('normalizes optional points and clamps waypoint lists', () => {
+    expect(normalizeOptionalPoint({ x: 0.1, y: 0.2 })).toEqual({ x: 0.1, y: 0.2 });
+    expect(normalizeOptionalPoint({ x: null, y: 0.2 })).toBeNull();
+    expect(normalizePointList([
+      { x: 0.1, y: 0.2 },
+      { x: '', y: 0.4 },
+      { x: 0.3, y: 0.5 },
+      { x: 0.4, y: 0.6 },
+      { x: 0.5, y: 0.7 },
+    ], { maxLength: 3 })).toEqual([
+      { x: 0.1, y: 0.2 },
+      { x: 0.3, y: 0.5 },
+      { x: 0.4, y: 0.6 },
+    ]);
+  });
+
+  it('requires a destination point for pass outcomes only', () => {
+    expect(possessionOutcomeNeedsTarget('Hand pass')).toBe(true);
+    expect(possessionOutcomeNeedsTarget('Kick pass')).toBe(true);
+    expect(possessionOutcomeNeedsTarget('Score point')).toBe(false);
+    expect(possessionOutcomeNeedsTarget('')).toBe(false);
+  });
+
+  it('groups possession outcomes into analysis families', () => {
+    expect(possessionActionFamily('Score point')).toBe('scores');
+    expect(possessionActionFamily('Shot wide')).toBe('shots');
+    expect(possessionActionFamily('Hand pass')).toBe('passes');
+    expect(possessionActionFamily('Possession lost')).toBe('losses');
+    expect(possessionActionFamily('Foul won')).toBe('fouls');
+  });
+
+  it('computes carry distance over waypoints rather than a straight line', () => {
+    const receive = { x: 0.5, y: 0.2 };
+    const release = { x: 0.5, y: 0.4 };
+    const carryWaypoints = [
+      { x: 0.65, y: 0.28 },
+      { x: 0.35, y: 0.34 },
+    ];
+
+    const path = carryPathPoints(receive, release, carryWaypoints);
+    const straightDistance = pointDistanceMeters(receive, release);
+    const carryDistance = carryDistanceMeters(receive, release, carryWaypoints);
+
+    expect(path).toHaveLength(4);
+    expect(carryDistance).toBeGreaterThan(straightDistance);
+  });
+
   it('normalizes session points and direction toward the attacking end', () => {
     const session = { our_goal_at_top: false };
 
     expect(analysisPointForSession({ x: 0.25, y: 0.2 }, session)).toEqual({ x: 0.25, y: 0.8 });
+    const storagePoint = storagePointForSession({ x: 0.25, y: 0.8 }, session);
+    expect(storagePoint.x).toBeCloseTo(0.25, 6);
+    expect(storagePoint.y).toBeCloseTo(0.2, 6);
     expect(movementDirectionForSession({ x: 0.25, y: 0.8 }, { x: 0.25, y: 0.6 }, session)).toBe('forward');
     expect(movementDirectionForSession({ x: 0.25, y: 0.2 }, { x: 0.25, y: 0.4 }, session)).toBe('backward');
   });
@@ -142,6 +200,30 @@ describe('postMatchAnalysis helpers', () => {
     expect(summary.lateralCount).toBe(1);
     expect(summary.topOutcome).toBe('Lost');
     expect(buildPossessionSummary(events).totalEvents).toBe(3);
+  });
+
+  it('uses waypoint-aware carry distance in possession summaries', () => {
+    const events = [
+      {
+        receive: { x: 0.5, y: 0.2 },
+        carry_waypoints: [{ x: 0.65, y: 0.28 }, { x: 0.35, y: 0.34 }],
+        release: { x: 0.5, y: 0.4 },
+        target: { x: 0.5, y: 0.58 },
+        outcome: 'Hand pass',
+      },
+    ];
+
+    const summary = summarizePossessionEvents(events);
+    expect(summary.total).toBe(1);
+    expect(summary.averageCarry).toBeCloseTo(
+      carryDistanceMeters(events[0].receive, events[0].release, events[0].carry_waypoints),
+      5,
+    );
+    expect(summary.averageBall).toBeCloseTo(
+      ballDistanceMeters(events[0].release, events[0].target),
+      5,
+    );
+    expect(summary.ballEvents).toBe(1);
   });
 
   it('computes score involvement for empty events', () => {

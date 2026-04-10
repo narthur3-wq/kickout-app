@@ -30,6 +30,9 @@ describe('analysisSync helpers', () => {
               receive_y: 0.2,
               release_x: 0.3,
               release_y: 0.4,
+              carry_waypoints: [{ x: 0.15, y: 0.3 }],
+              target_x: 0.55,
+              target_y: 0.65,
               outcome: 'Score point',
               under_pressure: true,
             },
@@ -76,6 +79,16 @@ describe('analysisSync helpers', () => {
       passSessions: expect.arrayContaining([
         expect.objectContaining({ id: 'pass-1', player_name: 'Cian Murphy', squad_player_id: 'p1' }),
       ]),
+    }));
+    expect(rows.possessionEvents[0]).toEqual(expect.objectContaining({
+      carry_waypoints: [{ x: 0.15, y: 0.3 }],
+      target_x: 0.55,
+      target_y: 0.65,
+    }));
+    expect(roundTripped.possessionSessions[0].events[0]).toEqual(expect.objectContaining({
+      carry_waypoints: [{ x: 0.15, y: 0.3 }],
+      target_x: 0.55,
+      target_y: 0.65,
     }));
   });
 

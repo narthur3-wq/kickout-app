@@ -149,6 +149,8 @@ While a session is being built, draft events stay in component state and render 
 
 Each event stores normalised pitch coordinates (0–1 range) plus an `our_goal_at_top` flag on the session. Direction classification (forward / lateral / backward) must normalise the y-axis against this flag before computing the depth delta. Raw coordinates without normalisation will produce inverted direction labels when the attacking direction is toward lower y values.
 
+Possession events may also store `carry_waypoints` plus nullable `target_x / target_y` values so one post-match event can represent `A -> waypoint(s) -> B -> C` without freehand drawing. Carry metrics sum the full carry path when waypoints exist, while ball metrics separately measure the `B -> C` leg when a destination is present.
+
 ### Local storage
 
 Analysis state is stored under the key `ko_post_match_analysis` within the scoped storage pattern. The shape is:
@@ -162,7 +164,7 @@ Analysis state is stored under the key `ko_post_match_analysis` within the scope
 }
 ```
 
-Sessions carry `match_id`, `player_name`, and optional `squad_player_id`. Events carry coordinates, outcome or pass metadata, and a timestamp. Draft sessions are not written to the stored analysis arrays until they are finalized.
+Sessions carry `match_id`, `player_name`, and optional `squad_player_id`. Events carry coordinates, outcome or pass metadata, and a timestamp. Possession events now also normalize `carry_waypoints`, nullable destination fields, and `assist` through local-first save/load and sync. The saved possession analysis view persists UI state for action-family filters and carry-vs-ball path filters, and finalized events can be corrected in place through explicit point controls plus pitch handles. Draft sessions are not written to the stored analysis arrays until they are finalized.
 
 Scope migration (`migrateLocalScopeToUserScope`) merges analysis state by session ID, same as events.
 
@@ -190,6 +192,7 @@ create table public.possession_sessions (
   squad_player_id uuid references public.squad_players(id),
   player_name text not null,
   our_goal_at_top boolean not null default true,
+  half text,
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -200,10 +203,14 @@ create table public.possession_events (
   session_id uuid references public.possession_sessions(id) on delete cascade,
   receive_x numeric not null,
   receive_y numeric not null,
+  carry_waypoints jsonb not null default '[]'::jsonb,
   release_x numeric not null,
   release_y numeric not null,
+  target_x numeric,
+  target_y numeric,
   outcome text not null,
   under_pressure boolean not null default false,
+  assist boolean not null default false,
   created_at timestamptz not null default now()
 );
 

@@ -8,6 +8,7 @@
 | Phase 2 | Feature 1 Extension: Cross-Match Aggregation | Built by Codex — Phase 2a and Phase 2b shipped |
 | Phase 3 | Feature 2: Pass Destination / Progressive Impact | Built by Codex — fixes merged in current working tree |
 | Phase 4 | Combined View | Deferred |
+| Phase 5 | Carry Path + Ball Destination Extension | In progress - core capture, sync, rendering, export, saved-point editing, filtering, and ball summaries are landed; rendering polish and release hardening remain |
 
 Resolved issues from the original Codex drop (fixed in the current working tree):
 
@@ -18,6 +19,8 @@ Resolved issues from the original Codex drop (fixed in the current working tree)
 - Eyebrow labels read "Feature 1" / "Feature 2" — must be replaced before real use
 
 Implementation note: the shipped app already includes Phase 2a and Phase 2b using the local analysis store and Admin-managed roster state. The Supabase analysis schema and app sync are now in the repo; future work is only for extra resilience or richer pattern tooling.
+
+Implementation note: the active Phase 5 slice is now in the app. Possession events can capture `A -> waypoint(s) -> B -> C` with up to three carry waypoints, destination capture is enforced for pass outcomes, saved events can be corrected in place, and the analysis view now exposes action-family filters plus carry-vs-ball path filters. Follow-up work remains tracked in [documentation/possession-carry-destination-roadmap.md](./possession-carry-destination-roadmap.md).
 
 ---
 
@@ -76,7 +79,7 @@ During active logging:
 After a session is finalized:
 - Sessions can be deleted and re-logged
 - Player identity can be reassigned to a roster entry to fix spelling inconsistencies across matches
-- Individual event editing within a finalized session is deferred - delete and re-log if the session data is wrong
+- Individual possession events can be corrected in place for geometry, outcome, assist, and pressure flags; full session delete and re-log remains available when broader restructuring is needed
 
 ---
 
@@ -129,6 +132,13 @@ Each possession event records:
 - `under_pressure` — optional flag
 - `created_at` — timestamp
 
+Current implementation additions in Phase 5:
+
+- `carry_waypoints` stores up to three ordered carry points between `A` and `B`
+- `target_x / target_y` stores the post-release destination `C` when applicable, and remains `null` otherwise
+- `assist` survives local/sync round-trips for score-creating actions
+- destination capture is currently enforced for `Hand pass` and `Kick pass`
+
 Sessions also carry `our_goal_at_top` to record which direction the player was attacking when events were logged. This is required for correct direction classification.
 
 ### Outcome Taxonomy
@@ -141,6 +151,19 @@ Sessions also carry `our_goal_at_top` to record which direction the player was a
 - Passed / offloaded
 - Foul won
 
+Current implementation outcome set in the app:
+
+- Score point
+- Score goal
+- Shot wide
+- Shot short / saved / blocked
+- Hand pass
+- Kick pass
+- Possession lost
+- Fouled the ball
+- Tackled / dispossessed
+- Foul won
+
 ### Logging Flow
 
 Entry point: completed match → Analysis tab → Possession tab → Start draft session
@@ -148,11 +171,13 @@ Entry point: completed match → Analysis tab → Possession tab → Start draft
 1. Select player from squad name list (or type a name)
 2. Confirm attacking direction (`our_goal_at_top`)
 3. Tap receive location on pitch
-4. Tap release location on pitch
-5. Select outcome
-6. Optionally toggle under pressure
-7. Confirm and loop to the next event
-8. Finalize session commits the draft session
+4. Optionally add up to three carry waypoints
+5. Tap release location on pitch
+6. Select outcome
+7. If the outcome is `Hand pass` or `Kick pass`, tap the destination point
+8. Review the event path and metadata
+9. Add the event to the draft and loop to the next event
+10. Finalize session commits the draft session
 
 ### Session Rules
 
@@ -173,10 +198,12 @@ Entry point: completed match → Analysis tab → Possession tab
 
 Dot view:
 - Dot at receive location, coloured by outcome
-- Arrow to release location
-- Arrow colour: green = forward, yellow = lateral, red = backward
-- Tap a dot for event detail
+- Segmented carry path from receive to release, including waypoints when present
+- Straight ball path from release to destination when captured
+- Carry path colour: green = forward, yellow = lateral, red = backward
+- Tap a dot for event detail and saved-event correction controls
 - Under-pressure events use a distinct marker (ring)
+- Saved-event handles can be nudged with keyboard arrows or dragged directly on the pitch
 
 Heat map view:
 - Kernel density over receive locations
@@ -188,11 +215,21 @@ Heat map view:
 - Outcome breakdown
 - Carry direction split (forward / lateral / backward %)
 - Average carry distance
+- Ball-path count
+- Average ball distance
 - Sample-size note when event count is small (threshold: fewer than 5 events)
+
+Average carry distance now uses the full `A -> waypoint(s) -> B` path length when waypoints are logged. Legacy events with no waypoints continue to use the straight `A -> B` segment.
+
+**Saved-view filters:**
+- Under pressure only
+- Score involvements only
+- Action family filter: all actions, passes, shots, scores, losses, fouls
+- Path layer filter: carry only, ball only, or both
 
 ### Out of Scope (Feature 1)
 
-- Where the ball goes after release (Feature 2)
+- Replacing the dedicated Pass Impact workflow
 - Real-time / in-match logging
 - Team-level aggregation
 - Video timestamp linking
@@ -325,6 +362,7 @@ create table public.possession_sessions (
   squad_player_id uuid references public.squad_players(id),
   player_name text not null,
   our_goal_at_top boolean not null default true,
+  half text,
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -335,10 +373,14 @@ create table public.possession_events (
   session_id uuid references public.possession_sessions(id) on delete cascade,
   receive_x numeric not null,
   receive_y numeric not null,
+  carry_waypoints jsonb not null default '[]'::jsonb,
   release_x numeric not null,
   release_y numeric not null,
+  target_x numeric,
+  target_y numeric,
   outcome text not null,
   under_pressure boolean not null default false,
+  assist boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -406,6 +448,8 @@ Sync follows the same local-first, retry-queue pattern as events. RLS should be 
 - Carry direction split
 - Average carry distance
 
+Carry distance follows the same waypoint-aware methodology as the single-match view.
+
 **Per-match breakdown table:**
 - One row per included match
 - Columns: match, date, events, forward %, backward %, top outcome
@@ -446,7 +490,7 @@ Implementation notes:
 - Draft events are visible immediately in the session builder as low-opacity pitch overlays plus a numbered draft list
 - `Finalize session` is the commit point for the session
 - `Discard draft` removes the unsaved session entirely
-- Individual event editing remains deferred; remove and re-log if a finalized session is wrong
+- Finalized possession events can now be corrected in place from the saved analysis view
 - Sample-size notes remain on the summary strip for small datasets
 
 ### Phase 2 follow-on — Future resilience

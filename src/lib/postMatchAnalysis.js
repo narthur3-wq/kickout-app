@@ -10,6 +10,27 @@ export const ASSIST_ELIGIBLE_OUTCOMES = new Set([
   'Kick pass',
   'Foul won',
 ]);
+export const POSSESSION_TARGET_REQUIRED_OUTCOMES = new Set([
+  'Hand pass',
+  'Kick pass',
+]);
+export const POSSESSION_PASS_OUTCOMES = new Set([
+  'Passed / offloaded',
+  'Hand pass',
+  'Kick pass',
+]);
+export const POSSESSION_SHOT_OUTCOMES = new Set([
+  'Shot wide',
+  'Shot short / saved / blocked',
+]);
+export const POSSESSION_LOSS_OUTCOMES = new Set([
+  'Possession lost',
+  'Tackled / dispossessed',
+]);
+export const POSSESSION_FOUL_OUTCOMES = new Set([
+  'Foul won',
+  'Fouled the ball',
+]);
 
 function normalizeOutcomeLabel(value) {
   return String(value ?? '').trim();
@@ -21,6 +42,20 @@ export function isScoreOutcome(outcome) {
 
 export function isAssistEligibleOutcome(outcome) {
   return ASSIST_ELIGIBLE_OUTCOMES.has(normalizeOutcomeLabel(outcome));
+}
+
+export function possessionOutcomeNeedsTarget(outcome) {
+  return POSSESSION_TARGET_REQUIRED_OUTCOMES.has(normalizeOutcomeLabel(outcome));
+}
+
+export function possessionActionFamily(outcome) {
+  const normalized = normalizeOutcomeLabel(outcome);
+  if (POSSESSION_SCORE_OUTCOMES.has(normalized)) return 'scores';
+  if (POSSESSION_SHOT_OUTCOMES.has(normalized)) return 'shots';
+  if (POSSESSION_PASS_OUTCOMES.has(normalized)) return 'passes';
+  if (POSSESSION_LOSS_OUTCOMES.has(normalized)) return 'losses';
+  if (POSSESSION_FOUL_OUTCOMES.has(normalized)) return 'fouls';
+  return 'other';
 }
 
 function toFiniteNumber(value) {
@@ -41,6 +76,26 @@ export function isValidPoint(point) {
   return Number.isFinite(point?.x) && Number.isFinite(point?.y);
 }
 
+export function normalizeOptionalPoint(point) {
+  const normalized = normalizePoint(point);
+  return isValidPoint(normalized) ? normalized : null;
+}
+
+export function normalizePointList(points = [], {
+  maxLength = Infinity,
+} = {}) {
+  if (!Array.isArray(points)) return [];
+  const cap = Math.max(0, Math.floor(Number(maxLength) || 0));
+  const normalized = [];
+  for (const point of points) {
+    const nextPoint = normalizeOptionalPoint(point);
+    if (!nextPoint) continue;
+    normalized.push(nextPoint);
+    if (normalized.length >= cap) break;
+  }
+  return normalized;
+}
+
 export function normalizePointForAttackDirection(point, attackTowardPositiveY = true) {
   const normalized = normalizePoint(point);
   if (!isValidPoint(normalized)) return normalized;
@@ -56,11 +111,49 @@ export function analysisPointForSession(point, session) {
   return normalizePointForAttackDirection(point, sessionAttacksTowardPositiveY(session));
 }
 
+export function storagePointForSession(point, session) {
+  return normalizePointForAttackDirection(point, sessionAttacksTowardPositiveY(session));
+}
+
 export function pointDistanceMeters(from, to) {
   if (!isValidPoint(from) || !isValidPoint(to)) return NaN;
   const dx = (to.x - from.x) * PITCH_WIDTH_M;
   const dy = (to.y - from.y) * PITCH_LENGTH_M;
   return Math.hypot(dx, dy);
+}
+
+export function ballDistanceMeters(release, target) {
+  const normalizedTarget = normalizeOptionalPoint(target);
+  if (!normalizedTarget) return NaN;
+  return pointDistanceMeters(release, normalizedTarget);
+}
+
+export function pathDistanceMeters(points = []) {
+  if (!Array.isArray(points) || points.length < 2) return NaN;
+  let total = 0;
+  let segments = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const distance = pointDistanceMeters(points[index - 1], points[index]);
+    if (!Number.isFinite(distance)) continue;
+    total += distance;
+    segments += 1;
+  }
+  return segments > 0 ? total : NaN;
+}
+
+export function carryPathPoints(receive, release, carryWaypoints = []) {
+  const start = normalizeOptionalPoint(receive);
+  const end = normalizeOptionalPoint(release);
+  if (!start || !end) return [];
+  return [
+    start,
+    ...normalizePointList(carryWaypoints, { maxLength: 3 }),
+    end,
+  ];
+}
+
+export function carryDistanceMeters(receive, release, carryWaypoints = []) {
+  return pathDistanceMeters(carryPathPoints(receive, release, carryWaypoints));
 }
 
 export function depthDeltaMeters(from, to) {
@@ -312,6 +405,8 @@ export function summarizePossessionEvents(events = [], options = {}) {
   const {
     receiveSelector = (event) => event.receive || { x: event.receive_x, y: event.receive_y },
     releaseSelector = (event) => event.release || { x: event.release_x, y: event.release_y },
+    targetSelector = (event) => event.target || { x: event.target_x, y: event.target_y },
+    carryWaypointSelector = (event) => event.carry_waypoints || [],
     directionSelector = null,
   } = options || {};
 
@@ -322,10 +417,13 @@ export function summarizePossessionEvents(events = [], options = {}) {
   let lateralCount = 0;
   let backwardCount = 0;
   const distances = [];
+  const ballDistances = [];
 
   for (const event of events) {
     const receive = normalizePoint(receiveSelector(event));
     const release = normalizePoint(releaseSelector(event));
+    const target = normalizeOptionalPoint(targetSelector(event));
+    const carryWaypoints = carryWaypointSelector(event);
     const direction = directionSelector
       ? directionSelector(event)
       : movementDirection(receive, release);
@@ -334,8 +432,11 @@ export function summarizePossessionEvents(events = [], options = {}) {
     else if (direction === 'backward') backwardCount += 1;
     else if (direction === 'lateral') lateralCount += 1;
 
-    const distance = pointDistanceMeters(receive, release);
+    const distance = carryDistanceMeters(receive, release, carryWaypoints);
     if (Number.isFinite(distance)) distances.push(distance);
+
+    const ballDistance = ballDistanceMeters(release, target);
+    if (Number.isFinite(ballDistance)) ballDistances.push(ballDistance);
   }
 
   return {
@@ -345,6 +446,9 @@ export function summarizePossessionEvents(events = [], options = {}) {
     lateralCount,
     backwardCount,
     averageCarry: averageOf(distances),
+    averageBall: averageOf(ballDistances),
+    totalBallDistance: sumOf(ballDistances),
+    ballEvents: ballDistances.length,
     topOutcome,
   };
 }

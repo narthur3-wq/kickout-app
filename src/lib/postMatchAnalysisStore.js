@@ -2,11 +2,15 @@ import { STORAGE_KEYS, normalizeAnalysisSnapshot, readStoredJson, storageKey } f
 import {
   displayPlayerLabel,
   normalizePlayerKey,
+  normalizeOptionalPoint,
   normalizePoint,
+  normalizePointList,
   normalizeSquadPlayerName,
   resolveSessionPlayerIdentity,
   squadPlayerKey,
 } from './postMatchAnalysis.js';
+
+const MAX_CARRY_WAYPOINTS = 3;
 
 function nowIso() {
   return new Date().toISOString();
@@ -39,12 +43,22 @@ export function createEmptyAnalysisState() {
 export function normalizePossessionEvent(event, fallbackCreatedAt = nowIso()) {
   const receive = normalizePoint({ x: event?.receive_x, y: event?.receive_y });
   const release = normalizePoint({ x: event?.release_x, y: event?.release_y });
+  const carryWaypoints = normalizePointList(event?.carry_waypoints || event?.waypoints, {
+    maxLength: MAX_CARRY_WAYPOINTS,
+  });
+  const target = normalizeOptionalPoint(event?.target || {
+    x: event?.target_x,
+    y: event?.target_y,
+  });
   return {
     id: event?.id || createId(),
     receive_x: receive.x,
     receive_y: receive.y,
     release_x: release.x,
     release_y: release.y,
+    carry_waypoints: carryWaypoints,
+    target_x: target?.x ?? null,
+    target_y: target?.y ?? null,
     outcome: String(event?.outcome ?? '').trim() || 'Passed / offloaded',
     under_pressure: !!event?.under_pressure,
     assist: event?.assist === true,

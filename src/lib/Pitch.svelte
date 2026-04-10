@@ -12,6 +12,7 @@
   export let pickup  = { x: NaN, y: NaN };
   export let overlays: Array<any> = [];
   export let connections: Array<any> = [];
+  export let editHandles: Array<any> = [];
   export let interactive = true;
   export let showZoneLabels = false;
   export let showZoneLegend = showZoneLabels;
@@ -35,9 +36,11 @@
   const rightDClipId = `pitch-right-d-clip-${pitchInstanceCounter}`;
 
   let svgEl: SVGSVGElement;
+  let draggingHandleId: string | null = null;
+  let draggingHandleIndex = -1;
 
   // Map SVG click → normalised stored coords
-  function getPoint(evt: MouseEvent) {
+  function getPoint(evt: MouseEvent | PointerEvent) {
     const pt = svgEl.createSVGPoint();
     pt.x = evt.clientX; pt.y = evt.clientY;
     const inv = svgEl.getScreenCTM()?.inverse();
@@ -72,6 +75,101 @@
       if (!awaitingPickup) { awaitingPickup = true;  dispatch('landed', pos); }
       else                 { awaitingPickup = false; dispatch('picked', pos); }
     } else { awaitingPickup = false; dispatch('landed', pos); }
+  }
+
+  function clamp01(value: number) {
+    return Math.max(0, Math.min(1, value));
+  }
+
+  function editHandleId(handle: any, index: number) {
+    return String(handle?.id ?? `handle-${index}`);
+  }
+
+  function editHandlePoint(handle: any) {
+    return normalizePoint(handle);
+  }
+
+  function editHandleLabel(handle: any, index: number) {
+    return handle?.label || `Edit handle ${index + 1}`;
+  }
+
+  function editHandleColor(handle: any) {
+    return handle?.color || '#ffffff';
+  }
+
+  function editHandleRadius(handle: any) {
+    const radius = Number(handle?.radius ?? 2.2);
+    return Number.isFinite(radius) ? radius : 2.2;
+  }
+
+  function handleIsActive(handle: any, index: number) {
+    return !!handle?.active || draggingHandleId === editHandleId(handle, index);
+  }
+
+  function dispatchHandleDrag(handle: any, index: number, point: { x: number; y: number }) {
+    dispatch('handledrag', {
+      id: editHandleId(handle, index),
+      handle,
+      index,
+      point: {
+        x: clamp01(point.x),
+        y: clamp01(point.y),
+      },
+    });
+  }
+
+  function clickHandle(event: MouseEvent, handle: any, index: number) {
+    event.preventDefault();
+    event.stopPropagation();
+    dispatch('handleclick', { handle, index });
+  }
+
+  function beginHandleDrag(event: PointerEvent, handle: any, index: number) {
+    event.preventDefault();
+    event.stopPropagation();
+    draggingHandleId = editHandleId(handle, index);
+    draggingHandleIndex = index;
+    dispatch('handleclick', { handle, index });
+  }
+
+  function moveHandleDrag(event: PointerEvent) {
+    if (!draggingHandleId || draggingHandleIndex < 0) return;
+    const handle = editHandles[draggingHandleIndex];
+    if (!handle) {
+      draggingHandleId = null;
+      draggingHandleIndex = -1;
+      return;
+    }
+    event.preventDefault();
+    dispatchHandleDrag(handle, draggingHandleIndex, getPoint(event));
+  }
+
+  function endHandleDrag() {
+    draggingHandleId = null;
+    draggingHandleIndex = -1;
+  }
+
+  function handleEditHandleKeydown(event: KeyboardEvent, handle: any, index: number) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      event.stopPropagation();
+      dispatch('handleclick', { handle, index });
+      return;
+    }
+
+    const current = editHandlePoint(handle);
+    if (!isValidPoint(current)) return;
+    const step = event.shiftKey ? 0.02 : 0.01;
+    let nextPoint = null;
+    if (event.key === 'ArrowUp') nextPoint = { x: current.x - step, y: current.y };
+    if (event.key === 'ArrowDown') nextPoint = { x: current.x + step, y: current.y };
+    if (event.key === 'ArrowLeft') nextPoint = { x: current.x, y: current.y - step };
+    if (event.key === 'ArrowRight') nextPoint = { x: current.x, y: current.y + step };
+    if (!nextPoint) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dispatch('handleclick', { handle, index });
+    dispatchHandleDrag(handle, index, nextPoint);
   }
 
   // Keyboard crosshair — kb in normalised coords (x=side, y=depth)
@@ -168,6 +266,34 @@
     return connection?.label || 'Pitch connection';
   }
 
+  function connectionPoints(connection: any): Array<{x: number; y: number}> | null {
+    if (!Array.isArray(connection?.points) || connection.points.length < 2) return null;
+    const pts = connection.points.map((p: any) => normalizePoint(p)).filter(isValidPoint);
+    return pts.length >= 2 ? pts : null;
+  }
+
+  // Catmull-Rom spline through all points, returned as an SVG path string.
+  // Uses phantom duplicated endpoints so the curve passes through every stored point.
+  function catmullRomSvgPath(pts: Array<{x: number; y: number}>): string {
+    if (pts.length < 2) return '';
+    const xs = pts.map(p => svgX(p));
+    const ys = pts.map(p => svgY(p));
+    if (pts.length === 2) {
+      return `M ${xs[0]} ${ys[0]} L ${xs[1]} ${ys[1]}`;
+    }
+    const ex = [xs[0], ...xs, xs[xs.length - 1]];
+    const ey = [ys[0], ...ys, ys[ys.length - 1]];
+    let d = `M ${ex[1].toFixed(3)} ${ey[1].toFixed(3)}`;
+    for (let i = 1; i < ex.length - 2; i++) {
+      const cp1x = ex[i] + (ex[i + 1] - ex[i - 1]) / 6;
+      const cp1y = ey[i] + (ey[i + 1] - ey[i - 1]) / 6;
+      const cp2x = ex[i + 1] - (ex[i + 2] - ex[i]) / 6;
+      const cp2y = ey[i + 1] - (ey[i + 2] - ey[i]) / 6;
+      d += ` C ${cp1x.toFixed(3)} ${cp1y.toFixed(3)} ${cp2x.toFixed(3)} ${cp2y.toFixed(3)} ${ex[i + 1].toFixed(3)} ${ey[i + 1].toFixed(3)}`;
+    }
+    return d;
+  }
+
   function overlayIsClickable(o: any) {
     return o?.clickable !== false;
   }
@@ -202,7 +328,22 @@
     outline: 2px solid rgba(255,255,255,0.9);
     outline-offset: 2px;
   }
+  .edit-handle {
+    pointer-events: auto;
+    cursor: grab;
+  }
+  .edit-handle.active {
+    cursor: grabbing;
+  }
+  .edit-handle-hit {
+    pointer-events: all;
+  }
+  .edit-handle-core {
+    filter: drop-shadow(0 1px 1px rgba(15,23,42,0.28));
+  }
 </style>
+
+<svelte:window on:pointermove={moveHandleDrag} on:pointerup={endHandleDrag} on:pointercancel={endHandleDrag} />
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions -->
 <svg
@@ -329,50 +470,48 @@
   <!-- pass / carry connections -->
   <g>
     {#each connections as connection, index (`${connection.id ?? 'connection'}-${index}`)}
-      {@const from = connectionPoint(connection, 'from')}
-      {@const to = connectionPoint(connection, 'to')}
-      {#if isValidPoint(from) && isValidPoint(to)}
-        {@const sx = svgX(from)}
-        {@const sy = svgY(from)}
-        {@const tx = svgX(to)}
-        {@const ty = svgY(to)}
+      {@const cpts = connectionPoints(connection)}
+      {#if cpts}
+        <!-- smooth multi-point carry path (Catmull-Rom) -->
+        {@const pathD = catmullRomSvgPath(cpts)}
+        {@const lastPt = cpts[cpts.length - 1]}
+        {@const prevPt = cpts[cpts.length - 2]}
         {@const color = connectionColor(connection)}
         {@const width = connectionWidth(connection)}
         {@const dash = connectionDash(connection)}
         {@const arrowSize = connectionArrowSize(connection)}
-        {@const angle = Math.atan2(ty - sy, tx - sx)}
-        {@const arrowBackX = tx - Math.cos(angle) * arrowSize}
-        {@const arrowBackY = ty - Math.sin(angle) * arrowSize}
+        {@const tlx = svgX(lastPt)}
+        {@const tly = svgY(lastPt)}
+        {@const angle = Math.atan2(tly - svgY(prevPt), tlx - svgX(prevPt))}
+        {@const arrowBackX = tlx - Math.cos(angle) * arrowSize}
+        {@const arrowBackY = tly - Math.sin(angle) * arrowSize}
         {@const perpX = Math.cos(angle + Math.PI / 2) * (arrowSize * 0.45)}
         {@const perpY = Math.sin(angle + Math.PI / 2) * (arrowSize * 0.45)}
         <g opacity={connection.opacity ?? 0.78} data-draft={connection?.draft ? 'true' : undefined}>
-          <line
-            x1={sx}
-            y1={sy}
-            x2={tx}
-            y2={ty}
+          <path
+            d={pathD}
             stroke={color}
             stroke-width={width}
+            fill="none"
             stroke-linecap="round"
+            stroke-linejoin="round"
             stroke-dasharray={dash}
             vector-effect="non-scaling-stroke"
           />
           {#if connection.arrow !== false}
             <polygon
-              points={`${tx},${ty} ${arrowBackX + perpX},${arrowBackY + perpY} ${arrowBackX - perpX},${arrowBackY - perpY}`}
+              points={`${tlx},${tly} ${arrowBackX + perpX},${arrowBackY + perpY} ${arrowBackX - perpX},${arrowBackY - perpY}`}
               fill={color}
               opacity="0.95"
             />
           {/if}
           {#if connectionIsClickable(connection)}
-            <line
+            <path
               class:clickable={true}
-              x1={sx}
-              y1={sy}
-              x2={tx}
-              y2={ty}
+              d={pathD}
               stroke="rgba(255,255,255,0.001)"
               stroke-width={Math.max(width + 5, 7)}
+              fill="none"
               stroke-linecap="round"
               pointer-events="stroke"
               role="button"
@@ -383,6 +522,62 @@
             />
           {/if}
         </g>
+      {:else}
+        {@const from = connectionPoint(connection, 'from')}
+        {@const to = connectionPoint(connection, 'to')}
+        {#if isValidPoint(from) && isValidPoint(to)}
+          {@const sx = svgX(from)}
+          {@const sy = svgY(from)}
+          {@const tx = svgX(to)}
+          {@const ty = svgY(to)}
+          {@const color = connectionColor(connection)}
+          {@const width = connectionWidth(connection)}
+          {@const dash = connectionDash(connection)}
+          {@const arrowSize = connectionArrowSize(connection)}
+          {@const angle = Math.atan2(ty - sy, tx - sx)}
+          {@const arrowBackX = tx - Math.cos(angle) * arrowSize}
+          {@const arrowBackY = ty - Math.sin(angle) * arrowSize}
+          {@const perpX = Math.cos(angle + Math.PI / 2) * (arrowSize * 0.45)}
+          {@const perpY = Math.sin(angle + Math.PI / 2) * (arrowSize * 0.45)}
+          <g opacity={connection.opacity ?? 0.78} data-draft={connection?.draft ? 'true' : undefined}>
+            <line
+              x1={sx}
+              y1={sy}
+              x2={tx}
+              y2={ty}
+              stroke={color}
+              stroke-width={width}
+              stroke-linecap="round"
+              stroke-dasharray={dash}
+              vector-effect="non-scaling-stroke"
+            />
+            {#if connection.arrow !== false}
+              <polygon
+                points={`${tx},${ty} ${arrowBackX + perpX},${arrowBackY + perpY} ${arrowBackX - perpX},${arrowBackY - perpY}`}
+                fill={color}
+                opacity="0.95"
+              />
+            {/if}
+            {#if connectionIsClickable(connection)}
+              <line
+                class:clickable={true}
+                x1={sx}
+                y1={sy}
+                x2={tx}
+                y2={ty}
+                stroke="rgba(255,255,255,0.001)"
+                stroke-width={Math.max(width + 5, 7)}
+                stroke-linecap="round"
+                pointer-events="stroke"
+                role="button"
+                tabindex="0"
+                aria-label={connectionLabel(connection)}
+                on:click={() => dispatch('connectionclick', { connection, index })}
+                on:keydown={(event) => connectionKeydown(event, connection, index)}
+              />
+            {/if}
+          </g>
+        {/if}
       {/if}
     {/each}
   </g>
@@ -400,6 +595,7 @@
         class:clickable={overlayIsClickable(o)}
         style={overlayIsClickable(o) ? 'pointer-events:auto; cursor:pointer;' : 'pointer-events:none;'}
         data-draft={o?.draft ? 'true' : undefined}
+        opacity={o.opacity ?? 1}
         role={overlayIsClickable(o) ? 'button' : undefined}
         tabindex={overlayIsClickable(o) ? '0' : undefined}
         aria-label={o?.label || 'Pitch marker'}
@@ -478,6 +674,46 @@
           {/if}
         {/if}
       </g>
+    {/each}
+  </g>
+
+  <!-- edit handles -->
+  <g>
+    {#each editHandles as handle, index (`${editHandleId(handle, index)}`)}
+      {@const point = editHandlePoint(handle)}
+      {#if isValidPoint(point)}
+        {@const radius = editHandleRadius(handle)}
+        {@const active = handleIsActive(handle, index)}
+        <g
+          class="edit-handle"
+          class:active={active}
+          role="button"
+          tabindex="0"
+          aria-label={editHandleLabel(handle, index)}
+          transform={`translate(${svgX(point)} ${svgY(point)})`}
+          opacity={handle?.opacity ?? 1}
+          on:click={(event) => clickHandle(event, handle, index)}
+          on:pointerdown={(event) => beginHandleDrag(event, handle, index)}
+          on:keydown={(event) => handleEditHandleKeydown(event, handle, index)}
+        >
+          <circle class="edit-handle-hit" r={radius * 1.9} fill="rgba(255,255,255,0.001)" />
+          <circle
+            r={radius * 1.35}
+            fill="rgba(255,255,255,0.14)"
+            stroke={active ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.55)'}
+            stroke-width={active ? 0.95 : 0.75}
+            vector-effect="non-scaling-stroke"
+          />
+          <circle
+            class="edit-handle-core"
+            r={radius}
+            fill={editHandleColor(handle)}
+            stroke={active ? 'rgba(255,255,255,0.95)' : 'rgba(15,23,42,0.68)'}
+            stroke-width={active ? 0.9 : 0.65}
+            vector-effect="non-scaling-stroke"
+          />
+        </g>
+      {/if}
     {/each}
   </g>
 

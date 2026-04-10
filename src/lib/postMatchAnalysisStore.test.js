@@ -43,6 +43,9 @@ describe('postMatchAnalysisStore', () => {
               receive_y: 0.2,
               release_x: 0.2,
               release_y: 0.4,
+              carry_waypoints: [{ x: 0.15, y: 0.28 }],
+              target_x: 0.45,
+              target_y: 0.52,
               outcome: 'Score',
               under_pressure: true,
             },
@@ -139,6 +142,39 @@ describe('postMatchAnalysisStore', () => {
     expect(allMatches).toHaveLength(2);
     expect(matchTwoOnly).toHaveLength(1);
     expect(matchTwoOnly[0].id).toBe('session-2');
+  });
+
+  it('normalizes possession events with capped carry waypoints and nullable targets', () => {
+    const session = normalizePossessionSession({
+      id: 'session-1',
+      player_name: '#11',
+      events: [
+        {
+          id: 'event-1',
+          receive_x: 0.1,
+          receive_y: 0.2,
+          release_x: 0.3,
+          release_y: 0.4,
+          carry_waypoints: [
+            { x: 0.12, y: 0.24 },
+            { x: 0.16, y: 0.28 },
+            { x: 0.2, y: 0.32 },
+            { x: 0.24, y: 0.36 },
+          ],
+          target_x: '',
+          target_y: 0.7,
+          outcome: 'Hand pass',
+        },
+      ],
+    });
+
+    expect(session.events[0].carry_waypoints).toEqual([
+      { x: 0.12, y: 0.24 },
+      { x: 0.16, y: 0.28 },
+      { x: 0.2, y: 0.32 },
+    ]);
+    expect(session.events[0].target_x).toBeNull();
+    expect(session.events[0].target_y).toBeNull();
   });
 
   it('renames legacy session names to a squad player across both analysis modes', () => {

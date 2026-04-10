@@ -102,3 +102,70 @@ test('filters possession sessions by half and keeps the empty state legible', as
   await page.locator('.filter-row[aria-label="Half filter"]').getByRole('button', { name: /^All halves$/i }).click();
   await expect(page.getByText('Saved Sessions')).toBeVisible();
 });
+
+test('captures a carry with a waypoint and logs destination for a kick pass', async ({ page }) => {
+  await openFreshApp(page);
+  await setUpMatch(page, { opponent: 'Ballyboden St Endas' });
+  await clearAnalysisState(page);
+  await openPossessionTab(page);
+
+  await startDraftSession(page, 'Sean Brennan', { half: 'First half', attackingTop: true });
+
+  const pitch = page.locator('.draft-box').getByRole('application', { name: /GAA pitch/i });
+
+  // Set receive point
+  await pitch.click();
+
+  // Add a carry waypoint
+  await page.getByRole('button', { name: /Add waypoint/i }).click();
+  await pitch.click();
+
+  // Set release point
+  await pitch.click();
+
+  // Choose Kick pass outcome
+  await page.getByRole('button', { name: 'Kick pass', exact: true }).click();
+
+  // Set destination (required for Kick pass)
+  await pitch.click();
+
+  // Review and save
+  await page.getByRole('button', { name: /Review event/i }).click();
+  await expect(page.locator('.detail-card')).toContainText('Waypoints');
+  await expect(page.locator('.detail-card')).toContainText('1');
+
+  await page.getByRole('button', { name: /Add draft event/i }).click();
+  await expect(page.locator('.draft-box')).toContainText('1 event');
+
+  await page.getByRole('button', { name: /Finalize session/i }).click();
+  await expect(page.getByText('Session finalized.')).toBeVisible();
+});
+
+test('allows editing a saved event receive and release points without deleting it', async ({ page }) => {
+  await openFreshApp(page);
+  await setUpMatch(page, { opponent: 'St Judes' });
+  await clearAnalysisState(page);
+  await openPossessionTab(page);
+
+  await startDraftSession(page, 'Roisin Farrell', { half: 'Second half', attackingTop: false });
+  await addPossessionEvent(page, { outcome: 'Score point' });
+  await page.getByRole('button', { name: /Finalize session/i }).click();
+  await expect(page.getByText('Session finalized.')).toBeVisible();
+
+  // Open the saved event for editing
+  const eventCard = page.locator('.event-card').first();
+  await eventCard.click();
+
+  // The edit section should appear
+  await expect(page.locator('.detail-title')).toContainText(/Edit event/i);
+
+  // Activate receive-point edit mode
+  await page.getByRole('button', { name: /Edit receive/i }).click();
+
+  // Tap the pitch to update the receive point
+  const analysisPitch = page.locator('.analysis-pitch-frame').getByRole('application', { name: /GAA pitch/i });
+  await analysisPitch.click();
+
+  await page.getByRole('button', { name: /Save changes/i }).click();
+  await expect(page.locator('.detail-title')).toContainText(/Edit event/i);
+});

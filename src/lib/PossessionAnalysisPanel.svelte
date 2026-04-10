@@ -3,13 +3,17 @@
   import {
     analysisPointForSession,
     ASSIST_ELIGIBLE_OUTCOMES,
+    ballDistanceMeters,
     buildPlayerDirectory,
     buildPossessionSummary,
     buildPointSeries,
+    carryDistanceMeters,
+    carryPathPoints,
     collectPlayerOptions,
     displayPlayerLabel,
     formatMetres,
     formatSignedMetres,
+    normalizeOptionalPoint,
     movementDirection,
     movementDirectionColor,
     movementDirectionLabel,
@@ -17,8 +21,11 @@
     isScoreOutcome,
     normalizePlayerKey,
     pointDistanceMeters,
+    possessionActionFamily,
+    possessionOutcomeNeedsTarget,
     resolveSessionPlayerIdentity,
     sessionLabel,
+    storagePointForSession,
     splitMatchIdsForTrend,
     squadPlayerKey,
   } from './postMatchAnalysis.js';
@@ -73,6 +80,21 @@
     { value: 'et', label: 'Extra time' },
   ];
 
+  const DRAFT_MAX_WAYPOINTS = 3;
+  const ACTION_FAMILY_OPTIONS = [
+    { value: 'all', label: 'All actions' },
+    { value: 'passes', label: 'Passes' },
+    { value: 'shots', label: 'Shots' },
+    { value: 'scores', label: 'Scores' },
+    { value: 'losses', label: 'Losses' },
+    { value: 'fouls', label: 'Fouls' },
+  ];
+  const PATH_LAYER_OPTIONS = [
+    { value: 'all', label: 'Carry + Ball' },
+    { value: 'carry', label: 'Carry only' },
+    { value: 'ball', label: 'Ball only' },
+  ];
+
   const ANALYSIS_VIEW_DEFAULTS = Object.freeze({
     analysisMode: 'match',
     selectedHalf: null,
@@ -80,6 +102,8 @@
     showPressureOnly: false,
     showScoreInvolvementsOnly: false,
     showCarryLines: true,
+    actionFamilyFilter: 'all',
+    pathLayerFilter: 'all',
     legendOpen: false,
     trendMode: 'halves',
     trendLastN: 3,
@@ -113,6 +137,8 @@
   let showPressureOnly = false;
   let showScoreInvolvementsOnly = false;
   let showCarryLines = true;
+  let actionFamilyFilter = 'all';
+  let pathLayerFilter = 'all';
   let legendOpen = false;
   let trendMode = 'halves';
   let trendLastN = 3;
@@ -121,12 +147,15 @@
   let analysisCardEl;
   let exportingSnapshot = false;
   let exportFeedback = null;
+  let eventEditPointMode = null;
 
   const OUTCOME_COLORS = {
     'Score point': '#0f766e',
     'Score goal': '#15803d',
     'Shot wide': '#d97706',
     'Shot short / saved / blocked': '#64748b',
+    'Hand pass': '#2563eb',
+    'Kick pass': '#0f766e',
     'Possession lost': '#dc2626',
     'Passed / offloaded': '#2563eb',
     'Foul won': '#db2777',
@@ -139,6 +168,8 @@
     showPressureOnly = state.showPressureOnly ?? ANALYSIS_VIEW_DEFAULTS.showPressureOnly;
     showScoreInvolvementsOnly = state.showScoreInvolvementsOnly ?? ANALYSIS_VIEW_DEFAULTS.showScoreInvolvementsOnly;
     showCarryLines = state.showCarryLines ?? ANALYSIS_VIEW_DEFAULTS.showCarryLines;
+    actionFamilyFilter = state.actionFamilyFilter ?? ANALYSIS_VIEW_DEFAULTS.actionFamilyFilter;
+    pathLayerFilter = state.pathLayerFilter ?? ANALYSIS_VIEW_DEFAULTS.pathLayerFilter;
     legendOpen = state.legendOpen ?? ANALYSIS_VIEW_DEFAULTS.legendOpen;
     trendMode = state.trendMode ?? ANALYSIS_VIEW_DEFAULTS.trendMode;
     trendLastN = state.trendLastN ?? ANALYSIS_VIEW_DEFAULTS.trendLastN;
@@ -159,6 +190,8 @@
       showPressureOnly,
       showScoreInvolvementsOnly,
       showCarryLines,
+      actionFamilyFilter,
+      pathLayerFilter,
       legendOpen,
       trendMode,
       trendLastN,
@@ -178,10 +211,39 @@
     return { x: NaN, y: NaN };
   }
 
+  function hasPoint(nextPoint) {
+    return Number.isFinite(nextPoint?.x) && Number.isFinite(nextPoint?.y);
+  }
+
+  function pointLabel(nextPoint, fallback = 'Tap pitch') {
+    return hasPoint(nextPoint) ? `${nextPoint.x.toFixed(2)}, ${nextPoint.y.toFixed(2)}` : fallback;
+  }
+
+  function waypointModeId(index) {
+    return `waypoint:${index}`;
+  }
+
+  function waypointIndexFromMode(mode) {
+    if (typeof mode !== 'string' || !mode.startsWith('waypoint:')) return -1;
+    const index = Number(mode.split(':')[1]);
+    return Number.isInteger(index) ? index : -1;
+  }
+
+  function eventEditModeLabel(mode) {
+    if (mode === 'receive') return 'receive point';
+    if (mode === 'release') return 'release point';
+    if (mode === 'target') return 'destination point';
+    const waypointIndex = waypointIndexFromMode(mode);
+    if (waypointIndex >= 0) return `waypoint ${waypointIndex + 1}`;
+    return 'point';
+  }
+
   function blankDraftEvent() {
     return {
       receive: point(),
+      carry_waypoints: [],
       release: point(),
+      target: point(),
       outcome: 'Hand pass',
       under_pressure: false,
       assist: false,
@@ -318,11 +380,16 @@
   }
 
   function setDraftOutcome(outcome) {
+    const needsTarget = possessionOutcomeNeedsTarget(outcome);
     draftEvent = {
       ...draftEvent,
+      target: needsTarget ? draftEvent.target : point(),
       outcome,
       assist: ASSIST_ELIGIBLE_OUTCOMES.has(outcome) ? draftEvent.assist === true : false,
     };
+    if (draftStep === 'target' && !needsTarget) {
+      draftStep = 'confirm';
+    }
   }
 
   function setDraftAssist(nextValue) {
@@ -340,6 +407,16 @@
     draftOurGoalAtTop = !!nextValue;
   }
 
+  function draftStepLabel() {
+    if (draftStep === 'receive') return 'Tap receive point';
+    if (draftStep === 'waypoint') return 'Tap carry waypoint';
+    if (draftStep === 'release') return 'Tap release point or add a waypoint';
+    if (draftStep === 'outcome') return 'Choose outcome then review event';
+    if (draftStep === 'target') return 'Tap destination point';
+    if (draftStep === 'confirm') return 'Review event then add it to the draft';
+    return 'Build possession event';
+  }
+
   function isHalfMatch(sessionHalf, filterHalf) {
     if (!filterHalf) return true;
     return sessionHalf === filterHalf;
@@ -347,37 +424,45 @@
 
   function createEventEditDraft(event, session) {
     if (!event || !session) return null;
+    const points = eventPoints(event);
     return {
       sessionId: session.id,
       eventId: event.id,
       outcome: event.outcome,
       under_pressure: !!event.under_pressure,
       assist: !!event.assist,
-      receive_x: event.receive_x,
-      receive_y: event.receive_y,
-      release_x: event.release_x,
-      release_y: event.release_y,
+      receive: { ...points.receive },
+      carry_waypoints: (points.carry_waypoints || []).map((waypoint) => ({ ...waypoint })),
+      release: { ...points.release },
+      target: points.target ? { ...points.target } : point(),
     };
   }
 
   function openEventEditor(event) {
     const session = displayedSessions.find((item) => item.id === event.session_id) || selectedPlayerSessions.find((item) => item.id === event.session_id) || null;
     eventEditDraft = createEventEditDraft(event, session);
+    eventEditPointMode = null;
     selectedEventId = event.id;
   }
 
   function cancelEventEditor() {
     eventEditDraft = null;
+    eventEditPointMode = null;
     selectedEventId = null;
   }
 
   function setEventEditOutcome(outcome) {
     if (!eventEditDraft) return;
+    const needsTarget = possessionOutcomeNeedsTarget(outcome);
     eventEditDraft = {
       ...eventEditDraft,
       outcome,
       assist: ASSIST_ELIGIBLE_OUTCOMES.has(outcome) ? eventEditDraft.assist === true : false,
+      target: needsTarget ? eventEditDraft.target : point(),
     };
+    if (!needsTarget && eventEditPointMode === 'target') {
+      eventEditPointMode = null;
+    }
   }
 
   function setEventEditAssist(nextValue) {
@@ -396,18 +481,143 @@
     };
   }
 
+  function setEventEditPointMode(mode) {
+    if (!eventEditDraft) return;
+    eventEditPointMode = mode;
+    notice = `Tap the pitch or drag a handle to move the ${eventEditModeLabel(mode)}.`;
+  }
+
+  function updateEventEditPoint(mode, nextPoint) {
+    if (!eventEditDraft || !hasPoint(nextPoint)) return;
+    if (mode === 'receive') {
+      eventEditDraft = {
+        ...eventEditDraft,
+        receive: { ...nextPoint },
+      };
+      return;
+    }
+    if (mode === 'release') {
+      eventEditDraft = {
+        ...eventEditDraft,
+        release: { ...nextPoint },
+      };
+      return;
+    }
+    if (mode === 'target') {
+      eventEditDraft = {
+        ...eventEditDraft,
+        target: { ...nextPoint },
+      };
+      return;
+    }
+    const waypointIndex = waypointIndexFromMode(mode);
+    if (waypointIndex >= 0 && waypointIndex < eventEditDraft.carry_waypoints.length) {
+      const nextWaypoints = eventEditDraft.carry_waypoints.map((waypoint, index) => (
+        index === waypointIndex ? { ...nextPoint } : waypoint
+      ));
+      eventEditDraft = {
+        ...eventEditDraft,
+        carry_waypoints: nextWaypoints,
+      };
+    }
+  }
+
+  function handleEventEditPitchPoint(pos) {
+    if (!eventEditDraft || !eventEditPointMode) return;
+    updateEventEditPoint(eventEditPointMode, pos);
+    notice = '';
+  }
+
+  function handleEventEditHandleDrag(event) {
+    if (!eventEditDraft) return;
+    const mode = event?.detail?.id;
+    const nextPoint = event?.detail?.point;
+    if (!mode || !hasPoint(nextPoint)) return;
+    eventEditPointMode = mode;
+    updateEventEditPoint(mode, nextPoint);
+  }
+
+  function addEventEditWaypoint(afterIndex = null) {
+    if (!eventEditDraft || eventEditDraft.carry_waypoints.length >= DRAFT_MAX_WAYPOINTS) return;
+    const insertIndex = Number.isInteger(afterIndex)
+      ? Math.max(0, Math.min(eventEditDraft.carry_waypoints.length, afterIndex + 1))
+      : eventEditDraft.carry_waypoints.length;
+    const referencePoint = eventEditDraft.carry_waypoints[insertIndex - 1]
+      || (insertIndex > 0 ? eventEditDraft.release : eventEditDraft.receive)
+      || point();
+    const nextWaypoint = hasPoint(referencePoint) ? { ...referencePoint } : { x: 0.5, y: 0.5 };
+    const nextWaypoints = [...eventEditDraft.carry_waypoints];
+    nextWaypoints.splice(insertIndex, 0, nextWaypoint);
+    eventEditDraft = {
+      ...eventEditDraft,
+      carry_waypoints: nextWaypoints,
+    };
+    eventEditPointMode = waypointModeId(insertIndex);
+    notice = `Drag or tap to place waypoint ${insertIndex + 1}.`;
+  }
+
+  function removeEventEditWaypoint(index) {
+    if (!eventEditDraft || index < 0 || index >= eventEditDraft.carry_waypoints.length) return;
+    const nextWaypoints = eventEditDraft.carry_waypoints.filter((_, waypointIndex) => waypointIndex !== index);
+    eventEditDraft = {
+      ...eventEditDraft,
+      carry_waypoints: nextWaypoints,
+    };
+    if (eventEditPointMode === waypointModeId(index)) {
+      eventEditPointMode = null;
+    } else if (waypointIndexFromMode(eventEditPointMode) > index) {
+      eventEditPointMode = waypointModeId(waypointIndexFromMode(eventEditPointMode) - 1);
+    }
+    notice = '';
+  }
+
+  function clearEventEditTarget() {
+    if (!eventEditDraft || possessionOutcomeNeedsTarget(eventEditDraft.outcome)) return;
+    eventEditDraft = {
+      ...eventEditDraft,
+      target: point(),
+    };
+    if (eventEditPointMode === 'target') eventEditPointMode = null;
+  }
+
   function saveEventEditor() {
     if (!eventEditDraft) return;
+    const needsTarget = possessionOutcomeNeedsTarget(eventEditDraft.outcome);
+    const hasTarget = hasPoint(eventEditDraft.target);
+    if (needsTarget && !hasTarget) {
+      notice = 'This outcome needs a destination point.';
+      return;
+    }
     const sessionIndex = analysisState.possessionSessions.findIndex((session) => session.id === eventEditDraft.sessionId);
     if (sessionIndex < 0) return;
     const session = analysisState.possessionSessions[sessionIndex];
+    const receive = storagePointForSession(eventEditDraft.receive, session);
+    const release = storagePointForSession(eventEditDraft.release, session);
+    if (!hasPoint(receive) || !hasPoint(release)) {
+      notice = 'Receive and release points must both be valid before saving.';
+      return;
+    }
+    const nextWaypoints = eventEditDraft.carry_waypoints
+      .map((waypoint) => storagePointForSession(waypoint, session))
+      .filter((waypoint) => hasPoint(waypoint));
+    const target = hasTarget ? storagePointForSession(eventEditDraft.target, session) : null;
     const updatedEvents = (session.events || []).map((event) => {
       if (event.id !== eventEditDraft.eventId) return event;
       return {
         ...event,
+        receive_x: Math.round(receive.x * 100) / 100,
+        receive_y: Math.round(receive.y * 100) / 100,
+        carry_waypoints: nextWaypoints.map((waypoint) => ({
+          x: Math.round(waypoint.x * 100) / 100,
+          y: Math.round(waypoint.y * 100) / 100,
+        })),
+        release_x: Math.round(release.x * 100) / 100,
+        release_y: Math.round(release.y * 100) / 100,
         outcome: eventEditDraft.outcome,
         under_pressure: !!eventEditDraft.under_pressure,
         assist: ASSIST_ELIGIBLE_OUTCOMES.has(eventEditDraft.outcome) ? !!eventEditDraft.assist : false,
+        target_x: needsTarget && hasPoint(target) ? Math.round(target.x * 100) / 100 : null,
+        target_y: needsTarget && hasPoint(target) ? Math.round(target.y * 100) / 100 : null,
       };
     });
     const nextSession = {
@@ -418,6 +628,7 @@
     const nextState = replaceAnalysisSession(analysisState, nextSession);
     saveState(nextState);
     eventEditDraft = null;
+    eventEditPointMode = null;
     selectedEventId = null;
   }
 
@@ -448,16 +659,82 @@
       draftStep = 'release';
       return;
     }
-    if (draftStep === 'release') {
-      draftEvent = { ...draftEvent, release: { ...pos } };
-      draftStep = 'outcome';
+    if (draftStep === 'waypoint') {
+      draftEvent = {
+        ...draftEvent,
+        carry_waypoints: [...draftEvent.carry_waypoints, { ...pos }],
+      };
+      draftStep = 'release';
+      return;
     }
+    if (draftStep === 'release') {
+      draftEvent = {
+        ...draftEvent,
+        release: { ...pos },
+        target: point(),
+      };
+      draftStep = 'outcome';
+      return;
+    }
+    if (draftStep === 'target') {
+      draftEvent = { ...draftEvent, target: { ...pos } };
+      draftStep = 'confirm';
+    }
+  }
+
+  function addWaypointCapture() {
+    if (!draftSession || !hasPoint(draftEvent.receive) || hasPoint(draftEvent.release)) return;
+    if ((draftEvent.carry_waypoints || []).length >= DRAFT_MAX_WAYPOINTS) return;
+    draftStep = 'waypoint';
+    notice = '';
+  }
+
+  function returnToReleaseCapture() {
+    if (!draftSession) return;
+    draftStep = hasPoint(draftEvent.release) ? 'outcome' : 'release';
+    notice = '';
+  }
+
+  function removeLastWaypoint() {
+    if (!draftSession || (draftEvent.carry_waypoints || []).length === 0) return;
+    draftEvent = {
+      ...draftEvent,
+      carry_waypoints: draftEvent.carry_waypoints.slice(0, -1),
+    };
+    if (draftStep === 'waypoint') draftStep = 'release';
+    notice = '';
+  }
+
+  function reviewDraftEvent() {
+    if (!draftSession) return;
+    if (!hasPoint(draftEvent.receive) || !hasPoint(draftEvent.release)) {
+      notice = 'Tap receive and release points first.';
+      return;
+    }
+    if (possessionOutcomeNeedsTarget(draftEvent.outcome) && !hasPoint(draftEvent.target)) {
+      draftStep = 'target';
+      notice = 'Tap the destination point.';
+      return;
+    }
+    draftStep = 'confirm';
+    notice = '';
+  }
+
+  function editDraftEvent() {
+    if (!draftSession) return;
+    draftStep = possessionOutcomeNeedsTarget(draftEvent.outcome) ? 'target' : 'outcome';
+    notice = '';
   }
 
   function addDraftEvent() {
     if (!draftSession) return;
-    if (!Number.isFinite(draftEvent.receive.x) || !Number.isFinite(draftEvent.release.x)) {
+    if (!hasPoint(draftEvent.receive) || !hasPoint(draftEvent.release)) {
       notice = 'Tap both receive and release points first.';
+      return;
+    }
+    if (possessionOutcomeNeedsTarget(draftEvent.outcome) && !hasPoint(draftEvent.target)) {
+      notice = 'Tap the destination point first.';
+      draftStep = 'target';
       return;
     }
     const timestamp = nowIso();
@@ -465,8 +742,14 @@
       id: crypto.randomUUID(),
       receive_x: Math.round(draftEvent.receive.x * 100) / 100,
       receive_y: Math.round(draftEvent.receive.y * 100) / 100,
+      carry_waypoints: (draftEvent.carry_waypoints || []).map((nextPoint) => ({
+        x: Math.round(nextPoint.x * 100) / 100,
+        y: Math.round(nextPoint.y * 100) / 100,
+      })),
       release_x: Math.round(draftEvent.release.x * 100) / 100,
       release_y: Math.round(draftEvent.release.y * 100) / 100,
+      target_x: hasPoint(draftEvent.target) ? Math.round(draftEvent.target.x * 100) / 100 : null,
+      target_y: hasPoint(draftEvent.target) ? Math.round(draftEvent.target.y * 100) / 100 : null,
       outcome: draftEvent.outcome,
       under_pressure: draftEvent.under_pressure,
       assist: draftEvent.assist,
@@ -484,13 +767,24 @@
 
   function clearCurrentDraftPoint() {
     if (!draftSession) return;
-    if (draftStep === 'outcome') {
-      draftEvent = { ...draftEvent, release: point() };
+    if (hasPoint(draftEvent.target)) {
+      draftEvent = { ...draftEvent, target: point() };
+      draftStep = possessionOutcomeNeedsTarget(draftEvent.outcome) ? 'target' : 'outcome';
+      return;
+    }
+    if (hasPoint(draftEvent.release)) {
+      draftEvent = { ...draftEvent, release: point(), target: point() };
       draftStep = 'release';
       return;
     }
-    if (draftStep === 'release') {
-      draftEvent = { ...draftEvent, receive: point() };
+    if (hasPoint(draftEvent.receive)) {
+      draftEvent = {
+        ...draftEvent,
+        receive: point(),
+        carry_waypoints: [],
+        release: point(),
+        target: point(),
+      };
       draftStep = 'receive';
     }
   }
@@ -558,39 +852,56 @@
     return events.find((event) => event.id === selectedId) ?? null;
   }
 
+  function eventPoints(event) {
+    return {
+      receive: event?.receive || { x: event?.receive_x, y: event?.receive_y },
+      carry_waypoints: Array.isArray(event?.carry_waypoints) ? event.carry_waypoints : [],
+      release: event?.release || { x: event?.release_x, y: event?.release_y },
+      target: normalizeOptionalPoint(event?.target || { x: event?.target_x, y: event?.target_y }),
+    };
+  }
+
   function directionOf(event) {
-    return movementDirection(event.receive, event.release) || 'lateral';
+    const points = eventPoints(event);
+    return movementDirection(points.receive, points.release) || 'lateral';
   }
 
   function draftDirectionOf(event) {
     if (!draftSession) return 'lateral';
+    const points = eventPoints(event);
     return movementDirectionForSession(
-      { x: event.receive_x, y: event.receive_y },
-      { x: event.release_x, y: event.release_y },
+      points.receive,
+      points.release,
       draftSession,
     ) || 'lateral';
   }
 
-  function overlayFor(event) {
+  function overlayFor(event, {
+    selected = false,
+    dimmed = false,
+  } = {}) {
+    const points = eventPoints(event);
     return {
       id: event.id,
-      x: event.receive.x,
-      y: event.receive.y,
+      x: points.receive.x,
+      y: points.receive.y,
       outcome: event.outcome,
       label: `${event.outcome}${event.assist ? ' - Assist' : ''} - ${movementDirectionLabel(directionOf(event))}`,
       marker_shape: 'circle',
       marker_fill: event.assist ? '#f59e0b' : (OUTCOME_COLORS[event.outcome] || '#1c3f8a'),
       marker_ring: event.under_pressure ? 'target' : null,
       marker_ring_color: 'rgba(220, 38, 38, 0.9)',
+      opacity: dimmed ? 0.28 : (selected ? 1 : 0.94),
       clickable: true,
     };
   }
 
   function draftOverlayFor(event, index) {
+    const points = eventPoints(event);
     return {
       id: event.id,
-      x: event.receive_x,
-      y: event.receive_y,
+      x: points.receive.x,
+      y: points.receive.y,
       outcome: event.outcome,
       label: `Draft event ${index + 1}: ${event.outcome}${event.assist ? ' - Assist' : ''} - ${movementDirectionLabel(draftDirectionOf(event))}`,
       marker_shape: 'circle',
@@ -603,31 +914,216 @@
     };
   }
 
-  function lineFor(event) {
-    return {
-      id: event.id,
-      from: event.receive,
-      to: event.release,
-      color: movementDirectionColor(directionOf(event)),
-      width: 1.5,
-      opacity: event.under_pressure ? 0.85 : 0.72,
-    };
+  function previewOverlaysForDraftEvent(event) {
+    const overlays = [];
+    const points = eventPoints(event);
+    if (hasPoint(points.receive)) {
+      overlays.push({
+        id: `${event.id}-receive`,
+        x: points.receive.x,
+        y: points.receive.y,
+        marker_shape: 'circle',
+        marker_fill: 'rgba(255,255,255,0.92)',
+        marker_ring: 'target',
+        marker_ring_color: 'rgba(255,255,255,0.65)',
+        opacity: 0.9,
+        draft: true,
+        clickable: false,
+        label: 'Current receive point',
+      });
+    }
+    points.carry_waypoints.forEach((waypoint, index) => {
+      overlays.push({
+        id: `${event.id}-waypoint-${index}`,
+        x: waypoint.x,
+        y: waypoint.y,
+        marker_shape: 'square',
+        marker_fill: 'rgba(191,219,254,0.9)',
+        opacity: 0.9,
+        draft: true,
+        clickable: false,
+        label: `Carry waypoint ${index + 1}`,
+      });
+    });
+    if (hasPoint(points.release)) {
+      overlays.push({
+        id: `${event.id}-release`,
+        x: points.release.x,
+        y: points.release.y,
+        marker_shape: 'diamond',
+        marker_fill: 'rgba(147,197,253,0.92)',
+        opacity: 0.9,
+        draft: true,
+        clickable: false,
+        label: 'Release point',
+      });
+    }
+    if (points.target) {
+      overlays.push({
+        id: `${event.id}-target`,
+        x: points.target.x,
+        y: points.target.y,
+        marker_shape: 'triangle',
+        marker_fill: 'rgba(251,191,36,0.92)',
+        opacity: 0.92,
+        draft: true,
+        clickable: false,
+        label: 'Destination point',
+      });
+    }
+    return overlays;
   }
 
-  function draftLineFor(event, index) {
-    return {
-      id: event.id,
-      from: { x: event.receive_x, y: event.receive_y },
-      to: { x: event.release_x, y: event.release_y },
-      color: movementDirectionColor(draftDirectionOf(event)),
-      width: 1.35,
-      opacity: event.under_pressure ? 0.55 : 0.35,
-      dasharray: '4 3',
-      arrow: true,
-      draft: true,
-      clickable: false,
-      label: `Draft event ${index + 1}: ${event.outcome} - ${movementDirectionLabel(draftDirectionOf(event))}`,
-    };
+  function editHandlesForEventDraft(draft = null) {
+    if (!draft) return [];
+    const points = eventPoints(draft);
+    const handles = [];
+    if (hasPoint(points.receive)) {
+      handles.push({
+        id: 'receive',
+        x: points.receive.x,
+        y: points.receive.y,
+        color: '#ffffff',
+        active: eventEditPointMode === 'receive',
+        label: 'Drag receive point',
+      });
+    }
+    points.carry_waypoints.forEach((waypoint, index) => {
+      handles.push({
+        id: waypointModeId(index),
+        x: waypoint.x,
+        y: waypoint.y,
+        color: '#bfdbfe',
+        active: eventEditPointMode === waypointModeId(index),
+        label: `Drag waypoint ${index + 1}`,
+      });
+    });
+    if (hasPoint(points.release)) {
+      handles.push({
+        id: 'release',
+        x: points.release.x,
+        y: points.release.y,
+        color: '#93c5fd',
+        active: eventEditPointMode === 'release',
+        label: 'Drag release point',
+      });
+    }
+    if (possessionOutcomeNeedsTarget(draft.outcome) || hasPoint(points.target)) {
+      handles.push({
+        id: 'target',
+        x: hasPoint(points.target) ? points.target.x : points.release.x,
+        y: hasPoint(points.target) ? points.target.y : points.release.y,
+        color: '#fbbf24',
+        active: eventEditPointMode === 'target',
+        label: 'Drag destination point',
+      });
+    }
+    return handles.filter((handle) => hasPoint(handle));
+  }
+
+  function buildSegments(points = [], base = {}, { arrowOnLast = true } = {}) {
+    const segments = [];
+    for (let index = 1; index < points.length; index += 1) {
+      segments.push({
+        ...base,
+        id: `${base.id}-${index}`,
+        from: points[index - 1],
+        to: points[index],
+        arrow: arrowOnLast ? index === points.length - 1 : false,
+      });
+    }
+    return segments;
+  }
+
+  // Carry paths with waypoints render as a single smooth Catmull-Rom connection;
+  // two-point paths (no waypoints) fall back to a plain straight segment.
+  function buildSmoothedCarryConnection(points = [], base = {}) {
+    if (points.length < 2) return [];
+    if (points.length === 2) {
+      return [{ ...base, id: `${base.id}-1`, from: points[0], to: points[1], arrow: true }];
+    }
+    return [{ ...base, id: `${base.id}-smooth`, points, from: points[0], to: points[points.length - 1], arrow: true }];
+  }
+
+  function ballPathForEvent(event, {
+    idPrefix = 'ball',
+    draft = false,
+    opacity = 0.88,
+    clickable = true,
+    selected = false,
+    dimmed = false,
+  } = {}) {
+    const points = eventPoints(event);
+    if (!points.target || !hasPoint(points.release)) return [];
+    return [{
+      id: `${event.id}-${idPrefix}`,
+      from: points.release,
+      to: points.target,
+      color: OUTCOME_COLORS[event.outcome] || '#2563eb',
+      width: selected ? 1.85 : 1.45,
+      opacity: dimmed ? 0.18 : (selected ? 0.96 : opacity),
+      dasharray: '6 4',
+      draft,
+      clickable,
+      label: `${event.outcome} destination`,
+    }];
+  }
+
+  function carryConnectionsForEvent(event, {
+    draft = false,
+    labelPrefix = 'Carry',
+    opacity = null,
+    clickable = true,
+    selected = false,
+    dimmed = false,
+  } = {}) {
+    const points = eventPoints(event);
+    const carryPath = draft && !hasPoint(points.release)
+      ? (hasPoint(points.receive) ? [points.receive, ...(points.carry_waypoints || [])] : [])
+      : carryPathPoints(points.receive, points.release, points.carry_waypoints);
+    if (carryPath.length < 2) return [];
+    const direction = draft ? draftDirectionOf(event) : directionOf(event);
+    return buildSmoothedCarryConnection(carryPath, {
+      id: `${event.id}-carry`,
+      color: movementDirectionColor(direction),
+      width: selected ? (draft ? 1.65 : 1.9) : (draft ? 1.35 : 1.5),
+      opacity: dimmed
+        ? 0.18
+        : (opacity ?? (draft ? (event.under_pressure ? 0.55 : 0.35) : (selected ? 0.95 : (event.under_pressure ? 0.85 : 0.72)))),
+      dasharray: draft ? '4 3' : null,
+      draft,
+      clickable,
+      label: `${labelPrefix}: ${movementDirectionLabel(direction)}`,
+    });
+  }
+
+  function connectionsForEvent(event, {
+    pathLayer = 'all',
+    selected = false,
+    dimmed = false,
+  } = {}) {
+    const includeCarry = pathLayer !== 'ball';
+    const includeBall = pathLayer !== 'carry';
+    return [
+      ...(includeCarry ? carryConnectionsForEvent(event, { selected, dimmed }) : []),
+      ...(includeBall ? ballPathForEvent(event, { selected, dimmed }) : []),
+    ];
+  }
+
+  function draftConnectionsForEvent(event, index) {
+    return [
+      ...carryConnectionsForEvent(event, {
+        draft: true,
+        labelPrefix: `Draft event ${index + 1}`,
+        clickable: false,
+      }),
+      ...ballPathForEvent(event, {
+        idPrefix: `draft-ball-${index}`,
+        draft: true,
+        opacity: 0.42,
+        clickable: false,
+      }),
+    ];
   }
 
   function removeDraftEvent(eventId) {
@@ -846,13 +1342,35 @@
     const sessionMap = new Map(displayedSessions.map((s) => [s.id, s]));
     const matchMap = new Map(matches.map((m) => [m.id, m]));
     const rows = [
-      ['player', 'match', 'match_date', 'session_date', 'receive_x', 'receive_y', 'release_x', 'release_y', 'outcome', 'under_pressure', 'direction', 'carry_m'],
+      [
+        'player',
+        'match',
+        'match_date',
+        'session_date',
+        'receive_x',
+        'receive_y',
+        'carry_waypoint_count',
+        'carry_waypoints',
+        'release_x',
+        'release_y',
+        'target_x',
+        'target_y',
+        'outcome',
+        'under_pressure',
+        'direction',
+        'carry_m',
+        'ball_m',
+      ],
     ];
     for (const event of displayedEvents) {
       const session = sessionMap.get(event.session_id);
       const match = session ? matchMap.get(session.match_id) : null;
       const direction = movementDirection(event.receive, event.release);
-      const carry = pointDistanceMeters(event.receive, event.release);
+      const carry = carryDistanceMeters(event.receive, event.release, event.carry_waypoints);
+      const ball = event.target ? pointDistanceMeters(event.release, event.target) : NaN;
+      const carryWaypoints = Array.isArray(event.carry_waypoints)
+        ? event.carry_waypoints.map((waypoint) => `${waypoint.x.toFixed(3)}:${waypoint.y.toFixed(3)}`).join('|')
+        : '';
       rows.push([
         session?.player_name || '',
         match ? `${match.team || 'Team'} v ${match.opponent || 'Opposition'}` : (session?.match_id || ''),
@@ -860,12 +1378,17 @@
         session?.created_at?.slice(0, 10) || '',
         Number.isFinite(event.receive.x) ? event.receive.x.toFixed(3) : '',
         Number.isFinite(event.receive.y) ? event.receive.y.toFixed(3) : '',
+        Array.isArray(event.carry_waypoints) ? event.carry_waypoints.length : 0,
+        carryWaypoints,
         Number.isFinite(event.release.x) ? event.release.x.toFixed(3) : '',
         Number.isFinite(event.release.y) ? event.release.y.toFixed(3) : '',
+        Number.isFinite(event.target?.x) ? event.target.x.toFixed(3) : '',
+        Number.isFinite(event.target?.y) ? event.target.y.toFixed(3) : '',
         event.outcome || '',
         event.under_pressure ? 'yes' : 'no',
         direction,
         Number.isFinite(carry) ? carry.toFixed(1) : '',
+        Number.isFinite(ball) ? ball.toFixed(1) : '',
       ]);
     }
     const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -976,16 +1499,28 @@
       session_id: session.id,
       session_our_goal_at_top: session.our_goal_at_top,
       receive: analysisPointForSession({ x: event.receive_x, y: event.receive_y }, session),
+      carry_waypoints: (event.carry_waypoints || []).map((waypoint) => analysisPointForSession(waypoint, session)),
       release: analysisPointForSession({ x: event.release_x, y: event.release_y }, session),
+      target: event.target_x == null || event.target_y == null
+        ? null
+        : analysisPointForSession({ x: event.target_x, y: event.target_y }, session),
     }))
   );
 
   $: draftEventCount = draftSession?.events?.length || 0;
+  $: draftWaypointCount = draftEvent?.carry_waypoints?.length || 0;
+  $: draftTargetRequired = possessionOutcomeNeedsTarget(draftEvent.outcome);
   $: draftOverlays = draftSession
-    ? draftSession.events.map((event, index) => draftOverlayFor(event, index))
+    ? [
+      ...draftSession.events.map((event, index) => draftOverlayFor(event, index)),
+      ...previewOverlaysForDraftEvent({ id: 'draft-current', ...draftEvent }),
+    ]
     : [];
   $: draftConnections = draftSession
-    ? draftSession.events.map((event, index) => draftLineFor(event, index))
+    ? [
+      ...draftSession.events.flatMap((event, index) => draftConnectionsForEvent(event, index)),
+      ...draftConnectionsForEvent({ id: 'draft-current', ...draftEvent }, draftEventCount),
+    ]
     : [];
 
   $: playerAutocomplete = collectPlayerOptions([
@@ -1006,9 +1541,12 @@
   $: lateralCount = possessionSummary.lateralCount;
   $: backwardCount = possessionSummary.backwardCount;
   $: averageCarry = possessionSummary.averageCarry;
+  $: averageBall = possessionSummary.averageBall;
+  $: ballEvents = possessionSummary.ballEvents ?? 0;
   $: forwardDisplay = analysisMode === 'cross' ? formatPercent(forwardCount, totalEvents) : forwardCount;
   $: lateralDisplay = analysisMode === 'cross' ? formatPercent(lateralCount, totalEvents) : lateralCount;
   $: backwardDisplay = analysisMode === 'cross' ? formatPercent(backwardCount, totalEvents) : backwardCount;
+  $: ballEventsDisplay = analysisMode === 'cross' ? formatPercent(ballEvents, totalEvents) : ballEvents;
   $: scoreInvolvementDetail = scoreInvolvement > 0
     ? (directScores > 0 && assistCount > 0
       ? `(${assistCount} assist${assistCount === 1 ? '' : 's'} · ${directScores} direct)`
@@ -1025,11 +1563,22 @@
       const outcome = String(event?.outcome ?? '').trim();
       if (!isScoreOutcome(outcome) && event?.assist !== true) return false;
     }
+    if (actionFamilyFilter !== 'all' && possessionActionFamily(event?.outcome) !== actionFamilyFilter) return false;
     return true;
   });
+  $: selectedVisibleEvent = currentSelectedEvent(displayedEventsVisible, selectedEventId);
   $: heatPoints = buildPointSeries(displayedEventsVisible, (event) => event.receive);
-  $: dotOverlays = displayedEventsVisible.map((event) => overlayFor(event));
-  $: dotConnections = showCarryLines ? displayedEventsVisible.map((event) => lineFor(event)) : [];
+  $: dotOverlays = displayedEventsVisible.map((event) => overlayFor(event, {
+    selected: !!eventEditDraft && event.id === selectedEventId,
+    dimmed: !!eventEditDraft && event.id !== selectedEventId,
+  }));
+  $: dotConnections = showCarryLines ? displayedEventsVisible.flatMap((event) => connectionsForEvent(event, {
+    pathLayer: pathLayerFilter,
+    selected: !!eventEditDraft && event.id === selectedEventId,
+    dimmed: !!eventEditDraft && event.id !== selectedEventId,
+  })) : [];
+  $: analysisEditHandles = viewMode === 'dots' && selectedVisibleEvent && eventEditDraft ? editHandlesForEventDraft(eventEditDraft) : [];
+  $: analysisPitchInteractive = viewMode === 'dots' && !!selectedVisibleEvent && !!eventEditDraft;
   $: sampleNote = (() => {
     if (totalEvents <= 0) return '';
     if (analysisMode === 'cross') {
@@ -1227,7 +1776,7 @@
         {#if draftSession}
           <div class="draft-box">
             <div class="draft-head">
-              <div class="step">{draftStep === 'receive' ? 'Tap receive point' : draftStep === 'release' ? 'Tap release point' : 'Choose outcome then add draft event'}</div>
+              <div class="step">{draftStepLabel()}</div>
               <div class="draft-status">
                 <span class="draft-chip">Draft session</span>
                 <span>{draftEventCount} event{draftEventCount === 1 ? '' : 's'}</span>
@@ -1235,11 +1784,11 @@
             </div>
             <div class="pitch-frame">
               <Pitch
-                interactive={true}
+                interactive={draftStep !== 'outcome' && draftStep !== 'confirm'}
                 flip={!draftSession.our_goal_at_top}
                 contestType="clean"
-                landing={draftSession ? draftEvent.receive : point()}
-                pickup={draftSession ? draftEvent.release : point()}
+                landing={point()}
+                pickup={point()}
                 overlays={draftOverlays}
                 connections={draftConnections}
                 showZoneLabels={true}
@@ -1252,8 +1801,26 @@
             </div>
 
             <div class="mini-grid">
-              <div><span>Receive</span><strong>{Number.isFinite(draftEvent.receive.x) ? `${draftEvent.receive.x.toFixed(2)}, ${draftEvent.receive.y.toFixed(2)}` : 'Tap pitch'}</strong></div>
-              <div><span>Release</span><strong>{Number.isFinite(draftEvent.release.x) ? `${draftEvent.release.x.toFixed(2)}, ${draftEvent.release.y.toFixed(2)}` : 'Tap pitch'}</strong></div>
+              <div><span>Receive</span><strong>{pointLabel(draftEvent.receive)}</strong></div>
+              <div><span>Waypoints</span><strong>{draftWaypointCount} / {DRAFT_MAX_WAYPOINTS}</strong></div>
+              <div><span>Release</span><strong>{pointLabel(draftEvent.release)}</strong></div>
+              <div><span>Destination</span><strong>{draftTargetRequired ? pointLabel(draftEvent.target) : 'Not required'}</strong></div>
+            </div>
+
+            <div class="button-row">
+              <button
+                type="button"
+                on:click={addWaypointCapture}
+                disabled={!draftSession || !hasPoint(draftEvent.receive) || hasPoint(draftEvent.release) || draftWaypointCount >= DRAFT_MAX_WAYPOINTS || draftStep === 'waypoint'}
+              >
+                Add waypoint
+              </button>
+              <button type="button" on:click={returnToReleaseCapture} disabled={draftStep !== 'waypoint'}>
+                Set release point
+              </button>
+              <button type="button" on:click={removeLastWaypoint} disabled={draftWaypointCount === 0}>
+                Remove last waypoint
+              </button>
             </div>
 
             {#if draftSession.events.length > 0}
@@ -1310,10 +1877,29 @@
               <span>Under pressure</span>
             </label>
 
+            {#if draftStep === 'confirm'}
+              <div class="detail-card">
+                <div class="detail-title">Review event</div>
+                <div class="detail-grid">
+                  <span>Receive</span><strong>{pointLabel(draftEvent.receive, '—')}</strong>
+                  <span>Waypoints</span><strong>{draftWaypointCount}</strong>
+                  <span>Release</span><strong>{pointLabel(draftEvent.release, '—')}</strong>
+                  <span>Destination</span><strong>{draftTargetRequired ? pointLabel(draftEvent.target, '—') : 'Not required'}</strong>
+                  <span>Outcome</span><strong>{draftEvent.outcome}</strong>
+                  <span>Carry</span><strong>{formatMetres(carryDistanceMeters(draftEvent.receive, draftEvent.release, draftEvent.carry_waypoints))}</strong>
+                </div>
+              </div>
+            {/if}
+
             <div class="button-row">
               <button type="button" on:click={clearCurrentDraftPoint} disabled={!draftSession}>Clear point</button>
               <button type="button" on:click={undoLastDraftEvent} disabled={!draftSession || draftSession.events.length === 0}>Undo draft event</button>
-              <button type="button" class="primary" on:click={addDraftEvent} disabled={!draftSession}>Add draft event</button>
+              {#if draftStep === 'confirm'}
+                <button type="button" on:click={editDraftEvent} disabled={!draftSession}>Back</button>
+                <button type="button" class="primary" on:click={addDraftEvent} disabled={!draftSession}>Add draft event</button>
+              {:else}
+                <button type="button" class="primary" on:click={reviewDraftEvent} disabled={!draftSession}>Review event</button>
+              {/if}
               <button type="button" class="primary" on:click={saveDraftSession} disabled={!draftSession}>Finalize session</button>
             </div>
           </div>
@@ -1451,8 +2037,26 @@
             Score involvements only
           </button>
           <button type="button" class:active={showCarryLines} on:click={() => showCarryLines = !showCarryLines}>
-            Show carry lines
+            Show paths
           </button>
+        </div>
+
+        <div class="filter-row" aria-label="Action family filter">
+          <span class="filter-label">Action family:</span>
+          {#each ACTION_FAMILY_OPTIONS as option (option.value)}
+            <button type="button" class:active={actionFamilyFilter === option.value} on:click={() => actionFamilyFilter = option.value}>
+              {option.label}
+            </button>
+          {/each}
+        </div>
+
+        <div class="filter-row" aria-label="Path layer filter">
+          <span class="filter-label">Path layer:</span>
+          {#each PATH_LAYER_OPTIONS as option (option.value)}
+            <button type="button" class:active={pathLayerFilter === option.value} on:click={() => pathLayerFilter = option.value}>
+              {option.label}
+            </button>
+          {/each}
         </div>
 
         {#if analysisMode === 'cross' && selectedCrossMatchIds.length === 0}
@@ -1477,6 +2081,8 @@
             <div><span>Lateral</span><strong>{lateralDisplay}</strong></div>
             <div><span>Backward</span><strong>{backwardDisplay}</strong></div>
             <div><span>Avg carry</span><strong>{formatMetres(averageCarry)}</strong></div>
+            <div><span>Ball paths</span><strong>{ballEventsDisplay}</strong></div>
+            <div><span>Avg ball</span><strong>{formatMetres(averageBall)}</strong></div>
           </div>
 
           {#if sampleNote}
@@ -1498,18 +2104,22 @@
               <Heatmap points={heatPoints} cols={140} radius={3} smooth={2} colorScheme="density" />
             {:else}
               <Pitch
-                interactive={false}
+                interactive={analysisPitchInteractive}
                 flip={false}
                 contestType="clean"
                 landing={{ x: NaN, y: NaN }}
                 pickup={{ x: NaN, y: NaN }}
                 overlays={dotOverlays}
                 connections={dotConnections}
+                editHandles={analysisEditHandles}
                 showZoneLabels={false}
                 showZoneLegend={false}
                 ownGoalFill="rgba(255,255,255,0.16)"
                 oppositionGoalFill="rgba(255,255,255,0.05)"
                 ownGoalBandStroke="rgba(255,255,255,0.95)"
+                on:landed={(e) => handleEventEditPitchPoint(e.detail)}
+                on:handledrag={handleEventEditHandleDrag}
+                on:handleclick={(e) => setEventEditPointMode(e.detail.handle.id)}
                 on:overlayclick={(e) => selectEvent(e.detail.overlay.id)}
               />
             {/if}
@@ -1545,11 +2155,12 @@
                     </div>
                   </div>
                   <div class="legend-section">
-                    <strong>Carry arrows</strong>
+                    <strong>Paths</strong>
                     <div class="legend-list">
                       <div class="legend-item"><span class="legend-arrow forward"></span><span>Forward carry</span></div>
                       <div class="legend-item"><span class="legend-arrow lateral"></span><span>Lateral carry</span></div>
                       <div class="legend-item"><span class="legend-arrow backward"></span><span>Backward carry</span></div>
+                      <div class="legend-item"><span class="legend-arrow ball"></span><span>Ball path</span></div>
                     </div>
                   </div>
                 </div>
@@ -1688,12 +2299,58 @@
 
           {@const selectedEvent = currentSelectedEvent(displayedEventsVisible, selectedEventId)}
           {#if selectedEvent && eventEditDraft}
+            {@const selectedPoints = eventPoints(eventEditDraft)}
+            {@const editTarget = normalizeOptionalPoint(eventEditDraft.target)}
+            {@const editTargetRequired = possessionOutcomeNeedsTarget(eventEditDraft.outcome)}
             <div class="detail-card popover">
               <div class="detail-title">Edit event</div>
               <div class="detail-grid">
-                <span>Receive</span><strong>{Number.isFinite(selectedEvent.receive.x) ? `${selectedEvent.receive.x.toFixed(2)}, ${selectedEvent.receive.y.toFixed(2)}` : '—'}</strong>
-                <span>Release</span><strong>{Number.isFinite(selectedEvent.release.x) ? `${selectedEvent.release.x.toFixed(2)}, ${selectedEvent.release.y.toFixed(2)}` : '—'}</strong>
+                <span>Receive</span><strong>{pointLabel(selectedPoints.receive, 'Not set')}</strong>
+                <span>Waypoints</span><strong>{selectedPoints.carry_waypoints.length}</strong>
+                <span>Release</span><strong>{pointLabel(selectedPoints.release, 'Not set')}</strong>
+                <span>Destination</span><strong>{editTargetRequired ? pointLabel(editTarget, 'Missing') : pointLabel(editTarget, 'Not required')}</strong>
+                <span>Carry</span><strong>{formatMetres(carryDistanceMeters(selectedPoints.receive, selectedPoints.release, selectedPoints.carry_waypoints))}</strong>
+                <span>Ball</span><strong>{formatMetres(ballDistanceMeters(selectedPoints.release, editTarget))}</strong>
               </div>
+
+              {#if selectedPoints.carry_waypoints.length > 0}
+                <div class="point-sequence">
+                  {#each selectedPoints.carry_waypoints as waypoint, index (`${selectedEvent.id}-waypoint-${index}`)}
+                    <span>W{index + 1}: {pointLabel(waypoint, 'Not set')}</span>
+                  {/each}
+                </div>
+              {/if}
+
+              <div class="button-row compact">
+                <button type="button" class:active={eventEditPointMode === 'receive'} on:click={() => setEventEditPointMode('receive')}>
+                  Move receive point
+                </button>
+                <button type="button" class:active={eventEditPointMode === 'release'} on:click={() => setEventEditPointMode('release')}>
+                  Move release point
+                </button>
+                <button type="button" on:click={() => addEventEditWaypoint()} disabled={eventEditDraft.carry_waypoints.length >= DRAFT_MAX_WAYPOINTS}>
+                  Add waypoint
+                </button>
+                <button type="button" class:active={eventEditPointMode === 'target'} on:click={() => setEventEditPointMode('target')} disabled={!editTargetRequired && !editTarget}>
+                  Move destination point
+                </button>
+                <button type="button" on:click={clearEventEditTarget} disabled={editTargetRequired || !editTarget}>
+                  Clear destination
+                </button>
+              </div>
+
+              {#if selectedPoints.carry_waypoints.length > 0}
+                <div class="point-sequence edit-sequence">
+                  {#each selectedPoints.carry_waypoints as waypoint, index (`${selectedEvent.id}-edit-waypoint-${index}`)}
+                    <button type="button" class:active={eventEditPointMode === waypointModeId(index)} on:click={() => setEventEditPointMode(waypointModeId(index))}>
+                      Move W{index + 1}
+                    </button>
+                    <button type="button" class="link-button" on:click={() => removeEventEditWaypoint(index)}>
+                      Remove W{index + 1}
+                    </button>
+                  {/each}
+                </div>
+              {/if}
 
               <label class="field edit-field">
                 <span>Outcome</span>
@@ -1716,8 +2373,14 @@
                 <span>Under pressure</span>
               </label>
 
+              {#if eventEditPointMode}
+                <div class="edit-note">Editing {eventEditModeLabel(eventEditPointMode)}. Drag its handle on the pitch or tap the pitch to reposition it.</div>
+              {:else if editTargetRequired && !editTarget}
+                <div class="edit-note">This outcome needs a destination point. Use the destination controls or pitch handle to add it.</div>
+              {/if}
+
               <div class="button-row">
-                <button type="button" class="primary" on:click={saveEventEditor}>Save changes</button>
+                <button type="button" class="primary" on:click={saveEventEditor} disabled={editTargetRequired && !editTarget}>Save changes</button>
                 <button type="button" on:click={cancelEventEditor}>Cancel</button>
               </div>
             </div>
@@ -1774,6 +2437,8 @@
   .field input, .field select { border: 1.5px solid #d1d5db; border-radius: 10px; padding: 10px 12px; font-family: inherit; font-size: 13px; color: #111827; background: #fff; }
   .field input:disabled { background: #f9fafb; opacity: 0.8; }
   .button-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .button-row.compact button { padding: 7px 10px; font-size: 12px; }
+  .button-row.compact button.active { background: #1c3f8a; border-color: #1c3f8a; color: #fff; }
   button { border: 1.5px solid #d1d5db; background: #fff; color: #374151; border-radius: 10px; padding: 8px 12px; font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer; }
   button:hover:not(:disabled) { background: #f9fafb; }
   button:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -1873,6 +2538,11 @@
   .detail-grid { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 12px; }
   .detail-grid span { color: #6b7280; font-weight: 700; }
   .detail-grid strong { color: #111827; }
+  .point-sequence { display: flex; flex-wrap: wrap; gap: 6px 10px; margin-top: 10px; font-size: 12px; color: #475569; }
+  .point-sequence span { padding: 4px 8px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 999px; }
+  .point-sequence.edit-sequence { align-items: center; gap: 8px; }
+  .point-sequence.edit-sequence button.active { background: #1c3f8a; border-color: #1c3f8a; color: #fff; }
+  .edit-note { margin-top: 10px; padding: 8px 10px; background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; border-radius: 10px; font-size: 12px; line-height: 1.4; }
   .edit-field { margin-top: 10px; text-transform: none; letter-spacing: 0; font-size: 12px; }
   .edit-field span { text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; }
   .edit-field select { border: 1.5px solid #d1d5db; border-radius: 10px; padding: 10px 12px; font-family: inherit; font-size: 13px; color: #111827; background: #fff; }
