@@ -141,6 +141,53 @@ test('captures a carry with a waypoint and logs destination for a kick pass', as
   await expect(page.getByText('Session finalized.')).toBeVisible();
 });
 
+test('carry waypoints survive finalize, page reload, and re-open', async ({ page }) => {
+  await openFreshApp(page);
+  await setUpMatch(page, { opponent: 'Cuala' });
+  await clearAnalysisState(page);
+  await openPossessionTab(page);
+
+  await startDraftSession(page, 'Cian Murphy', { half: 'First half', attackingTop: true });
+
+  const pitch = page.locator('.draft-box').getByRole('application', { name: /GAA pitch/i });
+
+  // Set receive point
+  await pitch.click();
+
+  // Add a carry waypoint
+  await page.getByRole('button', { name: /Add waypoint/i }).click();
+  await pitch.click();
+
+  // Set release point
+  await pitch.click();
+
+  // Choose an outcome that does not require a destination
+  await page.getByRole('button', { name: 'Hand pass', exact: true }).click();
+
+  await page.getByRole('button', { name: /Add draft event/i }).click();
+  await expect(page.locator('.draft-box')).toContainText('1 event');
+
+  await page.getByRole('button', { name: /Finalize session/i }).click();
+  await expect(page.getByText('Session finalized.')).toBeVisible();
+
+  // Reload the page to confirm persistence
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await openPossessionTab(page);
+
+  // Select the session player to restore the analysis view
+  const playerBtn = page.locator('.player-strip button', { hasText: 'Cian Murphy' });
+  await playerBtn.click();
+
+  // Open the saved event
+  const eventCard = page.locator('.event-card').first();
+  await eventCard.click();
+
+  // The detail panel should show the waypoint count
+  await expect(page.locator('.detail-card')).toContainText('Waypoint');
+  await expect(page.locator('.detail-card')).toContainText('1');
+});
+
 test('allows editing a saved event receive and release points without deleting it', async ({ page }) => {
   await openFreshApp(page);
   await setUpMatch(page, { opponent: 'St Judes' });

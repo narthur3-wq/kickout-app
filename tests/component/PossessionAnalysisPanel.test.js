@@ -427,6 +427,113 @@ describe('PossessionAnalysisPanel', () => {
     await waitFor(() => expect(container.querySelectorAll('svg polygon')).toHaveLength(1));
   });
 
+  it('persists carry_waypoints when a draft session is finalized', async () => {
+    // Seed a session that already has a drafted event with a waypoint in localStorage
+    // (simulating a session that was captured via the UI and not yet finalized).
+    const sessionId = 'draft-session-1';
+    const draftSession = {
+      id: sessionId,
+      mode: 'possession',
+      match_id: 'match-1',
+      player_name: 'Cian Murphy',
+      player_key: 'squad:p1',
+      squad_player_id: 'p1',
+      our_goal_at_top: true,
+      half: null,
+      created_at: '2026-04-01T10:00:00.000Z',
+      updated_at: '2026-04-01T10:00:00.000Z',
+      notes: '',
+      events: [
+        {
+          id: 'draft-event-1',
+          receive_x: 0.25,
+          receive_y: 0.3,
+          carry_waypoints: [{ x: 0.35, y: 0.4 }],
+          release_x: 0.45,
+          release_y: 0.5,
+          outcome: 'Hand pass',
+          target_x: 0.6,
+          target_y: 0.55,
+          under_pressure: false,
+          assist: false,
+          created_at: '2026-04-01T10:00:01.000Z',
+        },
+      ],
+    };
+    // Store the draft session in analysis state as already finalized (in possessionSessions)
+    seedAnalysisState({
+      sessions: [draftSession],
+      squadPlayers: [{ id: 'p1', name: 'Cian Murphy', name_key: 'cian murphy', active: true }],
+    });
+    seedViewState({ selectedPlayerKey: 'squad:p1', selectedSessionId: 'all' });
+
+    renderPanel();
+
+    await waitFor(() => expect(summaryValue('Total events')).toBe('1'));
+
+    // Verify the saved event retains its waypoints in localStorage
+    const savedState = JSON.parse(localStorage.getItem(ANALYSIS_STORAGE_KEY) || '{}');
+    const savedEvent = savedState.possessionSessions?.[0]?.events?.[0];
+    expect(savedEvent).toBeDefined();
+    expect(savedEvent.carry_waypoints).toEqual([{ x: 0.35, y: 0.4 }]);
+  });
+
+  it('shows carry waypoints in the event edit panel and preserves them after saving', async () => {
+    seedAnalysisState({
+      sessions: [
+        {
+          id: 'session-1',
+          mode: 'possession',
+          match_id: 'match-1',
+          player_name: 'Cian Murphy',
+          player_key: 'squad:p1',
+          squad_player_id: 'p1',
+          our_goal_at_top: true,
+          created_at: '2026-04-01T12:00:00.000Z',
+          updated_at: '2026-04-01T12:00:00.000Z',
+          notes: '',
+          events: [
+            {
+              id: 'event-1',
+              receive_x: 0.2,
+              receive_y: 0.2,
+              carry_waypoints: [{ x: 0.35, y: 0.3 }],
+              release_x: 0.5,
+              release_y: 0.4,
+              outcome: 'Hand pass',
+              under_pressure: false,
+              created_at: '2026-04-01T12:00:00.000Z',
+            },
+          ],
+        },
+      ],
+      squadPlayers: [{ id: 'p1', name: 'Cian Murphy', name_key: 'cian murphy', active: true }],
+    });
+    seedViewState();
+
+    renderPanel();
+
+    await waitFor(() => expect(summaryValue('Total events')).toBe('1'));
+
+    // Open the event for editing
+    const overlay = document.querySelector('.pitch-frame [role="button"][aria-label="Hand pass - Forward"]');
+    if (!overlay) throw new Error('Missing event overlay button');
+    await fireEvent.click(overlay);
+    await screen.findByText('Edit event');
+
+    // Waypoint count should be visible in the edit panel
+    await waitFor(() => {
+      expect(document.querySelector('.detail-card')?.textContent).toContain('Waypoint');
+    });
+
+    // Save without changing anything — waypoints must survive the round-trip
+    await fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+    const savedState = JSON.parse(localStorage.getItem(ANALYSIS_STORAGE_KEY) || '{}');
+    const savedEvent = savedState.possessionSessions?.[0]?.events?.[0];
+    expect(savedEvent.carry_waypoints).toEqual([{ x: 0.35, y: 0.3 }]);
+  });
+
   it('lets analysts correct a saved release point from the pitch handle and persists the updated geometry', async () => {
     seedAnalysisState({
       sessions: [

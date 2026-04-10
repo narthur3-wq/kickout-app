@@ -19,6 +19,7 @@
     movementDirectionLabel,
     movementDirectionForSession,
     isScoreOutcome,
+    isValidPoint,
     normalizePlayerKey,
     pointDistanceMeters,
     possessionActionFamily,
@@ -59,6 +60,8 @@
   export let playerOptions = [];
   export let squadPlayers = [];
   export let defaultOurGoalAtTop = true;
+
+  const EMPTY_POINT = { x: NaN, y: NaN };
 
   const OUTCOMES = [
     'Score point',
@@ -207,12 +210,12 @@
     return new Date().toISOString();
   }
 
-  function point() {
-    return { x: NaN, y: NaN };
+  function hasPoint(nextPoint) {
+    return isValidPoint(nextPoint);
   }
 
-  function hasPoint(nextPoint) {
-    return Number.isFinite(nextPoint?.x) && Number.isFinite(nextPoint?.y);
+  function roundCoord(v) {
+    return Math.round(v * 100) / 100;
   }
 
   function pointLabel(nextPoint, fallback = 'Tap pitch') {
@@ -240,10 +243,10 @@
 
   function blankDraftEvent() {
     return {
-      receive: point(),
+      receive: { ...EMPTY_POINT },
       carry_waypoints: [],
-      release: point(),
-      target: point(),
+      release: { ...EMPTY_POINT },
+      target: { ...EMPTY_POINT },
       outcome: 'Hand pass',
       under_pressure: false,
       assist: false,
@@ -383,7 +386,7 @@
     const needsTarget = possessionOutcomeNeedsTarget(outcome);
     draftEvent = {
       ...draftEvent,
-      target: needsTarget ? draftEvent.target : point(),
+      target: needsTarget ? draftEvent.target : { ...EMPTY_POINT },
       outcome,
       assist: ASSIST_ELIGIBLE_OUTCOMES.has(outcome) ? draftEvent.assist === true : false,
     };
@@ -434,7 +437,7 @@
       receive: { ...points.receive },
       carry_waypoints: (points.carry_waypoints || []).map((waypoint) => ({ ...waypoint })),
       release: { ...points.release },
-      target: points.target ? { ...points.target } : point(),
+      target: points.target ? { ...points.target } : { ...EMPTY_POINT },
     };
   }
 
@@ -458,7 +461,7 @@
       ...eventEditDraft,
       outcome,
       assist: ASSIST_ELIGIBLE_OUTCOMES.has(outcome) ? eventEditDraft.assist === true : false,
-      target: needsTarget ? eventEditDraft.target : point(),
+      target: needsTarget ? eventEditDraft.target : { ...EMPTY_POINT },
     };
     if (!needsTarget && eventEditPointMode === 'target') {
       eventEditPointMode = null;
@@ -544,7 +547,7 @@
       : eventEditDraft.carry_waypoints.length;
     const referencePoint = eventEditDraft.carry_waypoints[insertIndex - 1]
       || (insertIndex > 0 ? eventEditDraft.release : eventEditDraft.receive)
-      || point();
+      || { ...EMPTY_POINT };
     const nextWaypoint = hasPoint(referencePoint) ? { ...referencePoint } : { x: 0.5, y: 0.5 };
     const nextWaypoints = [...eventEditDraft.carry_waypoints];
     nextWaypoints.splice(insertIndex, 0, nextWaypoint);
@@ -575,7 +578,7 @@
     if (!eventEditDraft || possessionOutcomeNeedsTarget(eventEditDraft.outcome)) return;
     eventEditDraft = {
       ...eventEditDraft,
-      target: point(),
+      target: { ...EMPTY_POINT },
     };
     if (eventEditPointMode === 'target') eventEditPointMode = null;
   }
@@ -605,19 +608,19 @@
       if (event.id !== eventEditDraft.eventId) return event;
       return {
         ...event,
-        receive_x: Math.round(receive.x * 100) / 100,
-        receive_y: Math.round(receive.y * 100) / 100,
+        receive_x: roundCoord(receive.x),
+        receive_y: roundCoord(receive.y),
         carry_waypoints: nextWaypoints.map((waypoint) => ({
-          x: Math.round(waypoint.x * 100) / 100,
-          y: Math.round(waypoint.y * 100) / 100,
+          x: roundCoord(waypoint.x),
+          y: roundCoord(waypoint.y),
         })),
-        release_x: Math.round(release.x * 100) / 100,
-        release_y: Math.round(release.y * 100) / 100,
+        release_x: roundCoord(release.x),
+        release_y: roundCoord(release.y),
         outcome: eventEditDraft.outcome,
         under_pressure: !!eventEditDraft.under_pressure,
         assist: ASSIST_ELIGIBLE_OUTCOMES.has(eventEditDraft.outcome) ? !!eventEditDraft.assist : false,
-        target_x: needsTarget && hasPoint(target) ? Math.round(target.x * 100) / 100 : null,
-        target_y: needsTarget && hasPoint(target) ? Math.round(target.y * 100) / 100 : null,
+        target_x: needsTarget && hasPoint(target) ? roundCoord(target.x) : null,
+        target_y: needsTarget && hasPoint(target) ? roundCoord(target.y) : null,
       };
     });
     const nextSession = {
@@ -671,7 +674,7 @@
       draftEvent = {
         ...draftEvent,
         release: { ...pos },
-        target: point(),
+        target: { ...EMPTY_POINT },
       };
       draftStep = 'outcome';
       return;
@@ -740,16 +743,16 @@
     const timestamp = nowIso();
     const event = {
       id: crypto.randomUUID(),
-      receive_x: Math.round(draftEvent.receive.x * 100) / 100,
-      receive_y: Math.round(draftEvent.receive.y * 100) / 100,
+      receive_x: roundCoord(draftEvent.receive.x),
+      receive_y: roundCoord(draftEvent.receive.y),
       carry_waypoints: (draftEvent.carry_waypoints || []).map((nextPoint) => ({
-        x: Math.round(nextPoint.x * 100) / 100,
-        y: Math.round(nextPoint.y * 100) / 100,
+        x: roundCoord(nextPoint.x),
+        y: roundCoord(nextPoint.y),
       })),
-      release_x: Math.round(draftEvent.release.x * 100) / 100,
-      release_y: Math.round(draftEvent.release.y * 100) / 100,
-      target_x: hasPoint(draftEvent.target) ? Math.round(draftEvent.target.x * 100) / 100 : null,
-      target_y: hasPoint(draftEvent.target) ? Math.round(draftEvent.target.y * 100) / 100 : null,
+      release_x: roundCoord(draftEvent.release.x),
+      release_y: roundCoord(draftEvent.release.y),
+      target_x: hasPoint(draftEvent.target) ? roundCoord(draftEvent.target.x) : null,
+      target_y: hasPoint(draftEvent.target) ? roundCoord(draftEvent.target.y) : null,
       outcome: draftEvent.outcome,
       under_pressure: draftEvent.under_pressure,
       assist: draftEvent.assist,
@@ -768,22 +771,22 @@
   function clearCurrentDraftPoint() {
     if (!draftSession) return;
     if (hasPoint(draftEvent.target)) {
-      draftEvent = { ...draftEvent, target: point() };
+      draftEvent = { ...draftEvent, target: { ...EMPTY_POINT } };
       draftStep = possessionOutcomeNeedsTarget(draftEvent.outcome) ? 'target' : 'outcome';
       return;
     }
     if (hasPoint(draftEvent.release)) {
-      draftEvent = { ...draftEvent, release: point(), target: point() };
+      draftEvent = { ...draftEvent, release: { ...EMPTY_POINT }, target: { ...EMPTY_POINT } };
       draftStep = 'release';
       return;
     }
     if (hasPoint(draftEvent.receive)) {
       draftEvent = {
         ...draftEvent,
-        receive: point(),
+        receive: { ...EMPTY_POINT },
         carry_waypoints: [],
-        release: point(),
-        target: point(),
+        release: { ...EMPTY_POINT },
+        target: { ...EMPTY_POINT },
       };
       draftStep = 'receive';
     }
@@ -1019,20 +1022,6 @@
       });
     }
     return handles.filter((handle) => hasPoint(handle));
-  }
-
-  function buildSegments(points = [], base = {}, { arrowOnLast = true } = {}) {
-    const segments = [];
-    for (let index = 1; index < points.length; index += 1) {
-      segments.push({
-        ...base,
-        id: `${base.id}-${index}`,
-        from: points[index - 1],
-        to: points[index],
-        arrow: arrowOnLast ? index === points.length - 1 : false,
-      });
-    }
-    return segments;
   }
 
   // Carry paths with waypoints render as a single smooth Catmull-Rom connection;
@@ -1787,8 +1776,8 @@
                 interactive={draftStep !== 'outcome' && draftStep !== 'confirm'}
                 flip={!draftSession.our_goal_at_top}
                 contestType="clean"
-                landing={point()}
-                pickup={point()}
+                landing={{ ...EMPTY_POINT }}
+                pickup={{ ...EMPTY_POINT }}
                 overlays={draftOverlays}
                 connections={draftConnections}
                 showZoneLabels={true}

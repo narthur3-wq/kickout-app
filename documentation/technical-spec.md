@@ -164,7 +164,7 @@ Analysis state is stored under the key `ko_post_match_analysis` within the scope
 }
 ```
 
-Sessions carry `match_id`, `player_name`, and optional `squad_player_id`. Events carry coordinates, outcome or pass metadata, and a timestamp. Possession events now also normalize `carry_waypoints`, nullable destination fields, and `assist` through local-first save/load and sync. The saved possession analysis view persists UI state for action-family filters and carry-vs-ball path filters, and finalized events can be corrected in place through explicit point controls plus pitch handles. Draft sessions are not written to the stored analysis arrays until they are finalized.
+Sessions carry `match_id`, `player_name`, and optional `squad_player_id`. Events carry coordinates, outcome or pass metadata, and a timestamp. Possession events now also normalize `carry_waypoints`, nullable destination fields, and `assist` through local-first save/load and sync. The saved possession analysis view persists UI state for action-family filters and carry-vs-ball path filters, and finalized events can be corrected in place through explicit point controls plus pitch handles. If the connected Supabase schema lags behind the app, possession path fields temporarily stay local-only and the UI surfaces a migration warning instead of failing the full analysis sync loop. Draft sessions are not written to the stored analysis arrays until they are finalized.
 
 Scope migration (`migrateLocalScopeToUserScope`) merges analysis state by session ID, same as events.
 

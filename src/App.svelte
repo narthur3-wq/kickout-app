@@ -42,12 +42,17 @@ import {
   summarizeDiagnostics,
 } from './lib/diagnostics.js';
 import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisStore.js';
-import {
-  analysisDeleteEntriesFromStates,
-  analysisDeleteKey,
-  analysisStateFromSupabaseRows,
-  analysisStateToSupabaseRows,
-  mergeAnalysisRows,
+  import {
+    describeAnalysisSyncCompatibility,
+    parseMissingPossessionEventSyncColumn,
+    stripUnsupportedPossessionEventSyncColumns,
+  } from './lib/analysisSyncCompat.js';
+  import {
+    analysisDeleteEntriesFromStates,
+    analysisDeleteKey,
+    analysisStateFromSupabaseRows,
+    analysisStateToSupabaseRows,
+    mergeAnalysisRows,
 } from './lib/analysisSync.js';
   import {
   LOCAL_STORAGE_SCOPE,
@@ -1097,6 +1102,38 @@ import {
     }
   }
 
+  async function upsertPossessionEventsToSupabase(rows = []) {
+    const payloadRows = (Array.isArray(rows) ? rows : [rows]).filter(Boolean);
+    if (!supabase || payloadRows.length === 0) return { error: null };
+
+    /** @type {Array<'carry_waypoints'|'target_x'|'target_y'>} */
+    const missingColumns = [];
+
+    while (true) {
+      const compatibleRows = missingColumns.length === 0
+        ? payloadRows
+        : payloadRows.map((row) => stripUnsupportedPossessionEventSyncColumns(row, missingColumns));
+      const payload = compatibleRows.length === 1 ? compatibleRows[0] : compatibleRows;
+      const { error } = await supabase.from('possession_events').upsert(payload);
+
+      if (!error) {
+        if (missingColumns.length > 0) {
+          setSyncWarning(
+            describeAnalysisSyncCompatibility(missingColumns),
+            { missing_possession_event_columns: [...missingColumns] },
+          );
+        }
+        return { error: null };
+      }
+
+      const missingColumn = parseMissingPossessionEventSyncColumn(error);
+      if (!missingColumn || missingColumns.includes(missingColumn)) {
+        return { error };
+      }
+      missingColumns.push(missingColumn);
+    }
+  }
+
   async function flushSyncQueue() {
     if (!supabase || !user || !teamId || (!pendingSync.size && !pendingMatchSync.size) || !isOnline) return;
     for (const [id] of [...pendingMatchSync]) {
@@ -1244,7 +1281,7 @@ import {
         if (error) throw error;
       }
       if (payloads.possessionEvents.length > 0) {
-        const { error } = await supabase.from('possession_events').upsert(payloads.possessionEvents);
+        const { error } = await upsertPossessionEventsToSupabase(payloads.possessionEvents);
         if (error) throw error;
       }
       if (payloads.passEvents.length > 0) {
