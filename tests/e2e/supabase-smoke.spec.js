@@ -17,8 +17,10 @@ test.describe('Supabase smoke', () => {
   );
 
   test('can sign in, create a match, save an event, and survive a reload', async ({ page }) => {
+    const runId = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
     const team = process.env.PAIRC_SMOKE_TEAM?.trim() || 'Smoke Team';
-    const opponent = process.env.PAIRC_SMOKE_OPPONENT?.trim() || 'Smoke Opponent';
+    const opponentPrefix = process.env.PAIRC_SMOKE_OPPONENT?.trim() || 'Smoke Opponent';
+    const opponent = `${opponentPrefix} ${runId}`;
     const matchDate = process.env.PAIRC_SMOKE_DATE?.trim() || new Date().toISOString().slice(0, 10);
 
     await page.goto('/');
@@ -26,7 +28,7 @@ test.describe('Supabase smoke', () => {
     await page.getByPlaceholder('Password').fill(smokePassword);
     await page.getByRole('button', { name: /Sign in/i }).click();
 
-    await expect(page.getByRole('button', { name: /Capture/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Capture/i })).toBeVisible({ timeout: 30000 });
     await page.waitForLoadState('networkidle');
 
     await setUpMatch(page, { team, opponent, date: matchDate });
@@ -39,7 +41,7 @@ test.describe('Supabase smoke', () => {
     await expect(page.locator('.outcome-badge').first()).toBeVisible();
 
     await page.reload();
-    await expect(page.getByRole('button', { name: /Capture/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Capture/i })).toBeVisible({ timeout: 30000 });
     await page.getByRole('button', { name: /^Events/i }).click();
     await expect(page.getByRole('cell', { name: opponent })).toBeVisible();
   });

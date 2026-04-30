@@ -43,7 +43,9 @@
     sessionsForPlayer,
   } from './postMatchAnalysisStore.js';
   import {
+    loadAnalysisPreset,
     loadAnalysisUiState,
+    saveAnalysisPreset,
     saveAnalysisUiState,
   } from './analysisUiState.js';
 
@@ -150,7 +152,9 @@
   let analysisCardEl;
   let exportingSnapshot = false;
   let exportFeedback = null;
+  let presetFeedback = '';
   let eventEditPointMode = null;
+  const QUICK_PRESET_NAME = 'Quick review';
 
   const OUTCOME_COLORS = {
     'Score point': '#0f766e',
@@ -204,6 +208,23 @@
       selectedCrossMatchIds: [...selectedCrossMatchIds],
       playerInput,
     };
+  }
+
+  function saveQuickPreset() {
+    if (!storageScope) return;
+    saveAnalysisPreset('possession', storageScope, QUICK_PRESET_NAME, storedViewState());
+    presetFeedback = 'Saved quick review preset.';
+  }
+
+  function applyQuickPreset() {
+    if (!storageScope) return;
+    const preset = loadAnalysisPreset('possession', storageScope, QUICK_PRESET_NAME);
+    if (!preset) {
+      presetFeedback = 'No quick review preset saved yet.';
+      return;
+    }
+    applyViewState({ ...ANALYSIS_VIEW_DEFAULTS, ...preset });
+    presetFeedback = 'Applied quick review preset.';
   }
 
   function nowIso() {
@@ -1906,6 +1927,8 @@
               <button type="button" class:active={viewMode === 'heat'} on:click={() => viewMode = 'heat'}>Heat</button>
             </div>
             <div class="export-actions">
+              <button type="button" on:click={saveQuickPreset} disabled={!storageScope} title="Save the current analysis filters as a quick preset">Save preset</button>
+              <button type="button" on:click={applyQuickPreset} disabled={!storageScope} title="Apply the saved quick preset">Apply preset</button>
               <button type="button" on:click={exportPossessionCSV} disabled={totalEvents === 0} title="Download raw event data as CSV">CSV</button>
               <button type="button" on:click={shareSnapshot} disabled={totalEvents === 0 || exportingSnapshot} title="Share or download a snapshot of this view">
                 {exportingSnapshot ? '...' : 'Snapshot'}
@@ -1915,6 +1938,9 @@
         </div>
         {#if exportFeedback}
           <div class="export-feedback">{exportFeedback}</div>
+        {/if}
+        {#if presetFeedback}
+          <div class="export-feedback">{presetFeedback}</div>
         {/if}
 
         <div class="mode-toggle">

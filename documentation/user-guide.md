@@ -226,3 +226,28 @@ For two analysts on the same match:
 Do not have both analysts logging the same event stream live, or you will create duplicates.
 
 See [`multi-analyst-setup.md`](./multi-analyst-setup.md) for the recommended shared-match setup.
+
+## Launch operating model
+
+The launch build is local-first with optional Supabase auth and sync.
+
+That means:
+
+- every match-day event is saved locally first
+- cloud sync is a convenience and collaboration layer, not the first place data is written
+- if Supabase is not configured, the app runs offline-only
+- if Supabase is configured but access cannot be verified, sign-in waits for a successful access check instead of assuming access
+
+For launch support, treat `npm run test:smoke` as the cloud path proof. Treat `npm run test:e2e` as the local/offline regression suite.
+
+## Accessibility launch checks
+
+Before release, check the core match-day flow with keyboard controls:
+
+- tab to the active match control
+- tab through the main navigation
+- focus the pitch and use arrow keys plus Enter or Space to place a point
+- open and close modal surfaces with their visible controls and Escape where supported
+- confirm Login and Events search fields have visible labels
+
+The automated smoke for this is `npm run test:a11y`.

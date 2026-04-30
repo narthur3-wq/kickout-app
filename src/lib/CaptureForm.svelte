@@ -80,7 +80,7 @@
 
   function outcomeClass(value) {
     if (eventType === 'kickout') {
-      return 'outcome-kickout';
+      return value === selectedTeamName ? 'outcome-retained' : 'outcome-lost';
     }
     return `outcome-${String(value || '').toLowerCase().replace(/\s+/g, '-')}`;
   }
@@ -199,10 +199,10 @@
         class:active={selectedOutcomeOption === option}
         on:click={() => chooseOutcome(option)}
       >
-        {#if selectedOutcomeOption === option}
-          <span class="seg-selected-indicator" aria-hidden="true">Selected</span>
-        {/if}
         {option}
+        {#if selectedOutcomeOption === option}
+          <span class="seg-selected-indicator" aria-hidden="true">On</span>
+        {/if}
       </button>
     {/each}
   </div>

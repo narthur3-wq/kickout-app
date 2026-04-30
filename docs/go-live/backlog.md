@@ -1,110 +1,57 @@
 # Go-Live Backlog
 
-Priority order is based on launch risk first, then user value, then engineering cost.
+Backlog date: 2026-04-30
 
-## Improvement Recommendations
+Priority is based on release truth, launch risk, user value, and implementation cost.
 
-1. Treat access control as a real product boundary: either fail closed or show an explicit degraded state.
-2. Make Supabase smoke a required release signal, not a best-effort manual step.
-3. Reduce shell density through progressive disclosure and targeted component splits.
-4. Keep supportability and multi-analyst guardrails in the product flow, not just in docs.
-5. Expand browser coverage with one non-Chromium lane before broad launch.
+## Resolved In This Tree
 
-## Current Delivery Status
+| ID | Title | Status | Notes |
+| --- | --- | --- | --- |
+| `AUD-BL-01` | Restore `CaptureForm` selected-state contract | done | Component contract restored; unit suite is green. |
+| `AUD-BL-02` | Separate normal E2E from Supabase smoke credentials | done | Normal E2E now runs local/offline by default. |
+| `AUD-BL-03` | Isolate or clean Supabase smoke data | done | Smoke uses a unique per-run opponent name. |
+| `AUD-BL-04` | Re-establish green `check:full` | done | `npm run check:full` passed on 2026-04-30. |
+| `AUD-PL-01` | Replace fail-open configured-cloud access errors with degraded state | done | Configured-cloud lookup failures now fail closed. |
+| `AUD-PL-02` | Add minimum a11y validation | done | `npm run test:a11y` covers the core keyboard path. |
+| `AUD-PL-03` | Route digest/share failures into diagnostics | done | Digest share failures now surface in diagnostics. |
+| `AUD-PL-04` | Confirm launch operating model | done | Release docs now describe the local-first/cloud-optional model. |
+| `AUD-PL-05` | Keep Supabase smoke mandatory and separate | done | Smoke remains explicit in release docs and test flow. |
+| `AUD-FU-02` | Reduce first-install and precache weight | done | Export-only `html2canvas` is no longer precached. |
+| `AUD-NTH-01` | Saved analysis presets | done | Quick preset save/apply added to analysis panels. |
+| `AUD-NTH-03` | Coach handoff export polish | done | Digest panel now includes a quick copy-brief handoff path. |
 
-- Phase 1 is complete in this pass: `AUD-MH-01` through `AUD-MH-04`, plus `AUD-CP-01` through `AUD-CP-03`, are now delivered.
-- Phase 2 is partially delivered: the analysis tabs are lazy-loaded, analysis UI state now persists per scope, and the WebKit smoke lane is wired into CI. The remaining shell decomposition, explicit preset flow, and coach-export polish stay open below.
-- The backlog below remains the complete target map for the product, but the completed items above should not be treated as still needing immediate work.
+## Remaining Post-Launch Improvements
 
-## Launch Blockers
+| ID | Title | Priority | Severity | Category | Impact | Effort | Owner type | Acceptance criteria | Test requirements | File / module refs |
+| --- | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- |
+| `AUD-FU-01` | Split largest app-shell responsibilities | 70 | medium | architecture | Reduces regression risk and review cost. | L | Senior frontend | Auth/session, sync/storage, and import/export are smaller focused modules. | Focused unit/component regression tests. | `src/App.svelte`, `src/lib/*` |
+| `AUD-FU-03` | Long-match performance profiling | 62 | medium | performance / reliability | Hundreds of events can amplify localStorage and derivation cost. | M | Frontend / QA | Large-history flows have measured interaction latency. | Performance smoke or scripted scenario. | `src/App.svelte`, analytics helpers |
+| `AUD-FU-04` | Dependency refresh cadence | 55 | low | maintenance | Package drift is manageable now but should not compound. | M | Frontend / release | Patch/minor updates land in green batches; majors are planned separately. | `check:full` per batch. | `package.json`, `package-lock.json` |
 
-| ID | Title | Priority score | Severity | Category | Impact | Why now | Effort | Owner type | Dependencies | Acceptance criteria | Test requirements | Rollout notes | File / module refs |
-| --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| AUTH-BL-01 | Fail closed on transient access-check errors | 99 | blocker | security / reliability | Release access can be bypassed on a network blip. | A trust boundary should not fail open in a launch app. | S | Full-stack / security | None | Access checks either succeed or fail in a bounded degraded state. | Unit/component test for the degraded path. | Fix before any broader launch signoff. | `src/lib/supabase.js`, `src/App.svelte`, `src/lib/Login.svelte` |
-| AUD-BL-02 | Make Supabase smoke mandatory and repeatable | 95 | blocker | release readiness / operations | Cloud auth/save/reload can be broken without being exercised. | The launch path needs a cloud confidence check, not an optional skip. | S | QA / ops | Smoke credentials, Supabase env | Smoke is runnable and part of the release gate. | End-to-end smoke on a dedicated account. | Document the env and keep it current. | `tests/e2e/supabase-smoke.spec.js`, `README.md`, `documentation/release-checklist.md` |
-| AUD-BL-03 | Align launch docs with the current product surface | 93 | high | product / docs | New users can land in the wrong mental model. | Docs drift is a launch credibility issue, not a cosmetic issue. | S | Product / UX | None | README, user guide, and checklist describe the current tabs and flows. | Doc review plus sanity check against the shell. | Update in one pass to avoid stale fragments. | `README.md`, `documentation/user-guide.md`, `documentation/technical-spec.md`, `documentation/release-checklist.md` |
-| AUD-BL-04 | Add explicit multi-analyst guardrails | 90 | high | functionality / operations | Same-stream duplication can corrupt data. | This is a real live workflow risk. | M | Product / frontend | Workflow rules from ops | The app warns or guides when analysts share responsibility. | E2E or component coverage for the warning path. | Keep the first version simple. | `documentation/technical-spec.md`, `src/App.svelte`, `src/lib/PossessionAnalysisPanel.svelte` |
+## Nice-To-Haves
 
-## Pre-launch Must-Haves
+| ID | Title | Priority | Category | Effort | Notes |
+| --- | --- | ---: | --- | --- | --- |
+| `AUD-NTH-02` | First-use orientation polish | 38 | UX | S | Existing docs and session labels help, but onboarding can still be smoother. |
+| `AUD-FUT-01` | Video-linked event review | 20 | strategic | L | Only if video becomes a real product input. |
+| `AUD-FUT-02` | GPS/workload views | 18 | strategic | L | Over-engineered without reliable tracking data. |
+| `AUD-FUT-03` | ML-assisted tagging | 15 | strategic | L | Over-engineered until the workflow and labels are stable. |
 
-| ID | Title | Priority score | Severity | Category | Impact | Why now | Effort | Owner type | Dependencies | Acceptance criteria | Test requirements | Rollout notes | File / module refs |
-| --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| AUD-MH-01 | Add launch-grade e2e coverage for possession/pass analysis | 88 | high | QA | The newest analysis workflows are too important to leave lightly tested. | The product surface has grown beyond the original live capture flows. | M | QA / frontend | Stable test data | Capture, finalize, filter, and edit analysis flows are covered. | Playwright flow coverage for possession/pass tabs. | Add tests before more analysis polish. | `tests/e2e`, `src/lib/PossessionAnalysisPanel.svelte` |
-| AUD-MH-02 | Expand browser coverage with one WebKit/mobile Safari lane | 84 | medium | QA | Chromium-only coverage leaves browser-specific regressions exposed. | The app is mobile-first and should not lean on one engine only. | M | QA / frontend | Stable e2e baseline | One smaller non-Chromium lane runs on each release. | Browser-matrix or smoke subset covering WebKit. | Keep the lane small and focused. | `playwright.config.js`, `tests/e2e` |
-| AUD-MH-03 | Add support-grade diagnostics export | 83 | medium | reliability / support | Field failures are hard to debug today. | Operational confidence matters at launch. | M | Frontend / ops | None | A user can export diagnostics in a useful bundle. | Unit/component test for formatting and copying. | Keep local storage but add a shared export format. | `src/lib/diagnostics.js`, account/settings UI |
-| AUD-MH-04 | Tighten onboarding idempotency and failure recovery | 82 | high | reliability / backend | Partial onboarding failures can leave operators in a bad state. | Admin flows are production critical. | M | Full-stack | Supabase function access | Retrying onboarding does not leave partial bad state. | Function-level tests or scripted smoke. | Make this safe before public rollout. | `supabase/functions/onboard-user/index.ts` |
+## Quick Wins After Launch
 
-## High-value Follow-ups
-
-| ID | Title | Priority score | Severity | Category | Impact | Why now | Effort | Owner type | Dependencies | Acceptance criteria | Test requirements | Rollout notes | File / module refs |
-| --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| AUD-FU-01 | Split the largest shell responsibilities | 78 | medium | architecture | Reduces regression risk and makes future changes safer. | The shell is already large enough to slow safe iteration. | L | Frontend | None | The largest state and tab logic lives in smaller units. | Component regression coverage around split boundaries. | Do it in slices, not a rewrite. | `src/App.svelte`, `src/lib/PossessionAnalysisPanel.svelte` |
-| AUD-FU-02 | Code split heavy analysis and export paths | 76 | medium | performance | Improves load time and field responsiveness. | The main bundle is already over the warning threshold. | M | Frontend | Shell decomposition helps | Default path loads less code. | Build-size check plus basic UX sanity. | Lazy-load only the heavy tabs. | `src/App.svelte`, `src/lib/PassImpactPanel.svelte`, `src/lib/PossessionAnalysisPanel.svelte` |
-| AUD-FU-03 | Add saved views / presets for common analysis states | 68 | medium | UX | Cuts repetitive filter setup. | Analysts repeat the same views often. | M | Product / frontend | Stable baseline | User can restore a preferred state quickly. | Component tests for preset restore. | Keep scope narrow. | analysis panels |
-| AUD-FU-04 | Improve coach handoff exports | 66 | medium | product | Makes the app more valuable after the live period ends. | The coach handoff is a monetizable moment. | M | Product / frontend | Digest flow stability | A coach-ready summary can be produced with less manual effort. | E2E for export/share path. | Extend, do not replace, the current digest. | `src/lib/DigestPanel.svelte`, export helpers |
-
-## Analysis Follow-Ups
-
-These depend on the retrospective tagging backbone described in `docs/go-live/roadmap.md`.
-
-| ID | Title | Priority score | Severity | Category | Impact | Why now | Effort | Owner type | Dependencies | Acceptance criteria | Test requirements | Rollout notes | File / module refs |
-| --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| AUD-AN-01 | Attack speed vs score rate | 64 | medium | analysis | Shows whether quicker attacks are more efficient. | Useful once conversion and source tags are consistent. | M | Product / frontend | Phase 1 retrospective tagging | Analysts can compare score rate across fast, medium, and slow attack bands. | Unit/component tests for banding and summaries. | Keep it as a retrospective view only. | `src/lib/PossessionAnalysisPanel.svelte`, `src/lib/postMatchAnalysis.js` |
-| AUD-AN-02 | Transition vs settled attack | 63 | medium | analysis | Shows whether regains or recycled play create better chances. | Depends on a clear regain/source split. | M | Product / frontend | Phase 1 retrospective tagging | Analysts can compare conversion for transition and settled possessions. | Component tests for split summaries. | Define transition explicitly in the help text. | `src/lib/PossessionAnalysisPanel.svelte`, `src/lib/liveInsights.js` |
-| AUD-AN-03 | Entry-to-shot conversion | 62 | medium | analysis | Measures whether dangerous entries actually turn into shots. | Useful once zone-based turnover danger is already tagged. | M | Product / frontend | Phase 1 retrospective tagging | Analysts can compare entry counts against eventual shots and scores. | Unit tests for zone and shot aggregation. | Avoid inferring from sparse or broken sequences. | `src/lib/PossessionAnalysisPanel.svelte`, `src/lib/postMatchAnalysis.js` |
-| AUD-AN-04 | Time-to-shot after regain | 61 | medium | analysis | Measures how quickly a regain becomes a shot. | Needs possession timing that is better handled after the first slice lands. | M | Product / frontend | Phase 1 retrospective tagging | Analysts can view median or banded time-to-shot after regain. | Component tests for time buckets and summaries. | Use recorded timestamps only. | `src/lib/PossessionAnalysisPanel.svelte`, `src/lib/liveInsights.js` |
-
-## Cleanup and Polish
-
-| ID | Title | Priority score | Severity | Category | Impact | Why now | Effort | Owner type | Dependencies | Acceptance criteria | Test requirements | Rollout notes | File / module refs |
-| --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| AUD-CP-01 | Reconcile release docs with the actual smoke and support flow | 60 | low | docs / release | Reduces confusion during handoff and support. | Easy to do and easy to neglect. | S | Product | None | Release checklist matches reality. | Manual doc review. | Keep language specific, not aspirational. | `documentation/release-checklist.md`, `README.md` |
-| AUD-CP-02 | Improve empty, loading, and recovery states | 58 | low | UX | Users trust the app more when failures are legible. | These states are common in the field. | S | UX / frontend | None | Important empty states explain the next action. | Component tests for key fallbacks. | Add to the heaviest screens first. | `src/App.svelte`, analysis panels |
-| AUD-CP-03 | Add a smaller first-use help path for orientation and half selection | 55 | low | UX | Reduces first-session mistakes. | The product assumes too much analyst context. | S | Product / frontend | None | Users understand ends, half, and session scope before starting. | Smoke component test. | Keep it short and contextual. | `src/lib/PossessionAnalysisPanel.svelte`, capture UI |
-
-## Future Opportunities
-
-| ID | Title | Priority score | Severity | Category | Impact | Why now | Effort | Owner type | Dependencies | Acceptance criteria | Test requirements | Rollout notes | File / module refs |
-| --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| AUD-FUT-01 | Video-linked event review | 30 | medium | strategic | High insight value if the product strategy later includes clip review. | Only worthwhile if video becomes a real product capability. | L | Product / platform | Video strategy change | Events can be reviewed against clips without manual reconciliation. | Future integration tests. | Do not fake this without real video. | future media layer |
-| AUD-FUT-02 | GPS / movement / workload views | 28 | medium | strategic | High if the product later integrates player tracking. | Only worthwhile if reliable tracking data becomes available. | L | Product / platform | GPS strategy change | Movement or workload views use real tracking inputs. | Future data-quality checks. | Not a near-term need. | future tracking layer |
-| AUD-FUT-03 | ML-assisted tagging or recommendations | 25 | low | strategic | Could speed up analysts later. | Useful only after the workflow and data quality are already strong. | L | Product / ML | Large labeled dataset | Suggestions improve capture speed without harming trust. | Future offline evaluation. | Do not build this before the basics are stable. | future analytics layer |
-
-## Recommended Execution Order
-
-1. AUTH-BL-01
-2. AUD-BL-02
-3. AUD-BL-03
-4. AUD-BL-04
-5. AUD-FU-01
-6. AUD-FU-02
-7. AUD-FU-03
-8. AUD-FU-04
-9. AUD-FUT-01 if video strategy changes
-10. AUD-FUT-02 if GPS strategy changes
-11. AUD-FUT-03 if the team has a large labeled dataset and a real product reason for ML assistance
-
-## Quick Wins Under Half a Day
-
-- Update the README and user guide to reflect the current analysis tabs.
-- Make the launch checklist match the current smoke and diagnostics path.
-- Clarify the multi-analyst operating rule in the docs.
-- Add a support note explaining how to export diagnostics locally.
-- Add a browser-matrix note so release owners know Chromium-only coverage is not enough.
+- Add a light performance scenario for long event histories.
+- Carve auth/session and sync orchestration into smaller modules.
+- Refresh patch and minor dependencies in green batches.
 
 ## Highest-Risk Hidden Gotchas
 
-- Access checks can still fail open on a transient network error.
-- Concurrent analysts can still duplicate the same event stream.
-- Smoke testing can be skipped by missing environment configuration.
-- Onboarding can leave partial admin state if one step fails.
-- The largest shell files make regressions harder to isolate.
+- `src/App.svelte` is still a large concentration point, so low-risk changes there need extra review care.
+- A passing `check:full` is not a replacement for the explicit Supabase smoke signoff.
+- The cloud path is intentionally stricter now; if the access lookup fails, login should wait rather than silently continue.
 
 ## Do-Not-Do List
 
-- Do not treat a fail-open access check as a hard security boundary.
-- Do not start a video rewrite before the manual workflow is trusted.
-- Do not add GPS-style abstractions without a real tracking source.
-- Do not split into microservices or a backend rewrite to solve shell maintainability.
-- Do not add generic AI tagging before the product has stable, well-labeled data.
-- Do not add more visual polish before the launch gates are reliable.
+- Do not pull video, GPS, or ML work into launch-hardening work.
+- Do not broaden cloud-backed E2E until there is server-side cleanup or a stronger isolation story.
+- Do not use app-shell decomposition as an excuse to reopen the now-green release gate.

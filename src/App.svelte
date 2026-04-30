@@ -263,6 +263,11 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     timerRunning = false;
   }
 
+  function resetTimer() {
+    stopTimer();
+    setClock('');
+  }
+
   function toggleTimer() {
     if (timerRunning) {
       stopTimer();
@@ -402,6 +407,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   }
 
   function resetRuntimeState() {
+    stopTimer();
     events = [];
     undoStack = [];
     matches = [];
@@ -3030,7 +3036,24 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
         <button class="timer-btn {timerRunning ? 'running' : ''}" on:click={toggleTimer}>
           {timerRunning ? '⏹' : '▶'}
         </button>
-        <span class="timer-clock">{clock || '0:00'}</span>
+        <button class="timer-reset-btn" on:click={resetTimer} title="Reset clock to 0:00" disabled={timerRunning}>⟳</button>
+        <input
+          class="timer-clock-input"
+          type="text"
+          inputmode="numeric"
+          placeholder="0:00"
+          value={clock}
+          on:focus={() => stopTimer()}
+          on:change={(e) => {
+            const raw = e.currentTarget.value.trim();
+            if (raw === '' || /^\d{1,2}:\d{2}$/.test(raw)) {
+              setClock(raw);
+            } else {
+              e.currentTarget.value = clock;
+            }
+          }}
+          title="Click to set clock (mm:ss)"
+        />
         <span class="timer-status {timerRunning ? 'running' : 'paused'}" aria-live="polite">
           {timerRunning ? 'Running' : 'Paused'}
         </span>
@@ -3122,6 +3145,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
       teamName={team}
       opponentName={opponent}
       phaseLabel={currentPhaseLabel}
+      onDiagnostic={recordDiagnostic}
     />
   </div>
 
@@ -3677,13 +3701,27 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     color: #fff; cursor: pointer; font-family: inherit; transition: all 0.12s; line-height: 1;
   }
   .timer-btn:hover { background: rgba(255,255,255,0.25); }
+  .timer-reset-btn {
+    padding: 6px 10px; border-radius: 7px; font-size: 15px; font-weight: 800;
+    background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18);
+    color: rgba(255,255,255,0.7); cursor: pointer; font-family: inherit; transition: all 0.12s; line-height: 1;
+  }
+  .timer-reset-btn:hover:not(:disabled) { background: rgba(255,255,255,0.22); color: #fff; }
+  .timer-reset-btn:disabled { opacity: 0.35; cursor: not-allowed; }
   .timer-btn.running {
     background: rgba(74,222,128,0.2);
     border-color: rgba(74,222,128,0.45);
   }
-  .timer-clock {
+  .timer-clock-input {
     font-size: 26px; font-weight: 900; color: #fff;
     font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 1;
+    background: transparent; border: none; outline: none;
+    width: 72px; text-align: center; font-family: inherit;
+    cursor: text;
+  }
+  .timer-clock-input::placeholder { color: rgba(255,255,255,0.4); }
+  .timer-clock-input:focus {
+    background: rgba(255,255,255,0.1); border-radius: 6px; padding: 2px 4px;
   }
   .timer-status {
     font-size: 11px;

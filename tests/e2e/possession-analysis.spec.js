@@ -45,18 +45,37 @@ async function startDraftSession(page, playerName, { half = null, attackingTop =
   await page.getByRole('button', { name: /Start draft session/i }).click();
 }
 
+async function clickPitchAt(pitch, xRatio, yRatio) {
+  const box = await pitch.boundingBox();
+  if (!box) throw new Error('Pitch is not visible');
+  await pitch.click({
+    position: {
+      x: Math.round(box.width * xRatio),
+      y: Math.round(box.height * yRatio),
+    },
+  });
+}
+
 async function addPossessionEvent(page, { outcome, assist = false }) {
   const pitch = page.locator('.draft-box').getByRole('application', { name: /GAA pitch/i });
-  await pitch.click();
-  await page.keyboard.press('Enter');
-  await page.keyboard.press('Enter');
+  await clickPitchAt(pitch, 0.35, 0.42);
+  await clickPitchAt(pitch, 0.62, 0.45);
 
   await page.getByRole('button', { name: outcome, exact: true }).click();
   if (assist) {
     await page.getByRole('checkbox', { name: /Assist/i }).check();
   }
 
+  await reviewDraftEvent(page, pitch);
   await page.getByRole('button', { name: /Add draft event/i }).click();
+}
+
+async function reviewDraftEvent(page, pitch) {
+  await page.getByRole('button', { name: /Review event/i }).click();
+  if (await page.getByText(/Tap the destination point/i).isVisible().catch(() => false)) {
+    await clickPitchAt(pitch, 0.78, 0.38);
+  }
+  await expect(page.locator('.detail-card')).toBeVisible();
 }
 
 test('captures, finalizes, and surfaces score involvement across sessions', async ({ page }) => {
@@ -114,23 +133,23 @@ test('captures a carry with a waypoint and logs destination for a kick pass', as
   const pitch = page.locator('.draft-box').getByRole('application', { name: /GAA pitch/i });
 
   // Set receive point
-  await pitch.click();
+  await clickPitchAt(pitch, 0.28, 0.42);
 
   // Add a carry waypoint
   await page.getByRole('button', { name: /Add waypoint/i }).click();
-  await pitch.click();
+  await clickPitchAt(pitch, 0.48, 0.36);
 
   // Set release point
-  await pitch.click();
+  await clickPitchAt(pitch, 0.64, 0.44);
 
   // Choose Kick pass outcome
   await page.getByRole('button', { name: 'Kick pass', exact: true }).click();
 
   // Set destination (required for Kick pass)
-  await pitch.click();
+  await clickPitchAt(pitch, 0.82, 0.35);
 
   // Review and save
-  await page.getByRole('button', { name: /Review event/i }).click();
+  await reviewDraftEvent(page, pitch);
   await expect(page.locator('.detail-card')).toContainText('Waypoints');
   await expect(page.locator('.detail-card')).toContainText('1');
 
@@ -152,18 +171,19 @@ test('carry waypoints survive finalize, page reload, and re-open', async ({ page
   const pitch = page.locator('.draft-box').getByRole('application', { name: /GAA pitch/i });
 
   // Set receive point
-  await pitch.click();
+  await clickPitchAt(pitch, 0.30, 0.42);
 
   // Add a carry waypoint
   await page.getByRole('button', { name: /Add waypoint/i }).click();
-  await pitch.click();
+  await clickPitchAt(pitch, 0.46, 0.36);
 
   // Set release point
-  await pitch.click();
+  await clickPitchAt(pitch, 0.63, 0.44);
 
   // Choose an outcome that does not require a destination
-  await page.getByRole('button', { name: 'Hand pass', exact: true }).click();
+  await page.getByRole('button', { name: 'Score point', exact: true }).click();
 
+  await reviewDraftEvent(page, pitch);
   await page.getByRole('button', { name: /Add draft event/i }).click();
   await expect(page.locator('.draft-box')).toContainText('1 event');
 
@@ -180,8 +200,7 @@ test('carry waypoints survive finalize, page reload, and re-open', async ({ page
   await playerBtn.click();
 
   // Open the saved event
-  const eventCard = page.locator('.event-card').first();
-  await eventCard.click();
+  await page.getByRole('button', { name: /Score point -/i }).first().click();
 
   // The detail panel should show the waypoint count
   await expect(page.locator('.detail-card')).toContainText('Waypoint');
@@ -200,19 +219,20 @@ test('allows editing a saved event receive and release points without deleting i
   await expect(page.getByText('Session finalized.')).toBeVisible();
 
   // Open the saved event for editing
-  const eventCard = page.locator('.event-card').first();
-  await eventCard.click();
+  await page.getByRole('button', { name: /Score point -/i }).first().click();
 
   // The edit section should appear
   await expect(page.locator('.detail-title')).toContainText(/Edit event/i);
 
   // Activate receive-point edit mode
-  await page.getByRole('button', { name: /Edit receive/i }).click();
+  await page.getByRole('button', { name: /Move receive point/i }).click();
 
   // Tap the pitch to update the receive point
-  const analysisPitch = page.locator('.analysis-pitch-frame').getByRole('application', { name: /GAA pitch/i });
-  await analysisPitch.click();
+  const analysisPitch = page.locator('.pitch-frame').getByRole('application', { name: /GAA pitch/i });
+  await clickPitchAt(analysisPitch, 0.42, 0.52);
 
   await page.getByRole('button', { name: /Save changes/i }).click();
-  await expect(page.locator('.detail-title')).toContainText(/Edit event/i);
+  await expect(page.locator('.detail-title')).toBeHidden();
+  await expect(page.locator('.summary-grid')).toContainText('Total events');
+  await expect(page.locator('.summary-grid .emphasis')).toContainText('1');
 });

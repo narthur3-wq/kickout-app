@@ -32,7 +32,9 @@
     sessionsForPlayer,
   } from './postMatchAnalysisStore.js';
   import {
+    loadAnalysisPreset,
     loadAnalysisUiState,
+    saveAnalysisPreset,
     saveAnalysisUiState,
   } from './analysisUiState.js';
 
@@ -69,6 +71,8 @@
   let analysisCardEl;
   let exportingSnapshot = false;
   let exportFeedback = null;
+  let presetFeedback = '';
+  const QUICK_PRESET_NAME = 'Quick review';
 
   const ANALYSIS_VIEW_DEFAULTS = Object.freeze({
     selectedPlayerKey: '',
@@ -149,6 +153,23 @@
       selectedConnectionId,
       playerInput,
     };
+  }
+
+  function saveQuickPreset() {
+    if (!storageScope) return;
+    saveAnalysisPreset('pass', storageScope, QUICK_PRESET_NAME, storedViewState());
+    presetFeedback = 'Saved quick review preset.';
+  }
+
+  function applyQuickPreset() {
+    if (!storageScope) return;
+    const preset = loadAnalysisPreset('pass', storageScope, QUICK_PRESET_NAME);
+    if (!preset) {
+      presetFeedback = 'No quick review preset saved yet.';
+      return;
+    }
+    applyViewState({ ...ANALYSIS_VIEW_DEFAULTS, ...preset });
+    presetFeedback = 'Applied quick review preset.';
   }
 
   function saveState(nextState) {
@@ -763,6 +784,8 @@
           <div class="card-head-right">
             <span>{totalPasses}</span>
             <div class="export-actions">
+              <button type="button" on:click={saveQuickPreset} disabled={!storageScope} title="Save the current analysis filters as a quick preset">Save preset</button>
+              <button type="button" on:click={applyQuickPreset} disabled={!storageScope} title="Apply the saved quick preset">Apply preset</button>
               <button type="button" on:click={exportPassCSV} disabled={totalPasses === 0} title="Download raw pass data as CSV">CSV</button>
               <button type="button" on:click={shareSnapshot} disabled={totalPasses === 0 || exportingSnapshot} title="Share or download a snapshot of this view">
                 {exportingSnapshot ? '...' : 'Snapshot'}
@@ -772,6 +795,9 @@
         </div>
         {#if exportFeedback}
           <div class="export-feedback">{exportFeedback}</div>
+        {/if}
+        {#if presetFeedback}
+          <div class="export-feedback">{presetFeedback}</div>
         {/if}
 
         <div class="player-strip">

@@ -5,10 +5,12 @@
   export let teamName = 'Us';
   export let opponentName = 'Them';
   export let phaseLabel = 'Match';
+  export let onDiagnostic = () => {};
 
   const POSITIVE_KO = new Set(['retained', 'score', 'won']);
   let digestEl;
   let sharing = false;
+  let copyingBrief = false;
   let shareFeedback = null;
 
   function eventTypeOf(event) {
@@ -43,6 +45,34 @@
   $: turnoverNet = (ourTurnovers.won - ourTurnovers.lost) - (theirTurnovers.won - theirTurnovers.lost);
   $: hasTurnovers = ourTurnovers.total + theirTurnovers.total > 0;
   $: scoreMargin = ourScores.total - theirScores.total;
+  $: briefLines = [
+    `${teamName || 'Us'} ${ourScores.goals}-${ourScores.points} / ${opponentName || 'Them'} ${theirScores.goals}-${theirScores.points}`,
+    insights.flow.coachLines[0] || 'Not enough data yet to describe the flow with confidence.',
+    insights.threat.line,
+    insights.opportunity.line,
+    insights.recommendations[0] ? `${insights.recommendations[0].title}: ${insights.recommendations[0].reason}` : 'No strong tactical change yet. Keep monitoring the half.',
+  ].filter(Boolean);
+
+  async function copyBrief() {
+    if (copyingBrief) return;
+    copyingBrief = true;
+    shareFeedback = null;
+    try {
+      await navigator.clipboard.writeText(briefLines.join('\n'));
+      shareFeedback = { type: 'info', message: 'Coach brief copied.' };
+    } catch (error) {
+      onDiagnostic('support', 'Digest coach brief copy failed', {
+        error: error?.message || String(error),
+        teamName,
+        opponentName,
+        phaseLabel,
+        eventCount: events.length,
+      });
+      shareFeedback = { type: 'error', message: 'Could not copy the coach brief on this device.' };
+    } finally {
+      copyingBrief = false;
+    }
+  }
 
   async function shareDigest() {
     if (sharing) return;
@@ -73,6 +103,13 @@
       if (error?.name === 'AbortError') {
         shareFeedback = { type: 'info', message: 'Share cancelled.' };
       } else {
+        onDiagnostic('support', 'Digest share failed', {
+          error: error?.message || String(error),
+          teamName,
+          opponentName,
+          phaseLabel,
+          eventCount: events.length,
+        });
         shareFeedback = {
           type: 'error',
           message: 'Could not generate the digest image on this device. Try again or use the browser download flow.',
@@ -97,9 +134,14 @@
         <h2>{teamName || 'Us'} vs {opponentName || 'Them'}</h2>
         <p>{phaseLabel} summary built for a 3-minute team talk.</p>
       </div>
-      <button class="share-btn" on:click={shareDigest} disabled={sharing}>
-        {sharing ? 'Preparing...' : 'Share image'}
-      </button>
+      <div class="digest-actions">
+        <button class="share-btn secondary" on:click={copyBrief} disabled={copyingBrief}>
+          {copyingBrief ? 'Copying...' : 'Copy brief'}
+        </button>
+        <button class="share-btn" on:click={shareDigest} disabled={sharing}>
+          {sharing ? 'Preparing...' : 'Share image'}
+        </button>
+      </div>
     </section>
 
     {#if shareFeedback}
@@ -292,6 +334,15 @@
     cursor: pointer;
     font-family: inherit;
   }
+  .digest-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .share-btn.secondary {
+    background: #fff;
+    color: #1d4ed8;
+  }
   .share-btn:disabled {
     opacity: 0.6;
     cursor: default;
@@ -463,6 +514,10 @@
     }
     .share-btn {
       width: 100%;
+    }
+    .digest-actions {
+      width: 100%;
+      flex-direction: column;
     }
   }
 </style>

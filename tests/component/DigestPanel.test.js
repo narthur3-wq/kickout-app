@@ -49,6 +49,7 @@ describe('DigestPanel', () => {
   it('shows a visible error if digest image generation fails', async () => {
     const user = userEvent.setup();
     const { events } = buildSimulatedMatchState();
+    const onDiagnostic = vi.fn();
 
     render(DigestPanel, {
       props: {
@@ -56,12 +57,21 @@ describe('DigestPanel', () => {
         teamName: 'Clontarf',
         opponentName: 'Vincents',
         phaseLabel: 'Match (all periods)',
+        onDiagnostic,
       },
     });
 
     await user.click(screen.getByRole('button', { name: /Share image/i }));
 
     expect(await screen.findByText(/Could not generate the digest image on this device/i)).toBeInTheDocument();
+    expect(onDiagnostic).toHaveBeenCalledWith(
+      'support',
+      'Digest share failed',
+      expect.objectContaining({
+        error: 'render failed',
+        eventCount: events.length,
+      })
+    );
   });
 
   it('falls back to download when native share is unavailable', async () => {
@@ -94,6 +104,32 @@ describe('DigestPanel', () => {
     expect(createObjectURLSpy).toHaveBeenCalled();
     expect(revokeObjectURLSpy).toHaveBeenCalled();
     expect(screen.queryByText(/Could not generate the digest image on this device/i)).not.toBeInTheDocument();
+  });
+
+  it('copies a coach brief for handoff', async () => {
+    const user = userEvent.setup();
+    const { events } = buildSimulatedMatchState();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(DigestPanel, {
+      props: {
+        events,
+        teamName: 'Clontarf',
+        opponentName: 'Vincents',
+        phaseLabel: 'Match (all periods)',
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: /Copy brief/i }));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Clontarf'));
+    });
+    expect(screen.getByText(/Coach brief copied/i)).toBeInTheDocument();
   });
 
   it('keeps tactical copy quiet when there is only a tiny sample', () => {

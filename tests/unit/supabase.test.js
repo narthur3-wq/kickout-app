@@ -19,8 +19,10 @@ async function loadSupabaseModule({
   url = '',
   key = '',
   adminEmails = '',
+  disabled = '',
 } = {}) {
   vi.resetModules();
+  vi.stubEnv('VITE_DISABLE_SUPABASE', disabled);
   vi.stubEnv('VITE_SUPABASE_URL', url);
   vi.stubEnv('VITE_SUPABASE_ANON_KEY', key);
   vi.stubEnv('VITE_ADMIN_EMAILS', adminEmails);
@@ -214,7 +216,7 @@ describe('supabase helpers', () => {
     await expect(mod.getUserTeamDetails()).resolves.toEqual({ id: null, name: null });
   });
 
-  it('checks access allowlists and fails open on transient errors', async () => {
+  it('checks access allowlists and fails closed on transient configured-cloud errors', async () => {
     const mod = await loadSupabaseModule({
       url: 'https://project.supabase.co',
       key: 'anon-key',
@@ -241,7 +243,19 @@ describe('supabase helpers', () => {
     const limit = vi.fn().mockRejectedValue(new Error('offline'));
     const select = vi.fn(() => ({ limit }));
     supabaseState.mockClient.from.mockReturnValue({ select });
-    await expect(mod.userHasAccess()).resolves.toBe(true);
+    await expect(mod.userHasAccess()).resolves.toBe(false);
+  });
+
+  it('can explicitly disable Supabase for local E2E even when env vars exist', async () => {
+    const mod = await loadSupabaseModule({
+      url: 'https://project.supabase.co',
+      key: 'anon-key',
+      disabled: '1',
+    });
+
+    expect(mod.supabaseConfigured).toBe(false);
+    expect(mod.supabase).toBeNull();
+    expect(supabaseState.createClientMock).not.toHaveBeenCalled();
   });
 
   it('returns true for offline access checks even without a configured client', async () => {

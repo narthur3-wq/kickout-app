@@ -1,17 +1,26 @@
 import { defineConfig } from '@playwright/test';
 import { readFileSync } from 'fs';
 
-// Load .env.e2e into the test process so smoke credentials are available
-try {
-  for (const line of readFileSync('.env.e2e', 'utf8').split('\n')) {
-    const eq = line.indexOf('=');
-    if (eq > 0 && !line.startsWith('#')) {
-      const key = line.slice(0, eq).trim();
-      const val = line.slice(eq + 1).trim();
-      if (key && !(key in process.env)) process.env[key] = val;
+const shouldLoadSmokeEnv =
+  process.env.PAIRC_LOAD_E2E_ENV === '1' ||
+  process.argv.some((arg) => /supabase-smoke\.spec\.(js|ts)$/.test(arg));
+
+// Only the explicit Supabase smoke run should load cloud credentials. The
+// ordinary E2E suite must stay local/offline so tests do not share backend state.
+if (shouldLoadSmokeEnv) {
+  try {
+    for (const line of readFileSync('.env.e2e', 'utf8').split('\n')) {
+      const eq = line.indexOf('=');
+      if (eq > 0 && !line.startsWith('#')) {
+        const key = line.slice(0, eq).trim();
+        const val = line.slice(eq + 1).trim();
+        if (key && !(key in process.env)) process.env[key] = val;
+      }
     }
-  }
-} catch { /* .env.e2e is optional */ }
+  } catch { /* .env.e2e is optional */ }
+} else {
+  process.env.VITE_DISABLE_SUPABASE = '1';
+}
 
 const commonUse = {
   baseURL: 'http://127.0.0.1:4173',

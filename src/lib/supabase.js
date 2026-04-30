@@ -1,8 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { runWithoutBrowserLock, shouldBypassBrowserAuthLock } from './supabaseAuthLock.js';
 
-const url = import.meta.env.VITE_SUPABASE_URL;
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseDisabled = import.meta.env.VITE_DISABLE_SUPABASE === '1';
+const url = supabaseDisabled ? '' : import.meta.env.VITE_SUPABASE_URL;
+const key = supabaseDisabled ? '' : import.meta.env.VITE_SUPABASE_ANON_KEY;
 const adminEmails = String(import.meta.env.VITE_ADMIN_EMAILS || '')
   .split(',')
   .map((value) => value.trim().toLowerCase())
@@ -82,9 +83,9 @@ export async function userHasAccess() {
     if (error) return false;
     return Array.isArray(data) && data.length > 0;
   } catch {
-    // Network error - fail open so a transient connectivity blip (e.g., mobile signal
-    // drop mid-match) does not sign the user out. The next successful check will deny
-    // access if the user has genuinely been removed from allowed_users.
-    return true;
+    // Offline-only mode is handled above. When Supabase is configured, a failed
+    // access lookup is an unknown authorization state, so keep the user out of
+    // the signed-in cloud path until the check can be retried successfully.
+    return false;
   }
 }

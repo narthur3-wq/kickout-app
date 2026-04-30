@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   clearAnalysisUiState,
+  loadAnalysisPreset,
+  loadAnalysisPresets,
   loadAnalysisUiState,
+  saveAnalysisPreset,
   saveAnalysisUiState,
 } from './analysisUiState.js';
 
@@ -104,6 +107,37 @@ describe('analysisUiState', () => {
 
     it('is a no-op when nothing was stored', () => {
       expect(() => clearAnalysisUiState('possession', 'missing')).not.toThrow();
+    });
+  });
+
+  describe('analysis view presets', () => {
+    it('saves, lists, and loads named presets by panel and scope', () => {
+      saveAnalysisPreset('possession', 'test', 'Coach review', {
+        viewMode: 'heat',
+        selectedHalf: 'second',
+      });
+      saveAnalysisPreset('pass', 'test', 'Coach review', { selectedPlayerKey: 'player:2' });
+
+      expect(loadAnalysisPresets('possession', 'test')).toEqual({
+        'Coach review': {
+          viewMode: 'heat',
+          selectedHalf: 'second',
+        },
+      });
+      expect(loadAnalysisPreset('possession', 'test', 'Coach review')).toEqual({
+        viewMode: 'heat',
+        selectedHalf: 'second',
+      });
+      expect(loadAnalysisPreset('pass', 'test', 'Coach review')).toEqual({
+        selectedPlayerKey: 'player:2',
+      });
+    });
+
+    it('returns empty preset state for corrupt or missing values', () => {
+      localStorage.setItem('ko_analysis_presets:possession:test', 'not-json');
+
+      expect(loadAnalysisPresets('possession', 'test')).toEqual({});
+      expect(loadAnalysisPreset('possession', 'test', 'Missing')).toBeNull();
     });
   });
 });
