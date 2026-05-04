@@ -210,6 +210,54 @@ What the sync indicators mean:
 
 If you see a retry banner, the data is normally still safe locally unless the app explicitly says the save itself failed.
 
+## Tactical Board
+
+The tactical board is a half-time presentation tool. Open it with the **Board** button in the header (only visible when a match is active). It opens as a full-screen overlay above the live match screen. Closing it returns you to exactly where you were — no match state is affected.
+
+### What it does
+
+- Places both teams on a full-pitch diagram (15 vs 15) in default GAA formation
+- Lets you drag players to set positions
+- Lets you draw passes and runs for players on either team
+- Groups those actions into numbered steps
+- Plays them back step by step so you can walk through a pattern live
+
+### Tool modes
+
+- **Select** — drag any player to reposition them
+- **Pass** — tap player A, then tap player B; a dashed arrow is drawn between them
+- **Run** — tap a player to select them (they highlight in yellow), then drag on the pitch to draw a movement path
+
+### Step sequence
+
+Each drawn pass or run is assigned to the current drawing step (shown in the toolbar as "Drawing step N").
+
+Press **+ Next Step** to advance to the next step. This lets you build a sequence — for example: step 1 has a run, step 2 has a pass off that run, step 3 has a response movement from the opposition.
+
+### Playback
+
+Press **▶ Play** to animate step 1. Players with runs animate to their path endpoints; pass arrows show a ball dot travelling to the receiver. When step 1 finishes, playback pauses.
+
+Press **▶ Play** again for step 2, and so on.
+
+**← Back** snaps instantly to the previous step state. **↺ Reset** returns everyone to their pre-play positions without losing the drawn moves.
+
+### Managing the board
+
+- **Undo** — removes the most recently drawn move
+- **Clear** — removes all drawn moves and resets the step counter, keeping player positions
+- **Reset** — removes all moves and returns players to the default formation
+- **Done** — closes the board
+
+### Typical half-time workflow
+
+1. Open the board just before or at half-time
+2. Drag players to reflect the actual positions you saw in the first half
+3. Draw the key pattern you want to address — opponent press shape, your kickout target zone, etc.
+4. Add steps to show how you want to respond
+5. Press Play and walk the coach through it
+6. Close when done
+
 ## Recommended live workflow
 
 For one analyst:

@@ -9,6 +9,7 @@
   import LivePanel from './lib/LivePanel.svelte';
   import CaptureForm from './lib/CaptureForm.svelte';
   import AdminPanel from './lib/AdminPanel.svelte';
+  import TacticalBoard from './lib/TacticalBoard.svelte';
   import {
     analyticsMarkerFill,
     analyticsMarkerRing,
@@ -157,6 +158,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   let possessionAnalysisPanelError = '';
   let passImpactPanelError = '';
   let confirmState = null;
+  let showTacticalBoard = false;
   let activeTab = 'capture';
   let savedFlash = false;
   let pendingSync = new SvelteMap(); // id -> 'upsert' | 'delete'
@@ -1691,6 +1693,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
       disposed = true;
       stopTimer();
       if (noticeTimer) clearTimeout(noticeTimer);
+      if (analysisRealtimeRefreshTimer) clearTimeout(analysisRealtimeRefreshTimer);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       authSubscription?.unsubscribe();
@@ -2810,12 +2813,15 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
       {:else if syncStatus === 'error'}
         <span class="chip error">!</span>
       {/if}
+      {#if activeMatch}
+        <button class="icon-btn" on:click={() => showTacticalBoard = true} title="Open tactical board">Board</button>
+      {/if}
       <button class="icon-btn" title="{wakeLock ? 'Screen locked on' : 'Keep screen on'}"
         on:click={toggleWakeLock}>{wakeLock ? 'Awake' : 'Keep awake'}</button>
       {#if supabaseConfigured && user}
         <div class="account-wrap">
           <button class="avatar-btn" on:click={() => accountOpen = !accountOpen} title={user.email}>
-            {user.email[0].toUpperCase()}
+            {(user.email?.[0] || '?').toUpperCase()}
           </button>
           {#if accountOpen}
             <button class="account-overlay" aria-label="Close account menu" on:click={() => accountOpen = false}></button>
@@ -3322,6 +3328,14 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   {/if}
 
 </div>
+{/if}
+
+{#if showTacticalBoard}
+  <TacticalBoard
+    teamName={activeMatch?.team || team || ''}
+    opponentName={activeMatch?.opponent || opponent || ''}
+    on:close={() => showTacticalBoard = false}
+  />
 {/if}
 
 <style>
