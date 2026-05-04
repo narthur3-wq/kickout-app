@@ -4,6 +4,7 @@
     W, H, svgX, svgY,
     pointerToPitch, easeInOut,
     simplifyPitchPath, defaultPlayers, derivePositionsAtStep,
+    buildStepPositionCache, interpolatePlayerPositions, playerPosition,
   } from './tacticalBoardUtils.js';
 
   export let teamName = 'Home';
@@ -46,13 +47,7 @@
 
   // Cache resolved player positions at each step boundary.
   // Reactive on players + moves. Stable during animation (no edits allowed then).
-  $: stepPositionCache = (() => {
-    const cache = new Map([[0, derivePositionsAtStep(players, moves, 0)]]);
-    for (let s = 1; s <= maxStep; s++) {
-      cache.set(s, derivePositionsAtStep(players, moves, s));
-    }
-    return cache;
-  })();
+  $: stepPositionCache = buildStepPositionCache(players, moves, maxStep);
 
   // Animated player positions — interpolates between adjacent step cache entries.
   // When not animating, show positions relevant to the current drawing context so that
@@ -60,32 +55,25 @@
   $: visualPositions = (() => {
     if (!animating) {
       const displayStep = Math.max(playhead, Math.max(0, currentStep - 1));
-      return stepPositionCache.get(displayStep) || derivePositionsAtStep(players, moves, displayStep);
+      return stepPositionCache[displayStep] || derivePositionsAtStep(players, moves, displayStep);
     }
-    const before = stepPositionCache.get(animatingStep - 1);
-    const after  = stepPositionCache.get(animatingStep);
-    if (!before || !after) return stepPositionCache.get(playhead) || new Map();
-    const t = easeInOut(animProgress);
-    const result = new Map();
-    for (const p of players) {
-      const b = before.get(p.id) || { x: p.baseX, y: p.baseY };
-      const a = after.get(p.id)  || { x: p.baseX, y: p.baseY };
-      result.set(p.id, { x: b.x + (a.x - b.x) * t, y: b.y + (a.y - b.y) * t });
-    }
-    return result;
+    const before = stepPositionCache[animatingStep - 1];
+    const after  = stepPositionCache[animatingStep];
+    if (!before || !after) return stepPositionCache[playhead] || {};
+    return interpolatePlayerPositions(players, before, after, easeInOut(animProgress));
   })();
 
   // Ball dots that travel along pass lines during animation.
   $: passAnimDots = (() => {
     if (!animating) return [];
-    const before = stepPositionCache.get(animatingStep - 1);
+    const before = stepPositionCache[animatingStep - 1];
     if (!before) return [];
     const t = easeInOut(animProgress);
     return moves
       .filter(m => m.type === 'pass' && m.step === animatingStep)
       .flatMap(m => {
-        const fp = before.get(m.fromPlayerId);
-        const tp = before.get(m.toPlayerId);
+        const fp = before[m.fromPlayerId];
+        const tp = before[m.toPlayerId];
         if (!fp || !tp) return [];
         return [{ id: m.id, x: fp.x + (tp.x - fp.x) * t, y: fp.y + (tp.y - fp.y) * t }];
       });
@@ -207,7 +195,7 @@
     if (!pt) return null;
     let best = null, bestDist = Infinity;
     for (const p of players) {
-      const pos = visualPositions.get(p.id) || { x: p.baseX, y: p.baseY };
+      const pos = playerPosition(visualPositions, p);
       const dx = (pos.y - pt.y) * W;
       const dy = (pos.x - pt.x) * H;
       const d = Math.hypot(dx, dy);
@@ -255,8 +243,8 @@
         rawPath = [];
         isDrawingRun = false;
       } else if (runArmedPlayerId && !isDrawingRun) {
-        const startPos = (stepPositionCache.get(Math.max(0, currentStep - 1)) || new Map())
-          .get(runArmedPlayerId) || { x: 0.5, y: 0.5 };
+        const startPositions = stepPositionCache[Math.max(0, currentStep - 1)] || {};
+        const startPos = startPositions[runArmedPlayerId] || { x: 0.5, y: 0.5 };
         isDrawingRun = true;
         rawPath = [startPos, pt];
       }
@@ -406,7 +394,6 @@
 
   <!-- Pitch -->
   <div class="tb-pitch-wrap">
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <svg
       bind:this={svgEl}
       viewBox="0 0 145 90"
@@ -500,9 +487,9 @@
 
       <!-- Pass arrows (dashed line with arrowhead, shortened to clear player circles) -->
       {#each moves.filter(m => m.type === 'pass') as m (m.id)}
-        {@const before = stepPositionCache.get(m.step - 1) || stepPositionCache.get(0) || new Map()}
-        {@const fp = before.get(m.fromPlayerId)}
-        {@const tp = before.get(m.toPlayerId)}
+        {@const before = stepPositionCache[m.step - 1] || stepPositionCache[0] || {}}
+        {@const fp = before[m.fromPlayerId]}
+        {@const tp = before[m.toPlayerId]}
         {#if fp && tp}
           {@const color = teamColor(m.team)}
           {@const op = moveOpacity(m)}
@@ -523,7 +510,7 @@
 
       <!-- ── Players ───────────────────────────────────────────────────── -->
       {#each players as p (p.id)}
-        {@const pos = visualPositions.get(p.id) || { x: p.baseX, y: p.baseY }}
+        {@const pos = playerPosition(visualPositions, p)}
         {@const cx = svgX(pos)}
         {@const cy2 = svgY(pos)}
         {@const isHome = p.team === 'home'}

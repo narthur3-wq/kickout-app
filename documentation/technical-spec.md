@@ -37,7 +37,7 @@ High-level shape:
 - `src/lib/AdminPanel.svelte`
   - lightweight admin/onboarding operations
 - `src/lib/TacticalBoard.svelte`
-  - full-screen half-time tactical board overlay
+  - lazy-loaded full-screen half-time/training tactical board overlay
   - drag-to-position players, draw passes and runs, step-based playback
 - `src/lib/tacticalBoardUtils.js`
   - pure utilities for the tactical board: coordinate conversion, Ramer-Douglas-Peucker path simplification, default GAA formations, per-step position derivation

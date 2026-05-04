@@ -261,6 +261,23 @@ describe('App shell auth and sync', () => {
     expect(screen.getByRole('button', { name: 'Pass Destination' })).toBeInTheDocument();
   });
 
+  it('keeps the tactical board visible and usable without an active match', async () => {
+    const session = { user: { id: 'user-board', email: 'analyst@example.com' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    await renderApp();
+
+    const user = userEvent.setup();
+    const boardTab = await screen.findByRole('button', { name: 'Board' });
+    expect(boardTab).toBeInTheDocument();
+
+    await user.click(boardTab);
+
+    expect(await screen.findByRole('application', { name: /Tactical board/i })).toBeInTheDocument();
+    expect(screen.getByText(/Home \(red\) vs Away \(white\)/i)).toBeInTheDocument();
+  });
+
   it('shows a paused sync warning and blocks saving when the user has no team assignment', async () => {
     const session = { user: { id: 'user-2', email: 'analyst@example.com' } };
     mockState.sessionState.session = session;

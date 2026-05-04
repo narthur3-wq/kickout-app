@@ -9,7 +9,6 @@
   import LivePanel from './lib/LivePanel.svelte';
   import CaptureForm from './lib/CaptureForm.svelte';
   import AdminPanel from './lib/AdminPanel.svelte';
-  import TacticalBoard from './lib/TacticalBoard.svelte';
   import {
     analyticsMarkerFill,
     analyticsMarkerRing,
@@ -155,8 +154,11 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   let PassImpactPanel = null;
   let loadingPossessionAnalysisPanel = false;
   let loadingPassImpactPanel = false;
+  let TacticalBoard = null;
+  let loadingTacticalBoard = false;
   let possessionAnalysisPanelError = '';
   let passImpactPanelError = '';
+  let tacticalBoardError = '';
   let confirmState = null;
   let showTacticalBoard = false;
   let activeTab = 'capture';
@@ -2375,6 +2377,35 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     activeTab = nextTab;
   }
 
+  async function loadTacticalBoard() {
+    if (TacticalBoard || loadingTacticalBoard) return;
+    loadingTacticalBoard = true;
+    tacticalBoardError = '';
+    try {
+      const module = await import('./lib/TacticalBoard.svelte');
+      TacticalBoard = module.default;
+    } catch (error) {
+      tacticalBoardError = 'Could not load the tactical board. Please reload and try again.';
+      recordDiagnostic('support', 'Failed to load tactical board', {
+        error: error?.message || String(error),
+      });
+      showNotice('error', tacticalBoardError, 7000);
+    } finally {
+      loadingTacticalBoard = false;
+    }
+  }
+
+  function openTacticalBoard() {
+    accountOpen = false;
+    showSummary = false;
+    showTacticalBoard = true;
+    void loadTacticalBoard();
+  }
+
+  function closeTacticalBoard() {
+    showTacticalBoard = false;
+  }
+
   async function loadAnalysisPanel(kind) {
     if (kind === 'possession') {
       if (PossessionAnalysisPanel || loadingPossessionAnalysisPanel) return;
@@ -2813,9 +2844,6 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
       {:else if syncStatus === 'error'}
         <span class="chip error">!</span>
       {/if}
-      {#if team}
-        <button class="icon-btn" on:click={() => showTacticalBoard = true} title="Open tactical board">Board</button>
-      {/if}
       <button class="icon-btn" title="{wakeLock ? 'Screen locked on' : 'Keep screen on'}"
         on:click={toggleWakeLock}>{wakeLock ? 'Awake' : 'Keep awake'}</button>
       {#if supabaseConfigured && user}
@@ -2885,6 +2913,9 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     </button>
     <button type="button" class="tab-btn {activeTab === 'digest' ? 'active' : ''}" on:click={() => switchTab('digest')}>
       Digest
+    </button>
+    <button type="button" class="tab-btn {showTacticalBoard ? 'active' : ''}" on:click={openTacticalBoard}>
+      Board
     </button>
     <button type="button" class="tab-btn {activeTab === 'analysis-possession' ? 'active' : ''}" on:click={() => switchTab('analysis-possession')}>
       Possession
@@ -3331,11 +3362,25 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
 {/if}
 
 {#if showTacticalBoard}
-  <TacticalBoard
-    teamName={activeMatch?.team || team || ''}
-    opponentName={activeMatch?.opponent || opponent || ''}
-    on:close={() => showTacticalBoard = false}
-  />
+  {#if tacticalBoardError}
+    <div class="board-loading-overlay">
+      <div class="board-loading-card">
+        <p>{tacticalBoardError}</p>
+        <button type="button" on:click={closeTacticalBoard}>Close</button>
+      </div>
+    </div>
+  {:else if loadingTacticalBoard || !TacticalBoard}
+    <div class="board-loading-overlay">
+      <div class="board-loading-card">Loading tactical board...</div>
+    </div>
+  {:else}
+    <svelte:component
+      this={TacticalBoard}
+      teamName={activeMatch?.team || team || 'Home'}
+      opponentName={activeMatch?.opponent || opponent || 'Away'}
+      on:close={closeTacticalBoard}
+    />
+  {/if}
 {/if}
 
 <style>
@@ -3539,6 +3584,32 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     padding: 4px 10px; border-radius: 7px; font-size: 12px;
     background: rgba(255,255,255,0.75); border: 1px solid rgba(0,0,0,0.08);
   }
+
+  .board-loading-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: #0f1923;
+    color: #fff;
+  }
+  .board-loading-card {
+    display: grid;
+    gap: 12px;
+    max-width: 360px;
+    padding: 18px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.16);
+    color: rgba(255,255,255,0.88);
+    font-size: 14px;
+    font-weight: 700;
+    text-align: center;
+  }
+  .board-loading-card p { margin: 0; }
 
   .confirm-backdrop {
     position: fixed; inset: 0; z-index: 260; background: rgba(15, 23, 42, 0.45);

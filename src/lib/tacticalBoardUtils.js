@@ -90,15 +90,41 @@ export function defaultPlayers() {
 }
 
 // ── Derived playback positions ────────────────────────────────────────────
-// Returns Map<playerId, {x, y}> reflecting player positions after all run
+// Returns { [playerId]: {x, y} } reflecting player positions after all run
 // moves in steps 1..upToStep have been fully resolved. Pass moves are visual
 // only and never reposition players.
 export function derivePositionsAtStep(players, moves, upToStep) {
-  const pos = new Map(players.map(p => [p.id, { x: p.baseX, y: p.baseY }]));
+  const pos = Object.fromEntries(players.map(p => [p.id, { x: p.baseX, y: p.baseY }]));
   for (const m of moves) {
     if (m.step > upToStep || m.type !== 'run') continue;
     const end = m.path[m.path.length - 1];
-    if (end) pos.set(m.playerId, { x: end.x, y: end.y });
+    if (end) pos[m.playerId] = { x: end.x, y: end.y };
   }
   return pos;
+}
+
+export function buildStepPositionCache(players, moves, maxStep) {
+  const cache = { 0: derivePositionsAtStep(players, moves, 0) };
+  for (let step = 1; step <= maxStep; step++) {
+    cache[step] = derivePositionsAtStep(players, moves, step);
+  }
+  return cache;
+}
+
+export function playerPosition(positions, player) {
+  return positions?.[player.id] || { x: player.baseX, y: player.baseY };
+}
+
+export function interpolatePlayerPositions(players, before = {}, after = {}, t = 0) {
+  return Object.fromEntries(players.map((player) => {
+    const start = playerPosition(before, player);
+    const end = playerPosition(after, player);
+    return [
+      player.id,
+      {
+        x: start.x + (end.x - start.x) * t,
+        y: start.y + (end.y - start.y) * t,
+      },
+    ];
+  }));
 }

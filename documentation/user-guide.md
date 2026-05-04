@@ -212,7 +212,7 @@ If you see a retry banner, the data is normally still safe locally unless the ap
 
 ## Tactical Board
 
-The tactical board is a half-time presentation tool. Open it with the **Board** button in the header (only visible when a match is active). It opens as a full-screen overlay above the live match screen. Closing it returns you to exactly where you were — no match state is affected.
+The tactical board is a half-time and training presentation tool. Open it with the **Board** tab, which is always available even when no match is active. It opens as a full-screen overlay above the app. Closing it returns you to exactly where you were — no match state is affected.
 
 ### What it does
 
