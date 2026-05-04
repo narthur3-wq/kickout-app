@@ -2813,7 +2813,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
       {:else if syncStatus === 'error'}
         <span class="chip error">!</span>
       {/if}
-      {#if activeMatch}
+      {#if team}
         <button class="icon-btn" on:click={() => showTacticalBoard = true} title="Open tactical board">Board</button>
       {/if}
       <button class="icon-btn" title="{wakeLock ? 'Screen locked on' : 'Keep screen on'}"
