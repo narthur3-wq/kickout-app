@@ -162,6 +162,9 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   let confirmState = null;
   let showTacticalBoard = false;
   let activeTab = 'capture';
+  let showAdmin = false;
+  let lastIngameTab = 'live';
+  let lastToolsTab = 'analysis-possession';
   let savedFlash = false;
   let pendingSync = new SvelteMap(); // id -> 'upsert' | 'delete'
   let pendingMatchSync = new SvelteMap(); // id -> 'upsert'
@@ -233,8 +236,17 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
 
   // Scroll the active tab button into view whenever the tab changes
   $: activeTab, tick().then(() => {
-    document.querySelector('.tab-btn.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    document.querySelector('.section-btn.active, .tab-btn.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   });
+
+  $: activeSection = ['live','digest','kickouts','shots','turnovers','events'].includes(activeTab)
+    ? 'ingame'
+    : ['analysis-possession','analysis-pass'].includes(activeTab)
+      ? 'tools'
+      : 'capture';
+  $: if (['live','digest','kickouts','shots','turnovers','events'].includes(activeTab)) lastIngameTab = activeTab;
+  $: if (['analysis-possession','analysis-pass'].includes(activeTab)) lastToolsTab = activeTab;
+  $: recentMatchEvents = [...currentMatchEvents].sort((a,b) => (b.created_at||'').localeCompare(a.created_at||'')).slice(0,5);
 
   // ── Clock timer ───────────────────────────────────────────────────────────
   let timerRunning = false;
@@ -2846,6 +2858,9 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
       {/if}
       <button class="icon-btn" title="{wakeLock ? 'Screen locked on' : 'Keep screen on'}"
         on:click={toggleWakeLock}>{wakeLock ? 'Awake' : 'Keep awake'}</button>
+      {#if isAdminUser}
+        <button class="icon-btn" title="Admin settings" on:click={() => showAdmin = !showAdmin}>⚙</button>
+      {/if}
       {#if supabaseConfigured && user}
         <div class="account-wrap">
           <button class="avatar-btn" on:click={() => accountOpen = !accountOpen} title={user.email}>
@@ -2905,40 +2920,32 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
 
   <!-- Tab bar -->
   <nav class="tab-bar">
-    <button type="button" class="tab-btn {activeTab === 'capture' ? 'active' : ''}" on:click={() => switchTab('capture')}>
-      Capture{#if editingId}&nbsp;<span class="edit-dot">●</span>{/if}
-    </button>
-    <button type="button" class="tab-btn {activeTab === 'live' ? 'active' : ''}" on:click={() => switchTab('live')}>
-      Live
-    </button>
-    <button type="button" class="tab-btn {activeTab === 'digest' ? 'active' : ''}" on:click={() => switchTab('digest')}>
-      Digest
-    </button>
-    <button type="button" class="tab-btn {showTacticalBoard ? 'active' : ''}" on:click={openTacticalBoard}>
-      Board
-    </button>
-    <button type="button" class="tab-btn {activeTab === 'analysis-possession' ? 'active' : ''}" on:click={() => switchTab('analysis-possession')}>
-      Possession
-    </button>
-    <button type="button" class="tab-btn {activeTab === 'analysis-pass' ? 'active' : ''}" on:click={() => switchTab('analysis-pass')}>
-      Pass Destination
-    </button>
-    <button type="button" class="tab-btn {activeTab === 'kickouts' ? 'active' : ''}" on:click={() => switchTab('kickouts')}>
-      Kickouts
-    </button>
-    <button type="button" class="tab-btn {activeTab === 'shots' ? 'active' : ''}" on:click={() => switchTab('shots')}>
-      Shots
-    </button>
-    <button type="button" class="tab-btn {activeTab === 'turnovers' ? 'active' : ''}" on:click={() => switchTab('turnovers')}>
-      Turnovers
-    </button>
-    <button type="button" class="tab-btn {activeTab === 'events' ? 'active' : ''}" on:click={() => switchTab('events')}>
-      Events <span class="tab-count">{events.length}</span>
-    </button>
-    {#if isAdminUser}
-      <button type="button" class="tab-btn {activeTab === 'admin' ? 'active' : ''}" on:click={() => switchTab('admin')}>
-        Admin
+    <div class="tab-sections">
+      <button type="button" class="section-btn {activeSection === 'capture' ? 'active' : ''}" on:click={() => switchTab('capture')}>
+        Capture{#if editingId}&nbsp;<span class="edit-dot">●</span>{/if}
       </button>
+      <button type="button" class="section-btn {activeSection === 'ingame' ? 'active' : ''}" on:click={() => switchTab(lastIngameTab)}>
+        In-game
+      </button>
+      <button type="button" class="section-btn {activeSection === 'tools' ? 'active' : ''}" on:click={() => switchTab(lastToolsTab)}>
+        Tools
+      </button>
+    </div>
+    {#if activeSection === 'ingame'}
+    <div class="tab-sub-bar">
+      <button type="button" class="tab-btn {activeTab === 'live' ? 'active' : ''}" on:click={() => switchTab('live')}>Live</button>
+      <button type="button" class="tab-btn {activeTab === 'digest' ? 'active' : ''}" on:click={() => switchTab('digest')}>Digest</button>
+      <button type="button" class="tab-btn {activeTab === 'kickouts' ? 'active' : ''}" on:click={() => switchTab('kickouts')}>Kickouts</button>
+      <button type="button" class="tab-btn {activeTab === 'shots' ? 'active' : ''}" on:click={() => switchTab('shots')}>Shots</button>
+      <button type="button" class="tab-btn {activeTab === 'turnovers' ? 'active' : ''}" on:click={() => switchTab('turnovers')}>Turnovers</button>
+      <button type="button" class="tab-btn {activeTab === 'events' ? 'active' : ''}" on:click={() => switchTab('events')}>Events <span class="tab-count">{events.length}</span></button>
+    </div>
+    {:else if activeSection === 'tools'}
+    <div class="tab-sub-bar">
+      <button type="button" class="tab-btn {activeTab === 'analysis-possession' ? 'active' : ''}" on:click={() => switchTab('analysis-possession')}>Possession</button>
+      <button type="button" class="tab-btn {activeTab === 'analysis-pass' ? 'active' : ''}" on:click={() => switchTab('analysis-pass')}>Pass Destination</button>
+      <button type="button" class="tab-btn {showTacticalBoard ? 'active' : ''}" on:click={openTacticalBoard}>Board</button>
+    </div>
     {/if}
   </nav>
 
@@ -3146,6 +3153,26 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
 
   </div><!-- /capture-layout -->
 
+  {#if recentMatchEvents.length > 0}
+  <div class="recent-events-strip">
+    <div class="re-header">
+      <span class="re-label">Recent events</span>
+      <span class="re-hint">Tap to edit</span>
+    </div>
+    {#each recentMatchEvents as ev (ev.id)}
+      <button class="recent-event-row" on:click={() => loadToForm(ev)}>
+        <span class="re-type-tag re-type-{ev.event_type}">{ev.event_type === 'kickout' ? 'KO' : ev.event_type === 'shot' ? 'Shot' : 'TO'}</span>
+        <span class="re-period">{ev.period || ''}</span>
+        {#if ev.clock}<span class="re-clock">{ev.clock}</span>{/if}
+        <span class="re-team">{ev.team || ''}</span>
+        <span class="re-outcome">{ev.outcome || ''}</span>
+        {#if ev.target_player}<span class="re-muted">{ev.target_player}</span>{/if}
+        {#if ev.turnover_lost_player}<span class="re-muted">Lost: {ev.turnover_lost_player}</span>{/if}
+      </button>
+    {/each}
+  </div>
+  {/if}
+
   {:else}
   {#if activeTab === 'live' || activeTab === 'digest' || activeTab === 'kickouts' || activeTab === 'shots' || activeTab === 'turnovers'}
   <div class="phase-scope-banner">
@@ -3304,21 +3331,33 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
       on:delete={(e) => delEvent(e.detail)}
     />
   </div>
-  {:else}
-  <div class="full-panel">
-    <AdminPanel
-      {user}
-      {teamName}
-      {storageScope}
-      {analysisRefreshToken}
-      on:diagnostic={() => diagnostics = loadDiagnostics()}
-    on:rosterchange={() => {
-      loadAnalysisRoster(storageScope);
-      scheduleAnalysisSync();
-    }}
-  />
-  </div>
   {/if}
+  {/if}
+
+  <!-- Admin settings overlay -->
+  {#if showAdmin && isAdminUser}
+    <div class="modal-backdrop" role="presentation"
+      on:click={() => showAdmin = false}
+      on:keydown={(e) => e.key === 'Escape' && (showAdmin = false)}>
+      <div class="modal-card admin-modal-card" role="dialog" aria-modal="true" tabindex="0" aria-label="Admin settings"
+        on:click|stopPropagation on:keydown|stopPropagation>
+        <div class="modal-header">
+          <span class="modal-title">Settings</span>
+          <button class="modal-close" on:click={() => showAdmin = false}>✕</button>
+        </div>
+        <AdminPanel
+          {user}
+          {teamName}
+          {storageScope}
+          {analysisRefreshToken}
+          on:diagnostic={() => diagnostics = loadDiagnostics()}
+          on:rosterchange={() => {
+            loadAnalysisRoster(storageScope);
+            scheduleAnalysisSync();
+          }}
+        />
+      </div>
+    </div>
   {/if}
 
   <!-- Backup reminder toast -->
@@ -3527,11 +3566,31 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
 
   /* ── Tab bar ── */
   .tab-bar {
-    flex-shrink: 0; display: flex; background: #fff; border-bottom: 1px solid #e5e7eb;
-    overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 0 4px;
-    position: relative; z-index: 8; overscroll-behavior-x: contain;
+    flex-shrink: 0; display: flex; flex-direction: column; background: #fff;
+    border-bottom: 1px solid #e5e7eb; position: relative; z-index: 8;
   }
-  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-sections {
+    display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; padding: 0 4px; overscroll-behavior-x: contain;
+  }
+  .tab-sections::-webkit-scrollbar { display: none; }
+  .section-btn {
+    flex: none; padding: 0 22px; height: 46px; font-size: 14px; font-weight: 700;
+    border: none; border-bottom: 3px solid transparent; margin-bottom: -1px;
+    background: none; cursor: pointer; color: #b0b8c4;
+    display: flex; align-items: center; gap: 5px;
+    white-space: nowrap; transition: color 0.15s;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  }
+  .section-btn.active { color: #1c3f8a; border-bottom-color: #1c3f8a; }
+  .section-btn:hover:not(.active) { color: #4b5563; }
+  .tab-sub-bar {
+    display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; padding: 0 4px; overscroll-behavior-x: contain;
+    background: #f9fafb; border-top: 1px solid #f3f4f6;
+  }
+  .tab-sub-bar::-webkit-scrollbar { display: none; }
+  .tab-sub-bar .tab-btn { height: 38px; font-size: 12px; padding: 0 12px; }
   .tab-btn {
     flex: none; padding: 0 16px; height: 44px; font-size: 13px; font-weight: 600;
     border: none; border-bottom: 3px solid transparent; margin-bottom: -1px;
@@ -3546,6 +3605,35 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   .tab-count { background: #f3f4f6; color: #b0b8c4; font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 99px; }
   .tab-btn.active .tab-count { background: #dbeafe; color: #1e40af; }
   .edit-dot { color: #f59e0b; font-size: 10px; }
+
+  .recent-events-strip { border-top: 1px solid #e5e7eb; background: #fafafa; }
+  .re-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 16px 4px;
+  }
+  .re-label { font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; }
+  .re-hint { font-size: 11px; color: #d1d5db; }
+  .recent-event-row {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 8px 16px; background: none; border: none; border-bottom: 1px solid #f3f4f6;
+    cursor: pointer; text-align: left; font-family: inherit;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  }
+  .recent-event-row:hover { background: #f3f4f6; }
+  .recent-event-row:last-child { border-bottom: none; }
+  .re-type-tag {
+    flex-shrink: 0; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+  }
+  .re-type-kickout { background: #dbeafe; color: #1e40af; }
+  .re-type-shot { background: #dcfce7; color: #166534; }
+  .re-type-turnover { background: #fef3c7; color: #92400e; }
+  .re-period { font-size: 11px; color: #9ca3af; font-weight: 600; flex-shrink: 0; }
+  .re-clock { font-size: 11px; color: #9ca3af; flex-shrink: 0; }
+  .re-team { font-size: 12px; font-weight: 700; color: #374151; flex-shrink: 0; }
+  .re-outcome { font-size: 12px; color: #374151; flex: 1; }
+  .re-muted { font-size: 11px; color: #9ca3af; }
+
+  .admin-modal-card { max-width: 480px; max-height: 80vh; overflow-y: auto; }
 
   .phase-scope-banner {
     display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
