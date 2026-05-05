@@ -26,6 +26,7 @@
   let saveStatus = 'Not saved yet';
   let hydrated = false;
   let loadedBoardKey = null;
+  let settingsOpen = false;
 
   // ── Tool ────────────────────────────────────────────────────────────────
   let tool = 'select'; // 'select' | 'pass' | 'run' | 'shot' | 'pen'
@@ -546,8 +547,10 @@
   }
 
   // ── Rendering helpers ─────────────────────────────────────────────────────
-  const HOME_COLOR = '#c41230';
-  const AWAY_COLOR = '#f1f5f9';
+  const HOME_COLOR = '#c81f32';
+  const AWAY_COLOR = '#f2c94c';
+  const MOVE_COLOR = '#2f7de1';
+  const SHOT_COLOR = '#f59e0b';
   const PEN_COLORS = [
     { label: 'Yellow', value: '#facc15' },
     { label: 'Blue', value: '#60a5fa' },
@@ -561,13 +564,12 @@
     { value: 'right', label: 'Right half' },
   ];
 
-  function teamColor(team) { return team === 'home' ? HOME_COLOR : AWAY_COLOR; }
   function teamTextColor(team) { return team === 'home' ? '#fff' : '#111'; }
 
-  function moveOpacity(m) {
-    if (m.step <= playhead) return 0.85;
-    if (m.step === currentStep || m.step === animatingStep) return 0.78;
-    return 0.28;
+  function moveStrokeOpacity(m) {
+    if (m.step <= playhead) return 0.82;
+    if (m.step === currentStep || m.step === animatingStep) return 0.72;
+    return 0.24;
   }
 
   function arrowHead(x1, y1, x2, y2, size = 2.6) {
@@ -610,7 +612,7 @@
     exportingSnapshot = true;
     try {
       const html2canvas = (await import('html2canvas')).default;
-      const canvas = await html2canvas(boardEl, { backgroundColor: '#0f1923', scale: 2, useCORS: true });
+      const canvas = await html2canvas(boardEl, { backgroundColor: '#1b2d25', scale: 2, useCORS: true });
       const url = canvas.toDataURL('image/png');
       const a = document.createElement('a');
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
@@ -646,96 +648,59 @@
 </script>
 
 <div class="tb-overlay" bind:this={boardEl}>
-  <!-- Toolbar -->
   <div class="tb-toolbar">
-    <div class="tb-section">
-      <span class="tb-section-label">Tools</span>
-      <div class="tb-btn-group">
-        <button class="tb-btn" class:active={tool === 'select'} on:click={() => switchTool('select')} disabled={animating}>Select</button>
-        <button class="tb-btn" class:active={tool === 'pass'} on:click={() => switchTool('pass')} disabled={animating}>Pass</button>
-        <button class="tb-btn" class:active={tool === 'run'} on:click={() => switchTool('run')} disabled={animating}>Run</button>
-        <button class="tb-btn" class:active={tool === 'shot'} on:click={() => switchTool('shot')} disabled={animating}>Shot</button>
-        <button class="tb-btn" class:active={tool === 'pen'} on:click={() => switchTool('pen')} disabled={animating}>Pen</button>
+    <div class="tb-toolbar-main">
+      <div class="tb-cluster tb-tools">
+        <span class="tb-section-label">Tools</span>
+        <div class="tb-btn-group">
+          <button class="tb-btn tb-tool-btn" class:active={tool === 'select'} on:click={() => switchTool('select')} disabled={animating}>Select</button>
+          <button class="tb-btn tb-tool-btn" class:active={tool === 'pass'} on:click={() => switchTool('pass')} disabled={animating}>Pass</button>
+          <button class="tb-btn tb-tool-btn" class:active={tool === 'run'} on:click={() => switchTool('run')} disabled={animating}>Run</button>
+          <button class="tb-btn tb-tool-btn" class:active={tool === 'shot'} on:click={() => switchTool('shot')} disabled={animating}>Shot</button>
+          <button class="tb-btn tb-tool-btn" class:active={tool === 'pen'} on:click={() => switchTool('pen')} disabled={animating}>Pen</button>
+          <button class="tb-btn tb-undo-btn" on:click={handleUndo} disabled={(moves.length === 0 && penStrokes.length === 0) || animating}>Undo</button>
+        </div>
+      </div>
+
+      <div class="tb-cluster tb-playback">
+        <span class="tb-section-label">Playback</span>
+        <div class="tb-btn-group">
+          <button class="tb-btn" on:click={handleBack} disabled={!canBack}>Back</button>
+          <button class="tb-btn tb-play" on:click={animating ? handlePause : handlePlay} disabled={!animating && !canPlay}>
+            {animating ? 'Pause' : 'Play'}
+          </button>
+          <button class="tb-btn" on:click={handleForward} disabled={!canForward}>Forward</button>
+          <span class="tb-step-info">
+            {#if animating}
+              {animatingStep}/{maxStep}
+            {:else}
+              {playhead}/{maxStep}
+            {/if}
+          </span>
+        </div>
+      </div>
+
+      <div class="tb-cluster tb-view">
+        <span class="tb-section-label">View</span>
+        <div class="tb-segmented" aria-label="Pitch view">
+          {#each PITCH_VIEWS as option (option.value)}
+            <button
+              type="button"
+              class="tb-segment-btn"
+              class:active={pitchView === option.value}
+              on:click={() => pitchView = option.value}
+              disabled={animating}
+            >{option.label}</button>
+          {/each}
+        </div>
       </div>
     </div>
 
-    <div class="tb-section">
-      <span class="tb-section-label">Pen</span>
-      <div class="tb-btn-group">
-        {#each PEN_COLORS as color (color.value)}
-          <button
-            type="button"
-            class="tb-color-btn"
-            class:active={penColor === color.value}
-            style={`--pen-color:${color.value}`}
-            aria-label={`Use ${color.label} pen`}
-            on:click={() => penColor = color.value}
-            disabled={animating}
-          ></button>
-        {/each}
-        <button class="tb-btn" on:click={handleClearInk} disabled={penStrokes.length === 0 || animating}>Clear ink</button>
-      </div>
-    </div>
-
-    <div class="tb-section tb-playback">
-      <span class="tb-section-label">Playback</span>
-      <div class="tb-btn-group">
-        <button class="tb-btn" on:click={handleBack} disabled={!canBack}>Back</button>
-        <button class="tb-btn tb-play" on:click={animating ? handlePause : handlePlay} disabled={!animating && !canPlay}>
-          {animating ? 'Pause' : 'Play'}
-        </button>
-        <button class="tb-btn" on:click={handleForward} disabled={!canForward}>Forward</button>
-        <button class="tb-btn" on:click={handleReset} disabled={!animating && playhead === 0}>Reset</button>
-      </div>
-      <span class="tb-step-info">
-        {#if animating}
-          {animatingStep}/{maxStep}
-        {:else}
-          {playhead}/{maxStep}
-        {/if}
-      </span>
-      <div class="tb-speed-group" aria-label="Playback speed">
-        {#each SPEED_OPTIONS as speed (speed)}
-          <button
-            type="button"
-            class="tb-speed-btn"
-            class:active={playbackSpeed === speed}
-            on:click={() => playbackSpeed = speed}
-            disabled={animating}
-          >{speed}x</button>
-        {/each}
-      </div>
-    </div>
-
-    <div class="tb-section tb-step-draw">
-      <span class="tb-section-label">Step {currentStep}</span>
-      <button class="tb-btn" on:click={advanceStep} disabled={animating || !moves.some(m => m.step === currentStep)} title="Start drawing the next step">Next Step</button>
-    </div>
-
-    <div class="tb-section">
-      <span class="tb-section-label">View</span>
-      <div class="tb-speed-group" aria-label="Pitch view">
-        {#each PITCH_VIEWS as option (option.value)}
-          <button
-            type="button"
-            class="tb-speed-btn"
-            class:active={pitchView === option.value}
-            on:click={() => pitchView = option.value}
-            disabled={animating}
-          >{option.label}</button>
-        {/each}
-      </div>
-    </div>
-
-    <div class="tb-section tb-manage">
-      <span class="tb-section-label">Actions</span>
-      <div class="tb-btn-group">
-        <button class="tb-btn" on:click={handleUndo} disabled={(moves.length === 0 && penStrokes.length === 0) || animating}>Undo</button>
-        <button class="tb-btn" on:click={handleClearMoves} disabled={moves.length === 0 || animating}>Clear moves</button>
-        <button class="tb-btn tb-reset-btn" on:click={handleResetFormation} disabled={animating}>Reset</button>
-        <button class="tb-btn" on:click={exportSnapshot} disabled={exportingSnapshot}>PNG</button>
-        <button class="tb-btn tb-done" on:click={() => dispatch('close')}>Close Board</button>
-      </div>
+    <div class="tb-toolbar-actions">
+      <button class="tb-btn tb-settings-btn" class:active={settingsOpen} on:click={() => settingsOpen = !settingsOpen}>
+        Settings
+      </button>
+      <button class="tb-btn tb-done" on:click={() => dispatch('close')}>Close Board</button>
     </div>
   </div>
 
@@ -745,19 +710,80 @@
     <span>{saveStatus} - View: {pitchViewLabel()}</span>
   </div>
 
-  <!-- Pitch -->
-  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (custom SVG board exposes keyboard controls) -->
-  <div
-    class="tb-pitch-wrap"
-    role="application"
-    tabindex="0"
-    aria-label="Tactical board. In select mode, bracket keys choose a player and arrow keys move them."
-    on:pointerdown={onPointerDown}
-    on:pointermove={onPointerMove}
-    on:pointerup={onPointerUp}
-    on:pointercancel={onPointerUp}
-    on:keydown={onBoardKeyDown}
-  >
+  <div class="tb-board-body" class:settings-open={settingsOpen}>
+    {#if settingsOpen}
+      <aside class="tb-side-panel" aria-label="Tactical board settings">
+        <section class="tb-side-section">
+          <h2>Board Settings</h2>
+          <p>Less-used controls stay here so the pitch remains the focus.</p>
+        </section>
+
+        <section class="tb-side-section">
+          <h3>Pen</h3>
+          <div class="tb-color-row">
+            {#each PEN_COLORS as color (color.value)}
+              <button
+                type="button"
+                class="tb-color-btn"
+                class:active={penColor === color.value}
+                style={`--pen-color:${color.value}`}
+                aria-label={`Use ${color.label} pen`}
+                on:click={() => penColor = color.value}
+                disabled={animating}
+              ></button>
+            {/each}
+          </div>
+          <button class="tb-btn tb-panel-btn" on:click={handleClearInk} disabled={penStrokes.length === 0 || animating}>Clear ink</button>
+        </section>
+
+        <section class="tb-side-section">
+          <h3>Sequence</h3>
+          <div class="tb-side-row">
+            <span>Drawing step</span>
+            <strong>{currentStep}</strong>
+          </div>
+          <button class="tb-btn tb-panel-btn" on:click={advanceStep} disabled={animating || !moves.some(m => m.step === currentStep)} title="Start drawing the next step">Next Step</button>
+          <div class="tb-side-label">Playback speed</div>
+          <div class="tb-segmented tb-segmented-panel" aria-label="Playback speed">
+            {#each SPEED_OPTIONS as speed (speed)}
+              <button
+                type="button"
+                class="tb-segment-btn"
+                class:active={playbackSpeed === speed}
+                on:click={() => playbackSpeed = speed}
+                disabled={animating}
+              >{speed}x</button>
+            {/each}
+          </div>
+          <button class="tb-btn tb-panel-btn" on:click={handleReset} disabled={!animating && playhead === 0}>Reset playback</button>
+        </section>
+
+        <section class="tb-side-section">
+          <h3>Output</h3>
+          <button class="tb-btn tb-panel-btn" on:click={exportSnapshot} disabled={exportingSnapshot}>Export PNG</button>
+        </section>
+
+        <section class="tb-side-section tb-danger-section">
+          <h3>Clear</h3>
+          <button class="tb-btn tb-panel-btn" on:click={handleClearMoves} disabled={moves.length === 0 || animating}>Clear moves</button>
+          <button class="tb-btn tb-panel-btn tb-reset-btn" on:click={handleResetFormation} disabled={animating}>Reset formation</button>
+        </section>
+      </aside>
+    {/if}
+
+    <!-- Pitch -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (custom SVG board exposes keyboard controls) -->
+    <div
+      class="tb-pitch-wrap"
+      role="application"
+      tabindex="0"
+      aria-label="Tactical board. In select mode, bracket keys choose a player and arrow keys move them."
+      on:pointerdown={onPointerDown}
+      on:pointermove={onPointerMove}
+      on:pointerup={onPointerUp}
+      on:pointercancel={onPointerUp}
+      on:keydown={onBoardKeyDown}
+    >
     <svg
       bind:this={svgEl}
       viewBox={viewBox}
@@ -773,57 +799,70 @@
         <clipPath id="tb-rd-clip" clipPathUnits="userSpaceOnUse">
           <rect x="0" y="0" width={W - L20} height={H} />
         </clipPath>
+        <linearGradient id="tb-pitch-surface" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#517d4e" />
+          <stop offset="100%" stop-color="#436f43" />
+        </linearGradient>
+        <radialGradient id="tb-home-token" cx="35%" cy="28%" r="75%">
+          <stop offset="0%" stop-color="#df3346" />
+          <stop offset="100%" stop-color={HOME_COLOR} />
+        </radialGradient>
+        <radialGradient id="tb-away-token" cx="35%" cy="28%" r="75%">
+          <stop offset="0%" stop-color="#ffe071" />
+          <stop offset="100%" stop-color={AWAY_COLOR} />
+        </radialGradient>
+        <filter id="tb-token-shadow" x="-40%" y="-40%" width="180%" height="180%">
+          <feDropShadow dx="0.18" dy="0.36" stdDeviation="0.42" flood-color="#102016" flood-opacity="0.36" />
+        </filter>
       </defs>
 
       <!-- ── Pitch geometry ─────────────────────────────────────────── -->
-      <rect x="0" y="0" width={W} height={H} fill="#3d7642" />
-      <rect x="0"     y="0" width={W / 2} height={H} fill="rgba(0,0,0,0.04)" />
-      <rect x={W*3/4} y="0" width={W / 4} height={H} fill="rgba(0,0,0,0.025)" />
-      <rect x="0"     y="0" width={W / 4} height={H} fill="rgba(0,0,0,0.025)" />
+      <rect x="0" y="0" width={W} height={H} fill="url(#tb-pitch-surface)" />
+      <rect x="0" y="0" width={W} height={H} fill="rgba(17,50,30,0.08)" />
 
       <rect x="0.5" y="0.5" width={W - 1} height={H - 1}
-        fill="none" stroke="rgba(255,255,255,0.92)" stroke-width="1.2"
+        fill="none" stroke="rgba(246,244,226,0.78)" stroke-width="0.78"
         vector-effect="non-scaling-stroke" />
 
       <line x1={W/2} y1="0" x2={W/2} y2={H}
-        stroke="rgba(255,255,255,0.88)" stroke-width="1.1"
+        stroke="rgba(246,244,226,0.62)" stroke-width="0.68"
         vector-effect="non-scaling-stroke" />
 
       {#each [L13, L20, L45, L65] as d (d)}
-        {@const op = d === L65 ? 0.62 : d === L13 ? 0.52 : 0.72}
-        <line x1={d}   y1="0" x2={d}   y2={H} stroke={`rgba(255,255,255,${op})`} stroke-width="0.9" vector-effect="non-scaling-stroke" />
-        <line x1={W-d} y1="0" x2={W-d} y2={H} stroke={`rgba(255,255,255,${op})`} stroke-width="0.9" vector-effect="non-scaling-stroke" />
+        {@const op = d === L65 ? 0.42 : d === L13 ? 0.36 : 0.52}
+        <line x1={d}   y1="0" x2={d}   y2={H} stroke={`rgba(246,244,226,${op})`} stroke-width="0.56" vector-effect="non-scaling-stroke" />
+        <line x1={W-d} y1="0" x2={W-d} y2={H} stroke={`rgba(246,244,226,${op})`} stroke-width="0.56" vector-effect="non-scaling-stroke" />
       {/each}
 
       <!-- Goals -->
       <rect x="0"       y={cy - SMALL_W/2} width={SMALL_D} height={SMALL_W}
-        fill="rgba(196,18,48,0.35)" stroke="rgba(255,255,255,0.88)" stroke-width="1.0" vector-effect="non-scaling-stroke" />
+        fill="rgba(43,75,46,0.42)" stroke="rgba(246,244,226,0.62)" stroke-width="0.7" vector-effect="non-scaling-stroke" />
       <rect x={W - SMALL_D} y={cy - SMALL_W/2} width={SMALL_D} height={SMALL_W}
-        fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.88)" stroke-width="1.0" vector-effect="non-scaling-stroke" />
+        fill="rgba(43,75,46,0.42)" stroke="rgba(246,244,226,0.62)" stroke-width="0.7" vector-effect="non-scaling-stroke" />
       <line x1="0" y1={cy - SMALL_W/2} x2="0" y2={cy + SMALL_W/2}
-        stroke="#c41230" stroke-width="3" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+        stroke={HOME_COLOR} stroke-width="2.1" stroke-linecap="round" vector-effect="non-scaling-stroke" />
       <line x1={W} y1={cy - SMALL_W/2} x2={W} y2={cy + SMALL_W/2}
-        stroke="#1c3f8a" stroke-width="3" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+        stroke={AWAY_COLOR} stroke-width="2.1" stroke-linecap="round" vector-effect="non-scaling-stroke" />
 
       <!-- 40m arcs -->
       <g clip-path="url(#tb-field-clip)">
-        <circle cx="0"  cy={cy} r={R_40} fill="none" stroke="rgba(255,255,255,0.65)" stroke-width="1.0" vector-effect="non-scaling-stroke" />
-        <circle cx={W} cy={cy} r={R_40} fill="none" stroke="rgba(255,255,255,0.65)" stroke-width="1.0" vector-effect="non-scaling-stroke" />
+        <circle cx="0"  cy={cy} r={R_40} fill="none" stroke="rgba(246,244,226,0.44)" stroke-width="0.58" vector-effect="non-scaling-stroke" />
+        <circle cx={W} cy={cy} r={R_40} fill="none" stroke="rgba(246,244,226,0.44)" stroke-width="0.58" vector-effect="non-scaling-stroke" />
       </g>
 
       <!-- D arcs -->
       <g clip-path="url(#tb-ld-clip)">
-        <circle cx={L20}     cy={cy} r={R_D} fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.1" vector-effect="non-scaling-stroke" />
+        <circle cx={L20}     cy={cy} r={R_D} fill="none" stroke="rgba(246,244,226,0.58)" stroke-width="0.66" vector-effect="non-scaling-stroke" />
       </g>
       <g clip-path="url(#tb-rd-clip)">
-        <circle cx={W - L20} cy={cy} r={R_D} fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.1" vector-effect="non-scaling-stroke" />
+        <circle cx={W - L20} cy={cy} r={R_D} fill="none" stroke="rgba(246,244,226,0.58)" stroke-width="0.66" vector-effect="non-scaling-stroke" />
       </g>
 
       <!-- Team labels -->
-      <text x="6" y="5.5" font-size="4" font-weight="700" fill="rgba(255,255,255,0.55)" pointer-events="none" style="user-select:none">
+      <text x="5" y="4.2" font-size="2.45" font-weight="800" fill="rgba(246,244,226,0.34)" pointer-events="none" style="user-select:none">
         {teamName || 'Home'}
       </text>
-      <text x={W - 6} y="5.5" font-size="4" font-weight="700" fill="rgba(255,255,255,0.55)" text-anchor="end" pointer-events="none" style="user-select:none">
+      <text x={W - 5} y="4.2" font-size="2.45" font-weight="800" fill="rgba(246,244,226,0.34)" text-anchor="end" pointer-events="none" style="user-select:none">
         {opponentName || 'Away'}
       </text>
 
@@ -857,16 +896,15 @@
 
       <!-- Run paths (dashed lines with arrowhead at endpoint) -->
       {#each moves.filter(m => m.type === 'run') as m (m.id)}
-        {@const color = teamColor(m.team)}
-        {@const op = moveOpacity(m)}
+        {@const op = moveStrokeOpacity(m)}
         {@const pts = toSvgPoints(m.path)}
         {@const last = m.path[m.path.length - 1]}
         {@const prev = m.path[m.path.length - 2] || m.path[0]}
         {@const runArrow = arrowHead(svgX(prev), svgY(prev), svgX(last), svgY(last))}
-        <polyline points={pts} fill="none" stroke={color} stroke-width="1.8"
-          stroke-dasharray="3.5 2" stroke-linecap="round"
+        <polyline points={pts} fill="none" stroke={MOVE_COLOR} stroke-width="1.35"
+          stroke-dasharray="2.4 1.9" stroke-linecap="round" stroke-linejoin="round"
           opacity={op} vector-effect="non-scaling-stroke" />
-        <polygon points={runArrow} fill={color} opacity={op} />
+        <polygon points={runArrow} fill={MOVE_COLOR} opacity={op} />
       {/each}
 
       <!-- Pass arrows (dashed line with arrowhead, shortened to clear player circles) -->
@@ -875,13 +913,12 @@
         {@const fp = before[m.fromPlayerId]}
         {@const tp = before[m.toPlayerId]}
         {#if fp && tp}
-          {@const color = teamColor(m.team)}
-          {@const op = moveOpacity(m)}
-          {@const seg = shortenLine(svgX(fp), svgY(fp), svgX(tp), svgY(tp), 5)}
+          {@const op = moveStrokeOpacity(m)}
+          {@const seg = shortenLine(svgX(fp), svgY(fp), svgX(tp), svgY(tp), 4.1)}
           <line x1={seg.x1} y1={seg.y1} x2={seg.x2} y2={seg.y2}
-            stroke={color} stroke-width="1.8" stroke-dasharray="4 2.5"
+            stroke={MOVE_COLOR} stroke-width="1.55"
             stroke-linecap="round" opacity={op} vector-effect="non-scaling-stroke" />
-          <polygon points={arrowHead(seg.x1, seg.y1, seg.x2, seg.y2)} fill={color} opacity={op} />
+          <polygon points={arrowHead(seg.x1, seg.y1, seg.x2, seg.y2, 2.75)} fill={MOVE_COLOR} opacity={op} />
         {/if}
       {/each}
 
@@ -891,19 +928,19 @@
         {@const from = before[m.playerId]}
         {@const target = shotTargetFor(m, before)}
         {#if from && target}
-          {@const op = moveOpacity(m)}
+          {@const op = moveStrokeOpacity(m)}
           {@const seg = shortenLine(svgX(from), svgY(from), svgX(target), svgY(target), 4)}
           <line x1={seg.x1} y1={seg.y1} x2={seg.x2} y2={seg.y2}
-            stroke="#f59e0b" stroke-width="2.1" stroke-linecap="round"
+            stroke={SHOT_COLOR} stroke-width="1.7" stroke-linecap="round"
             opacity={op} vector-effect="non-scaling-stroke" />
-          <polygon points={arrowHead(seg.x1, seg.y1, seg.x2, seg.y2, 3.1)} fill="#f59e0b" opacity={op} />
+          <polygon points={arrowHead(seg.x1, seg.y1, seg.x2, seg.y2, 2.95)} fill={SHOT_COLOR} opacity={op} />
         {/if}
       {/each}
 
       <!-- Ball dots travelling along pass and shot lines during animation -->
       {#each ballAnimDots as dot (dot.id)}
-        <circle cx={svgX(dot)} cy={svgY(dot)} r="2.2"
-          fill="white" stroke="rgba(0,0,0,0.5)" stroke-width="0.6"
+        <circle cx={svgX(dot)} cy={svgY(dot)} r="1.65"
+          fill="#f8fafc" stroke="rgba(15,23,42,0.58)" stroke-width="0.45"
           vector-effect="non-scaling-stroke" />
       {/each}
 
@@ -916,27 +953,32 @@
         {@const highlighted = selectedPlayerId === p.id || runArmedPlayerId === p.id || passFirstPlayerId === p.id || shotPlayerId === p.id || draggingPlayerId === p.id}
         {#if highlighted}
           <circle
-            cx={cx} cy={cy2} r="4.35"
+            cx={cx} cy={cy2} r="3.95"
             fill="none"
-            stroke="#fbbf24"
-            stroke-width="1.05"
+            stroke="#7dd3fc"
+            stroke-width="0.85"
+            opacity="0.95"
             vector-effect="non-scaling-stroke"
           />
         {/if}
         <circle
-          cx={cx} cy={cy2} r="3.75"
-          fill={isHome ? HOME_COLOR : AWAY_COLOR}
-          stroke={isHome ? 'rgba(255,255,255,0.9)' : 'rgba(30,30,30,0.6)'}
-          stroke-width="0.7"
+          cx={cx} cy={cy2} r="3.15"
+          fill={isHome ? 'url(#tb-home-token)' : 'url(#tb-away-token)'}
+          stroke={isHome ? 'rgba(92,13,25,0.82)' : 'rgba(99,72,14,0.82)'}
+          stroke-width="0.62"
+          filter="url(#tb-token-shadow)"
           vector-effect="non-scaling-stroke"
         />
         <text
-          x={cx} y={cy2}
+          x={cx} y={cy2 + 0.05}
           text-anchor="middle" dominant-baseline="central"
-          font-size="2.95" font-weight="800"
+          font-size="2.48" font-weight="850"
           fill={teamTextColor(p.team)}
+          stroke={isHome ? 'rgba(0,0,0,0.22)' : 'rgba(255,255,255,0.2)'}
+          stroke-width="0.28"
+          paint-order="stroke"
           pointer-events="none"
-          style="user-select:none"
+          style="user-select:none;letter-spacing:0"
         >{p.number}</text>
       {/each}
 
@@ -944,167 +986,210 @@
       {#if isDrawingRun && rawPath.length >= 2}
         <polyline
           points={toSvgPoints(rawPath)}
-          fill="none" stroke="rgba(251,191,36,0.75)" stroke-width="1.8"
-          stroke-dasharray="3 2" stroke-linecap="round"
+          fill="none" stroke={MOVE_COLOR} stroke-width="1.35"
+          stroke-dasharray="2.4 1.9" stroke-linecap="round" stroke-linejoin="round"
+          opacity="0.72"
           vector-effect="non-scaling-stroke"
         />
       {/if}
     </svg>
   </div>
+  </div>
 </div>
 
 <style>
   .tb-overlay {
+    --tb-bg: #1b2d25;
+    --tb-bg-deep: #14241d;
+    --tb-panel: #eef4ea;
+    --tb-panel-strong: #ffffff;
+    --tb-panel-line: rgba(45,72,55,0.18);
+    --tb-ink: #1c3227;
+    --tb-muted: rgba(28,50,39,0.66);
+    --tb-red: #c81f32;
+    --tb-yellow: #f2c94c;
+    --tb-blue: #2f7de1;
     position: fixed;
     inset: 0;
     z-index: 1000;
-    background: #0f1923;
+    background:
+      radial-gradient(circle at 50% 0%, rgba(79,119,79,0.24), transparent 42%),
+      var(--tb-bg-deep);
     display: flex;
     flex-direction: column;
     touch-action: none;
+    color: var(--tb-ink);
   }
 
   .tb-toolbar {
     flex-shrink: 0;
     display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 7px 10px;
-    background: #0f1923;
-    border-bottom: 2px solid #c41230;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    background: linear-gradient(180deg, #f4f7ef, #e7f0e4);
+    border-bottom: 1px solid rgba(31,55,42,0.18);
+    box-shadow: 0 8px 22px rgba(7,18,13,0.2);
+  }
+
+  .tb-toolbar-main,
+  .tb-toolbar-actions,
+  .tb-cluster,
+  .tb-btn-group,
+  .tb-segmented,
+  .tb-color-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .tb-toolbar-main {
+    flex: 1;
+    gap: 12px;
+    min-width: 0;
     flex-wrap: wrap;
   }
 
-  .tb-section {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 34px;
+  .tb-toolbar-actions {
+    gap: 8px;
+    flex-shrink: 0;
   }
 
-  .tb-section + .tb-section {
-    padding-left: 8px;
-    border-left: 1px solid rgba(255,255,255,0.15);
+  .tb-cluster {
+    gap: 8px;
+    min-height: 38px;
+  }
+
+  .tb-cluster + .tb-cluster {
+    padding-left: 12px;
+    border-left: 1px solid var(--tb-panel-line);
   }
 
   .tb-section-label {
     font-size: 10px;
-    font-weight: 600;
-    color: rgba(255,255,255,0.4);
+    font-weight: 800;
+    color: rgba(28,50,39,0.48);
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     white-space: nowrap;
   }
 
-  .tb-btn-group,
-  .tb-speed-group {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex-wrap: wrap;
+  .tb-btn-group {
+    gap: 5px;
   }
 
   .tb-btn {
-    padding: 6px 10px;
+    min-height: 34px;
+    padding: 7px 11px;
     font-size: 12px;
-    font-weight: 700;
-    border-radius: 6px;
-    border: 1px solid rgba(255,255,255,0.18);
-    background: rgba(255,255,255,0.08);
-    color: rgba(255,255,255,0.85);
+    font-weight: 800;
+    border-radius: 8px;
+    border: 1px solid rgba(44,72,55,0.2);
+    background: rgba(255,255,255,0.76);
+    color: var(--tb-ink);
     cursor: pointer;
     white-space: nowrap;
-    min-height: 32px;
-    transition: background 0.12s, color 0.12s;
+    box-shadow: 0 1px 2px rgba(15,35,24,0.08);
+    transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.12s;
     -webkit-tap-highlight-color: transparent;
   }
 
+  .tb-btn:not(:disabled):hover {
+    border-color: rgba(47,125,225,0.4);
+    box-shadow: 0 2px 7px rgba(15,35,24,0.12);
+  }
+
+  .tb-btn:not(:disabled):active {
+    transform: translateY(1px);
+  }
+
   .tb-btn:disabled {
-    opacity: 0.35;
+    opacity: 0.46;
     cursor: default;
+    box-shadow: none;
   }
 
   .tb-btn.active {
-    background: #c41230;
-    border-color: #c41230;
+    background: var(--tb-red);
+    border-color: rgba(105,14,28,0.36);
     color: #fff;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.16), 0 2px 8px rgba(119,18,32,0.22);
   }
 
-  .tb-btn:not(:disabled):not(.active):active {
-    background: rgba(255,255,255,0.16);
+  .tb-tool-btn.active {
+    background: var(--tb-red);
+    color: #fff;
   }
 
   .tb-play {
-    background: #1c3f8a;
-    border-color: #1c3f8a;
+    min-width: 66px;
+    background: var(--tb-blue);
+    border-color: rgba(22,76,155,0.38);
     color: #fff;
-    min-width: 64px;
+    box-shadow: 0 2px 8px rgba(47,125,225,0.22);
   }
 
-  .tb-play:not(:disabled):active {
-    background: #1a3577;
+  .tb-undo-btn {
+    color: #374151;
+    background: rgba(255,255,255,0.54);
   }
 
   .tb-done {
-    background: #4ade80;
-    border-color: #4ade80;
-    color: #052e16;
-    font-weight: 800;
+    background: #dff5e4;
+    border-color: rgba(34,133,77,0.26);
+    color: #14532d;
   }
 
-  .tb-reset-btn {
-    color: rgba(255,180,0,0.9);
-    border-color: rgba(255,180,0,0.35);
+  .tb-settings-btn.active {
+    background: #20392d;
+    border-color: #20392d;
+    color: #fff;
   }
 
   .tb-step-info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
+    min-height: 28px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: rgba(28,50,39,0.08);
+    color: rgba(28,50,39,0.72);
     font-size: 12px;
-    font-weight: 700;
-    color: rgba(255,255,255,0.7);
-    min-width: 44px;
+    font-weight: 800;
     text-align: center;
     font-variant-numeric: tabular-nums;
   }
 
-  .tb-speed-btn {
+  .tb-segmented {
+    gap: 2px;
+    padding: 3px;
+    border-radius: 9px;
+    background: rgba(28,50,39,0.08);
+    border: 1px solid rgba(28,50,39,0.08);
+  }
+
+  .tb-segment-btn {
     min-height: 28px;
-    padding: 5px 8px;
-    border: 1px solid rgba(255,255,255,0.16);
-    border-radius: 6px;
-    background: rgba(255,255,255,0.06);
-    color: rgba(255,255,255,0.78);
+    padding: 5px 9px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: rgba(28,50,39,0.72);
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 800;
     cursor: pointer;
     white-space: nowrap;
   }
 
-  .tb-speed-btn.active {
-    background: rgba(250,204,21,0.18);
-    border-color: rgba(250,204,21,0.6);
-    color: #fde68a;
+  .tb-segment-btn.active {
+    background: #fff;
+    color: var(--tb-blue);
+    box-shadow: 0 1px 5px rgba(15,35,24,0.14);
   }
 
-  .tb-speed-btn:disabled {
-    opacity: 0.35;
-    cursor: default;
-  }
-
-  .tb-color-btn {
-    width: 30px;
-    height: 30px;
-    border-radius: 999px;
-    border: 2px solid rgba(255,255,255,0.2);
-    background: var(--pen-color);
-    cursor: pointer;
-    box-shadow: inset 0 0 0 2px rgba(15,25,35,0.45);
-  }
-
-  .tb-color-btn.active {
-    border-color: #fff;
-  }
-
-  .tb-color-btn:disabled {
+  .tb-segment-btn:disabled {
     opacity: 0.35;
     cursor: default;
   }
@@ -1115,15 +1200,16 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    min-height: 34px;
+    padding: 7px 16px;
+    background: rgba(16,34,26,0.92);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    color: rgba(241,245,238,0.74);
     font-size: 13px;
-    color: rgba(255,255,255,0.66);
-    padding: 6px 12px;
-    background: #0c141c;
-    min-height: 30px;
   }
 
   .tb-hint strong {
-    color: rgba(255,255,255,0.92);
+    color: rgba(249,250,247,0.96);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1131,20 +1217,159 @@
 
   .tb-hint span {
     flex-shrink: 0;
-    color: rgba(255,255,255,0.5);
+    color: rgba(241,245,238,0.56);
     font-size: 12px;
+  }
+
+  .tb-board-body {
+    flex: 1;
+    display: flex;
+    gap: 12px;
+    min-height: 0;
+    padding: 12px;
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.04), transparent 38%),
+      var(--tb-bg);
+  }
+
+  .tb-side-panel {
+    width: 270px;
+    flex-shrink: 0;
+    overflow: auto;
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 12px;
+    background: linear-gradient(180deg, #f6f8f3, #e8f0e3);
+    box-shadow: 0 14px 32px rgba(4,16,10,0.28);
+    padding: 12px;
+  }
+
+  .tb-side-section {
+    display: grid;
+    gap: 9px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(28,50,39,0.12);
+  }
+
+  .tb-side-section:first-child {
+    padding-top: 0;
+  }
+
+  .tb-side-section:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .tb-side-section h2,
+  .tb-side-section h3,
+  .tb-side-section p {
+    margin: 0;
+  }
+
+  .tb-side-section h2 {
+    font-size: 15px;
+    line-height: 1.2;
+    color: var(--tb-ink);
+  }
+
+  .tb-side-section h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(28,50,39,0.54);
+  }
+
+  .tb-side-section p,
+  .tb-side-label {
+    font-size: 12px;
+    line-height: 1.35;
+    color: var(--tb-muted);
+  }
+
+  .tb-side-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 9px;
+    border-radius: 8px;
+    background: rgba(28,50,39,0.07);
+    color: var(--tb-muted);
+    font-size: 12px;
+  }
+
+  .tb-side-row strong {
+    color: var(--tb-ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tb-segmented-panel {
+    align-self: start;
+    background: rgba(28,50,39,0.1);
+  }
+
+  .tb-panel-btn {
+    justify-content: center;
+    width: 100%;
+    background: rgba(255,255,255,0.7);
+  }
+
+  .tb-reset-btn {
+    color: #8a3b00;
+    border-color: rgba(180,83,9,0.28);
+    background: rgba(255,247,237,0.82);
+  }
+
+  .tb-danger-section {
+    background: rgba(180,83,9,0.05);
+    margin: 0 -8px -4px;
+    padding: 12px 8px 8px;
+    border-radius: 10px;
+    border-bottom: 0;
+  }
+
+  .tb-color-row {
+    gap: 8px;
+  }
+
+  .tb-color-btn {
+    width: 31px;
+    height: 31px;
+    border-radius: 999px;
+    border: 2px solid rgba(28,50,39,0.18);
+    background: var(--pen-color);
+    cursor: pointer;
+    box-shadow: inset 0 0 0 2px rgba(255,255,255,0.3), 0 1px 4px rgba(15,35,24,0.18);
+  }
+
+  .tb-color-btn.active {
+    border-color: var(--tb-blue);
+    box-shadow: 0 0 0 2px rgba(47,125,225,0.2), inset 0 0 0 2px rgba(255,255,255,0.34);
+  }
+
+  .tb-color-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
   }
 
   .tb-pitch-wrap {
     flex: 1;
     display: flex;
     min-height: 0;
-    padding: 6px;
+    min-width: 0;
+    padding: 14px;
+    border-radius: 14px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
+      #253d31;
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,0.08),
+      inset 0 0 34px rgba(0,0,0,0.16),
+      0 18px 38px rgba(6,18,12,0.28);
   }
 
   .tb-pitch-wrap:focus {
-    outline: 3px solid rgba(250,204,21,0.7);
-    outline-offset: -3px;
+    outline: 3px solid rgba(125,211,252,0.72);
+    outline-offset: -4px;
   }
 
   svg {
@@ -1154,28 +1379,71 @@
     touch-action: none;
     user-select: none;
     cursor: default;
+    border-radius: 8px;
   }
 
-  @media (max-width: 760px) {
+  @media (max-width: 920px) {
     .tb-toolbar {
-      max-height: 37svh;
+      align-items: stretch;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .tb-toolbar-main,
+    .tb-toolbar-actions {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .tb-cluster {
+      padding-left: 0;
+      border-left: 0;
+    }
+
+    .tb-board-body {
+      flex-direction: column;
+      padding: 8px;
+      gap: 8px;
+    }
+
+    .tb-side-panel {
+      width: 100%;
+      max-height: 36svh;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .tb-toolbar {
+      max-height: 42svh;
       overflow-y: auto;
     }
 
-    .tb-section {
+    .tb-toolbar-main,
+    .tb-cluster,
+    .tb-btn-group {
+      align-items: flex-start;
       width: 100%;
-      justify-content: flex-start;
     }
 
-    .tb-section + .tb-section {
-      padding-left: 0;
-      border-left: 0;
+    .tb-cluster {
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .tb-toolbar-actions,
+    .tb-btn-group {
+      flex-wrap: wrap;
+      justify-content: flex-start;
     }
 
     .tb-hint {
       align-items: flex-start;
       flex-direction: column;
       gap: 2px;
+    }
+
+    .tb-pitch-wrap {
+      padding: 8px;
     }
   }
 

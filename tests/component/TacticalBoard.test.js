@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import TacticalBoard from '../../src/lib/TacticalBoard.svelte';
 import { tacticalBoardStorageKey } from '../../src/lib/tacticalBoardUtils.js';
@@ -45,8 +46,12 @@ describe('TacticalBoard', () => {
     expect(board.querySelector('svg')).toHaveAttribute('viewBox', '0 0 72.5 90');
     expect(screen.getByRole('button', { name: 'Shot' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Pen' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'PNG' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Close Board' })).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+
+    expect(screen.getByRole('button', { name: 'Export PNG' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '2x' })).toHaveClass('active');
     expect(screen.getByText(/View: Left half/i)).toBeInTheDocument();
   });
