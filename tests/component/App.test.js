@@ -141,6 +141,36 @@ function getCaptureFormButton(label) {
   return button;
 }
 
+async function findSubNavButton(name) {
+  let button;
+  await waitFor(() => {
+    const subNav = document.querySelector('.tab-sub-bar');
+    if (!subNav) throw new Error('Missing sub navigation');
+
+    button = Array.from(subNav.querySelectorAll('button')).find((node) => {
+      const label = node.textContent?.trim().replace(/\s+/g, ' ');
+      return typeof name === 'string' ? label === name : name.test(label);
+    });
+
+    if (!button) throw new Error(`Missing sub navigation button: ${name}`);
+  });
+  return button;
+}
+
+async function openInGameTab(user, name) {
+  await user.click(await screen.findByRole('button', { name: 'In-game' }));
+  const tab = await findSubNavButton(name);
+  await user.click(tab);
+  return tab;
+}
+
+async function openToolsTab(user, name) {
+  await user.click(await screen.findByRole('button', { name: 'Tools' }));
+  const tab = await findSubNavButton(name);
+  await user.click(tab);
+  return tab;
+}
+
 describe('App shell auth and sync', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -257,7 +287,10 @@ describe('App shell auth and sync', () => {
 
     await renderApp();
 
-    expect(await screen.findByRole('button', { name: 'Possession' })).toBeInTheDocument();
+    const user = userEvent.setup();
+    await openToolsTab(user, 'Possession');
+
+    expect(screen.getByRole('button', { name: 'Possession' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Pass Destination' })).toBeInTheDocument();
   });
 
@@ -269,13 +302,11 @@ describe('App shell auth and sync', () => {
     await renderApp();
 
     const user = userEvent.setup();
-    const boardTab = await screen.findByRole('button', { name: 'Board' });
+    const boardTab = await openToolsTab(user, 'Board');
     expect(boardTab).toBeInTheDocument();
 
-    await user.click(boardTab);
-
     expect(await screen.findByRole('application', { name: /Tactical board/i })).toBeInTheDocument();
-    expect(screen.getByText(/Home \(red\) vs Away \(white\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Select: drag players to set positions - Home vs Away\./i)).toBeInTheDocument();
   });
 
   it('shows a paused sync warning and blocks saving when the user has no team assignment', async () => {
@@ -737,8 +768,7 @@ describe('App shell auth and sync', () => {
     await renderApp();
 
     const user = userEvent.setup();
-    await screen.findByRole('button', { name: /Kickouts/i });
-    await user.click(screen.getByRole('button', { name: /Kickouts/i }));
+    await openInGameTab(user, /Kickouts/i);
     await user.click(screen.getByRole('button', { name: /Summary/i }));
 
     expect(await screen.findByRole('dialog')).toHaveTextContent('Kickout Summary');
@@ -857,13 +887,13 @@ describe('App shell auth and sync', () => {
     await renderApp();
 
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: /Live/i }));
+    await openInGameTab(user, /^Live$/i);
     expect(await screen.findByText('Live Match State')).toBeInTheDocument();
 
     await user.click(getDeepAnalysisButton('Kickouts'));
     expect(await screen.findByText('Target Players')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /^Live$/i }));
+    await openInGameTab(user, /^Live$/i);
     expect(await screen.findByText('Deep Analysis')).toBeInTheDocument();
 
     await user.click(getDeepAnalysisButton('Turnovers'));
@@ -931,8 +961,7 @@ describe('App shell auth and sync', () => {
     await renderApp();
 
     const user = userEvent.setup();
-    await screen.findByRole('button', { name: /Events/i });
-    await user.click(screen.getByRole('button', { name: /Events/i }));
+    await openInGameTab(user, /Events/i);
 
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL');
@@ -1019,8 +1048,7 @@ describe('App shell auth and sync', () => {
     await renderApp();
 
     const user = userEvent.setup();
-    await screen.findByRole('button', { name: /Events/i });
-    await user.click(screen.getByRole('button', { name: /Events/i }));
+    await openInGameTab(user, /Events/i);
 
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' });
 
@@ -1083,8 +1111,7 @@ describe('App shell auth and sync', () => {
     await renderApp();
 
     const user = userEvent.setup();
-    await screen.findByRole('button', { name: /Events/i });
-    await user.click(screen.getByRole('button', { name: /Events/i }));
+    await openInGameTab(user, /Events/i);
     await user.click(screen.getByRole('button', { name: 'Edit' }));
 
     expect(await screen.findByText(/Retrospective review/i)).toBeInTheDocument();
@@ -1152,8 +1179,7 @@ describe('App shell auth and sync', () => {
     mockState.upsertMock.mockClear();
 
     const user = userEvent.setup();
-    await screen.findByRole('button', { name: /Events/i });
-    await user.click(screen.getByRole('button', { name: /Events/i }));
+    await openInGameTab(user, /Events/i);
     await user.click(screen.getByRole('button', { name: 'Edit' }));
     await user.click(await screen.findByRole('button', { name: 'No score' }));
     await user.click(screen.getByRole('button', { name: /Update Event/i }));
@@ -1230,8 +1256,7 @@ describe('App shell auth and sync', () => {
     await renderApp();
 
     const user = userEvent.setup();
-    await screen.findByRole('button', { name: /Live/i });
-    await user.click(screen.getByRole('button', { name: /^Live$/i }));
+    await openInGameTab(user, /^Live$/i);
 
     expect(await screen.findByText(/Showing all periods in this view\./i)).toBeInTheDocument();
 
@@ -1367,8 +1392,7 @@ describe('App shell auth and sync', () => {
     await renderApp();
 
     const user = userEvent.setup();
-    await screen.findByRole('button', { name: /Events/i });
-    await user.click(screen.getByRole('button', { name: /Events/i }));
+    await openInGameTab(user, /Events/i);
     await user.click(screen.getByRole('button', { name: /Delete all/i }));
 
     const dialog = await screen.findByRole('alertdialog', { name: /Confirm action/i });
@@ -1426,8 +1450,7 @@ describe('App shell auth and sync', () => {
     await renderApp();
 
     const user = userEvent.setup();
-    await screen.findByRole('button', { name: /Events/i });
-    await user.click(screen.getByRole('button', { name: /Events/i }));
+    await openInGameTab(user, /Events/i);
 
     const originalCreateElement = document.createElement.bind(document);
     const fakeInput = {
@@ -1519,8 +1542,8 @@ describe('App shell auth and sync', () => {
     await renderApp();
 
     const user = userEvent.setup();
-    await screen.findByRole('button', { name: /Admin/i });
-    await user.click(screen.getByRole('button', { name: /Admin/i }));
+    const adminButton = await screen.findByTitle('Admin settings');
+    await user.click(adminButton);
 
     expect(await screen.findByRole('heading', { name: 'Admin Onboarding' })).toBeInTheDocument();
   });
@@ -1548,8 +1571,7 @@ describe('App shell auth and sync', () => {
     await renderApp();
 
     const user = userEvent.setup();
-    await screen.findByRole('button', { name: /Digest/i });
-    await user.click(screen.getByRole('button', { name: /Digest/i }));
+    await openInGameTab(user, /Digest/i);
 
     expect(screen.getByText(/No events yet for this digest/i)).toBeInTheDocument();
     expect(screen.getByText(/Match \(all periods\)/i)).toBeInTheDocument();
@@ -1616,8 +1638,7 @@ describe('App shell auth and sync', () => {
     await renderApp();
 
     const user = userEvent.setup();
-    await screen.findByRole('button', { name: /Events/i });
-    await user.click(screen.getByRole('button', { name: /Events/i }));
+    await openInGameTab(user, /Events/i);
 
     const originalSetItem = Storage.prototype.setItem;
     const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function(key, value) {

@@ -10,9 +10,14 @@ test('core match-day controls expose keyboard and accessible names', async ({ pa
 
   await expect(page.getByRole('navigation')).toBeVisible();
   await expect(page.getByRole('button', { name: /^Capture$/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^In-game$/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Tools$/i })).toBeVisible();
+
+  await page.getByRole('button', { name: /^In-game$/i }).click();
   await expect(page.getByRole('button', { name: /^Live$/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Digest$/i })).toBeVisible();
 
+  await page.getByRole('button', { name: /^Capture$/i }).click();
   const pitch = page.getByRole('application', { name: /GAA pitch/i });
   await pitch.focus();
   await expect(pitch).toBeFocused();

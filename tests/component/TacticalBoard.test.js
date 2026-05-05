@@ -1,0 +1,53 @@
+import { render, screen } from '@testing-library/svelte';
+import { describe, expect, it } from 'vitest';
+import TacticalBoard from '../../src/lib/TacticalBoard.svelte';
+import { tacticalBoardStorageKey } from '../../src/lib/tacticalBoardUtils.js';
+
+describe('TacticalBoard', () => {
+  it('restores a saved board and exposes the MVP coaching controls', async () => {
+    localStorage.setItem(tacticalBoardStorageKey('unit-board'), JSON.stringify({
+      moves: [
+        {
+          id: 'shot-1',
+          type: 'shot',
+          team: 'home',
+          playerId: 'home-11',
+          target: { x: 0.5, y: 0.98 },
+          step: 1,
+          createdOrder: 1,
+        },
+      ],
+      penStrokes: [
+        {
+          id: 'pen-1',
+          color: '#facc15',
+          width: 1.4,
+          path: [{ x: 0.2, y: 0.2 }, { x: 0.35, y: 0.4 }],
+          createdOrder: 2,
+        },
+      ],
+      pitchView: 'left',
+      playbackSpeed: 2,
+      currentStep: 1,
+      nextId: 3,
+    }));
+
+    render(TacticalBoard, {
+      props: {
+        boardKey: 'unit-board',
+        teamName: 'Clontarf',
+        opponentName: 'Crokes',
+      },
+    });
+
+    const board = await screen.findByRole('application', { name: /Tactical board/i });
+    expect(board).toHaveAttribute('tabindex', '0');
+    expect(board.querySelector('svg')).toHaveAttribute('viewBox', '0 0 72.5 90');
+    expect(screen.getByRole('button', { name: 'Shot' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'PNG' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close Board' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2x' })).toHaveClass('active');
+    expect(screen.getByText(/View: Left half/i)).toBeInTheDocument();
+  });
+});

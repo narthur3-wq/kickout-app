@@ -128,3 +128,71 @@ export function interpolatePlayerPositions(players, before = {}, after = {}, t =
     ];
   }));
 }
+
+export const TACTICAL_BOARD_STORAGE_PREFIX = 'ko_tactical_board';
+
+export function tacticalBoardStorageKey(boardKey = 'training') {
+  return `${TACTICAL_BOARD_STORAGE_PREFIX}:${String(boardKey || 'training')}`;
+}
+
+export function clampPoint(point) {
+  return {
+    x: Math.max(0, Math.min(1, Number(point?.x) || 0)),
+    y: Math.max(0, Math.min(1, Number(point?.y) || 0)),
+  };
+}
+
+export function normalizeBoardSnapshot(snapshot = {}) {
+  const board = snapshot && typeof snapshot === 'object'
+    ? /** @type {Record<string, any>} */ (snapshot)
+    : {};
+  const players = Array.isArray(board.players) && board.players.length > 0
+    ? board.players.map((player) => ({
+      id: String(player?.id || ''),
+      team: player?.team === 'away' ? 'away' : 'home',
+      number: Number(player?.number) || 0,
+      baseX: clampPoint({ x: player?.baseX, y: player?.baseY }).x,
+      baseY: clampPoint({ x: player?.baseX, y: player?.baseY }).y,
+    })).filter((player) => player.id && player.number > 0)
+    : defaultPlayers();
+
+  const moves = Array.isArray(board.moves)
+    ? board.moves
+      .filter((move) => move && typeof move === 'object')
+      .map((move) => ({
+        ...move,
+        id: String(move.id || ''),
+        type: ['pass', 'run', 'shot'].includes(move.type) ? move.type : 'pass',
+        team: move.team === 'away' ? 'away' : 'home',
+        step: Math.max(1, Number(move.step) || 1),
+        createdOrder: Math.max(1, Number(move.createdOrder) || 1),
+        path: Array.isArray(move.path) ? move.path.map(clampPoint) : move.path,
+        target: move.target ? clampPoint(move.target) : move.target,
+      }))
+      .filter((move) => move.id)
+    : [];
+
+  const penStrokes = Array.isArray(board.penStrokes)
+    ? board.penStrokes
+      .filter((stroke) => stroke && typeof stroke === 'object' && Array.isArray(stroke.path))
+      .map((stroke) => ({
+        id: String(stroke.id || ''),
+        color: ['#facc15', '#60a5fa', '#ef4444', '#ffffff'].includes(stroke.color) ? stroke.color : '#facc15',
+        width: Math.max(0.7, Math.min(3, Number(stroke.width) || 1.4)),
+        path: stroke.path.map(clampPoint),
+        createdOrder: Math.max(1, Number(stroke.createdOrder) || 1),
+      }))
+      .filter((stroke) => stroke.id && stroke.path.length >= 2)
+    : [];
+
+  return {
+    version: 1,
+    players,
+    moves,
+    penStrokes,
+    nextId: Math.max(1, Number(board.nextId) || 1),
+    currentStep: Math.max(1, Number(board.currentStep) || 1),
+    pitchView: ['full', 'left', 'right'].includes(board.pitchView) ? board.pitchView : 'full',
+    playbackSpeed: [0.5, 1, 2].includes(Number(board.playbackSpeed)) ? Number(board.playbackSpeed) : 1,
+  };
+}

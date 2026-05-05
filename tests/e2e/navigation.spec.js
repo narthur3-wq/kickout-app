@@ -1,12 +1,18 @@
 import { expect, test } from '@playwright/test';
 import { openFreshApp, setUpMatch } from './appSession.js';
 
+async function openInGameSection(tabBar, input = 'click') {
+  const action = input === 'tap' ? 'tap' : 'click';
+  await tabBar.getByRole('button', { name: /^In-game$/i })[action]();
+}
+
 test('moving between tabs keeps Kickouts reachable from every main screen', async ({ page }) => {
   await openFreshApp(page);
   await setUpMatch(page, { opponent: 'Kilmacud Crokes' });
 
   const tabBar = page.locator('nav.tab-bar');
 
+  await openInGameSection(tabBar);
   await tabBar.getByRole('button', { name: /^Live/i }).click();
   await expect(page.getByText('Live Match State')).toBeVisible();
 
@@ -29,6 +35,7 @@ test('moving between tabs keeps Kickouts reachable from every main screen', asyn
   await tabBar.getByRole('button', { name: /^Capture/i }).click();
   await expect(page.getByRole('button', { name: /Save Event/i })).toBeVisible();
 
+  await openInGameSection(tabBar);
   await tabBar.getByRole('button', { name: /^Kickouts/i }).click();
   await expect(page.getByText(/Showing all periods in this view/i)).toBeVisible();
   await expect(tabBar.getByRole('button', { name: /^Kickouts/i })).toHaveClass(/active/);
@@ -43,6 +50,7 @@ test.describe('touch tab movement', () => {
 
     const tabBar = page.locator('nav.tab-bar');
 
+    await openInGameSection(tabBar, 'tap');
     await tabBar.getByRole('button', { name: /^Kickouts/i }).tap();
     await expect(tabBar.getByRole('button', { name: /^Kickouts/i })).toHaveClass(/active/);
 

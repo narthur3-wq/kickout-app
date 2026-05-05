@@ -20,6 +20,13 @@ Current validation evidence from this working tree:
 - `npm run check:full` - passed on 2026-04-30.
 - `npm run test:smoke` - passed against configured Supabase smoke credentials on 2026-04-29.
 
+Tactical board update validation on 2026-05-04:
+
+- `npm run check` - passed after rerun outside the sandbox because the sandbox blocked Vitest/esbuild process spawn.
+- `npm run test:e2e -- tests/e2e/navigation.spec.js --project=chromium` - passed: 2 tests.
+- `npm run test:a11y` - passed: 1 test.
+- Build output kept the board lazy-loaded as `TacticalBoard-By7yfWmT.js` at `27.10 kB` minified / `9.06 kB` gzip; main JS was `494.10 kB` minified / `142.32 kB` gzip.
+
 Worktree note:
 
 - `src/App.svelte` and `src/lib/CaptureForm.svelte` were already modified at audit start. This cleanup kept working with those changes and did not revert them.
@@ -54,6 +61,7 @@ Conditions before or during launch signoff:
 - Routed digest share failures into the shared diagnostic path.
 - Added quick analysis preset support and coach-handoff copy support as low-risk polish.
 - Excluded the export-only `html2canvas` chunk from the PWA precache, reducing precache size materially.
+- Added the tactical board MVP polish: per-context save/restore, autoplay, playback speed, pen marks, shot arrows, half-pitch views, PNG export, confirmation on destructive board actions, and clearer `Close Board` wording.
 
 ## Resolved Audit Items
 

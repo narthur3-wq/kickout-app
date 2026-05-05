@@ -53,6 +53,10 @@ Audit baseline: 2026-04-30
 - [ ] Save a turnover event.
 - [ ] Reload and confirm the events persist in the intended storage mode.
 - [ ] Open Capture, Live, Digest, Possession, Pass Destination, Kickouts, Shots, Turnovers, and Events.
+- [ ] Open Tools > Board with and without an active match.
+- [ ] On Board, add a pass, run, shot, and pen mark; confirm one Play press runs the full flow.
+- [ ] On Board, switch speed and half-pitch view; reload and confirm the board restores.
+- [ ] On Board, export PNG once and confirm Reset / Clear moves / Clear ink ask for confirmation.
 - [ ] Export the digest image once.
 - [ ] Export diagnostics once.
 - [ ] If admin onboarding is in scope, onboard one test user end-to-end.

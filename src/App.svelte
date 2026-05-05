@@ -3417,6 +3417,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
       this={TacticalBoard}
       teamName={activeMatch?.team || team || 'Home'}
       opponentName={activeMatch?.opponent || opponent || 'Away'}
+      boardKey={activeMatchId ? `${storageScope || 'local'}:match:${activeMatchId}` : `${storageScope || 'local'}:training`}
       on:close={closeTacticalBoard}
     />
   {/if}

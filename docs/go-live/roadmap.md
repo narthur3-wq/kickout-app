@@ -8,6 +8,7 @@ This roadmap is ordered by release truth first: keep the validation signal trust
 
 - Phase 0 is complete in the current tree.
 - Phase 1 is complete for the minimum launch-hardening scope.
+- Tactical board MVP polish is complete in the 2026-05-04 update.
 - Phase 2 remains the main post-launch engineering work.
 - Phase 3 stays intentionally out of launch scope.
 
@@ -50,6 +51,7 @@ Status:
 | `AUD-PL-03` Route digest/share failures into diagnostics | complete | Digest share failures now report into diagnostics. |
 | `AUD-PL-04` Document launch operating model | complete | User guide and release checklist now describe the model clearly. |
 | `AUD-PL-05` Keep Supabase smoke mandatory and separate | complete | Smoke remains outside `check:full` and inside release signoff. |
+| `TB-MVP-01` Tactical board MVP polish | complete | Persistence, autoplay, speed control, pen marks, shot arrows, half-pitch views, PNG export, and safer destructive actions are in the board overlay. |
 
 ## Phase 2 - Early Post-Launch Strengthening
 
@@ -62,6 +64,7 @@ Objective:
 | `AUD-FU-01` Split app-shell responsibilities | Senior frontend | L | Auth/session, sync/storage, and import/export are extracted into focused modules with tests. | `src/App.svelte`, `src/lib/*` |
 | `AUD-FU-03` Profile long-match runtime behavior | Frontend / QA | M | Long event histories are tested for interaction latency and localStorage write cost. | `src/App.svelte`, `src/lib/liveInsights.js`, `src/lib/analyticsHelpers.js` |
 | `AUD-FU-04` Dependency refresh in small batches | Frontend / release | M | Patch/minor upgrades land green before major upgrades are attempted. | `package.json`, `package-lock.json` |
+| `TB-FU-01` Select/edit existing tactical-board actions | Frontend | M | Existing passes, runs, shots, and pen strokes can be selected and changed without rebuilding the board. | `src/lib/TacticalBoard.svelte` |
 
 ## Phase 3 - Nice-To-Haves And Strategic Options
 
@@ -72,6 +75,7 @@ These are not launch requirements.
 | `AUD-NTH-01` Saved analysis presets | complete | Quick preset save/apply is already in the tree. |
 | `AUD-NTH-02` First-use orientation polish | backlog | Worth doing, but not a launch gate. |
 | `AUD-NTH-03` Coach handoff polish | complete | Digest now supports a copy-brief handoff flow. |
+| `TB-NTH-01` Tactical-board templates and roster names | backlog | Defer until the MVP is proven in real coaching use. |
 | `AUD-FUT-01` Video-linked review | not planned for launch | Strategic only. |
 | `AUD-FUT-02` GPS/workload views | not planned for launch | Strategic only. |
 | `AUD-FUT-03` ML-assisted tagging | not planned for launch | Strategic only. |
