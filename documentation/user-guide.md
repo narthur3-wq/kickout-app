@@ -227,6 +227,8 @@ Boards are saved locally by context:
 - Lets you draw passes, runs, shots, and freehand pen markings
 - Groups actions into numbered steps on the bottom sequence strip
 - Plays the whole flow from one `Play` press so you can present a pattern live
+- Moves runners along the path you drew, not just straight to the endpoint
+- Lets you hide player counters when you only want to show a few specific players
 - Exports a PNG for handoff or follow-up
 
 ### Layout
@@ -241,7 +243,7 @@ Boards are saved locally by context:
 
 - **Select** — drag any player to reposition them
 - **Pass** — tap player A, then tap player B; a blue pass arrow is drawn between them
-- **Run** — tap a player, then drag on the pitch to draw a movement path
+- **Run** — tap a player, then drag on the pitch to draw a movement path; playback follows that path
 - **Shot** — tap the shooter, then tap the target area or goal; a stronger shot arrow is drawn
 - **Pen** — draw directly on the pitch for zones, traps, or emphasis
 - **Erase** — tap a freehand pen drawing to remove it
@@ -256,7 +258,7 @@ The current step is highlighted. `Back` and `Forward` move through the sequence 
 
 ### Playback
 
-Press `Play` once to animate the full flow from the current playhead. Players with runs move to their path endpoints; pass and shot arrows show a ball dot travelling through the action.
+Press `Play` once to animate the full flow from the current playhead. Players with runs travel along their drawn paths; pass and shot arrows show a ball dot travelling through the action.
 
 Use `Back`, `Forward`, and `Reset` for manual presentation control. Playback speed lives in the Settings drawer.
 
@@ -266,6 +268,8 @@ Use the view switcher for `Full`, `Left half`, or `Right half` when you want to 
 
 - **Undo** — removes the most recently added move or pen stroke
 - **Erase** — removes individual freehand pen drawings only
+- **Hide selected player** — removes the selected counter from the pitch without deleting it
+- **Show all players** — restores hidden counters
 - **Clear marks / Clear all markings** — removes passes, runs, shots, and pen drawings while keeping player positions
 - **Clear drawings / Clear ink** — removes freehand pen drawings only
 - **Reset positions** — returns players to the default formation while keeping markings

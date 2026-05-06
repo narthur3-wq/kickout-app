@@ -52,8 +52,10 @@ describe('TacticalBoard', () => {
     expect(screen.getByRole('button', { name: 'Shot' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Pen' })).toBeInTheDocument();
     expect(screen.getByText('Select mode')).toBeInTheDocument();
-    expect(screen.getByText('drag players to set positions.')).toBeInTheDocument();
+    expect(screen.getByText(/drag a player counter to move it/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Clear marks' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide player' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show all' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reset positions' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reset board' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Close Board' })).toBeInTheDocument();

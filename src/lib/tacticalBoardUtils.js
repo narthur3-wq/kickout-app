@@ -115,8 +115,70 @@ export function playerPosition(positions, player) {
   return positions?.[player.id] || { x: player.baseX, y: player.baseY };
 }
 
+function pathSegmentLength(a, b) {
+  return Math.hypot((b.y - a.y) * W, (b.x - a.x) * H);
+}
+
+export function pointAlongPath(path = [], t = 0) {
+  if (!Array.isArray(path) || path.length === 0) return null;
+  if (path.length === 1) return clampPoint(path[0]);
+  const progress = Math.max(0, Math.min(1, Number(t) || 0));
+  const lengths = [];
+  let total = 0;
+  for (let i = 1; i < path.length; i++) {
+    const length = pathSegmentLength(path[i - 1], path[i]);
+    lengths.push(length);
+    total += length;
+  }
+  if (total <= 0) return clampPoint(path[path.length - 1]);
+  let remaining = total * progress;
+  for (let i = 1; i < path.length; i++) {
+    const length = lengths[i - 1];
+    if (remaining <= length || i === path.length - 1) {
+      const ratio = length <= 0 ? 1 : remaining / length;
+      const start = path[i - 1];
+      const end = path[i];
+      return clampPoint({
+        x: start.x + (end.x - start.x) * ratio,
+        y: start.y + (end.y - start.y) * ratio,
+      });
+    }
+    remaining -= length;
+  }
+  return clampPoint(path[path.length - 1]);
+}
+
 export function interpolatePlayerPositions(players, before = {}, after = {}, t = 0) {
   return Object.fromEntries(players.map((player) => {
+    const start = playerPosition(before, player);
+    const end = playerPosition(after, player);
+    return [
+      player.id,
+      {
+        x: start.x + (end.x - start.x) * t,
+        y: start.y + (end.y - start.y) * t,
+      },
+    ];
+  }));
+}
+
+export function interpolatePlayerPositionsAlongRuns(players, before = {}, after = {}, activeMoves = [], t = 0) {
+  const runMovesByPlayer = new Map();
+  for (const move of activeMoves) {
+    if (move?.type !== 'run' || !move.playerId || !Array.isArray(move.path) || move.path.length < 2) continue;
+    const previous = runMovesByPlayer.get(move.playerId);
+    if (!previous || (Number(move.createdOrder) || 0) >= (Number(previous.createdOrder) || 0)) {
+      runMovesByPlayer.set(move.playerId, move);
+    }
+  }
+
+  return Object.fromEntries(players.map((player) => {
+    const runMove = runMovesByPlayer.get(player.id);
+    if (runMove) {
+      const pathPoint = pointAlongPath(runMove.path, t);
+      if (pathPoint) return [player.id, pathPoint];
+    }
+
     const start = playerPosition(before, player);
     const end = playerPosition(after, player);
     return [
@@ -160,6 +222,11 @@ export function normalizeBoardSnapshot(snapshot = {}) {
       baseY: clampPoint({ x: player?.baseX, y: player?.baseY }).y,
     })).filter((player) => player.id && player.number > 0)
     : defaultPlayers();
+  const playerIds = new Set(players.map((player) => player.id));
+  const hiddenPlayerIds = Array.isArray(board.hiddenPlayerIds)
+    ? [...new Set(board.hiddenPlayerIds.map((id) => String(id || '')))]
+      .filter((id) => playerIds.has(id))
+    : [];
 
   const moves = Array.isArray(board.moves)
     ? board.moves
@@ -194,6 +261,7 @@ export function normalizeBoardSnapshot(snapshot = {}) {
   return {
     version: 1,
     players,
+    hiddenPlayerIds,
     moves,
     penStrokes,
     nextId: Math.max(1, Number(board.nextId) || 1),

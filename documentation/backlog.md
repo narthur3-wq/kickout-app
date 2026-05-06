@@ -337,6 +337,8 @@ Shipped:
 - settings drawer
 - select/pass/run/shot/pen/erase tools
 - autoplay through the remaining steps from one `Play` press
+- run playback follows the drawn path
+- hide/show player counters for isolated demonstrations
 - playback speed
 - half-pitch views
 - PNG export

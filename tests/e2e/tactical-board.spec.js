@@ -42,6 +42,11 @@ test('tactical board controls stay usable after the visual refactor', async ({ p
   const svg = board.locator('svg');
   await expect(svg).toBeVisible();
 
+  await page.getByRole('button', { name: /^Hide player$/i }).click();
+  await expect(page.getByRole('button', { name: /^Show all$/i })).toBeEnabled();
+  await page.getByRole('button', { name: /^Show all$/i }).click();
+  await expect(page.getByRole('button', { name: /^Show all$/i })).toBeDisabled();
+
   await page.getByRole('button', { name: /^Pass$/i }).click();
   await clickSvg(page, svg, 4.35, 45);
   await clickSvg(page, svg, 14.5, 45);

@@ -4,7 +4,7 @@
     W, H, svgX, svgY,
     pointerToPitch, easeInOut,
     simplifyPitchPath, defaultPlayers, derivePositionsAtStep,
-    buildStepPositionCache, interpolatePlayerPositions, playerPosition,
+    buildStepPositionCache, interpolatePlayerPositionsAlongRuns, playerPosition,
     clampPoint, normalizeBoardSnapshot, tacticalBoardStorageKey,
   } from './tacticalBoardUtils.js';
 
@@ -16,6 +16,7 @@
 
   // ── State ───────────────────────────────────────────────────────────────
   let players = defaultPlayers();
+  let hiddenPlayerIds = [];
   let moves = [];
   let penStrokes = [];
   let nextId = 1;
@@ -71,6 +72,7 @@
     return {
       version: 1,
       players,
+      hiddenPlayerIds,
       moves,
       penStrokes,
       nextId,
@@ -103,6 +105,7 @@
       const raw = localStorage.getItem(tacticalBoardStorageKey(loadedBoardKey));
       if (!raw) {
         players = defaultPlayers();
+        hiddenPlayerIds = [];
         moves = [];
         penStrokes = [];
         nextId = 1;
@@ -119,6 +122,7 @@
       } else {
         const snapshot = normalizeBoardSnapshot(JSON.parse(raw));
         players = snapshot.players;
+        hiddenPlayerIds = snapshot.hiddenPlayerIds;
         moves = snapshot.moves;
         penStrokes = snapshot.penStrokes;
         nextId = Math.max(snapshot.nextId, highestCreatedOrder(snapshot.moves, snapshot.penStrokes) + 1);
@@ -136,6 +140,7 @@
       }
     } catch {
       players = defaultPlayers();
+      hiddenPlayerIds = [];
       moves = [];
       penStrokes = [];
       nextId = 1;
@@ -150,7 +155,7 @@
       showPreviousGhosts = true;
       saveStatus = 'Could not restore';
     } finally {
-      selectedPlayerId = players[0]?.id || null;
+      selectedPlayerId = firstVisiblePlayer()?.id || null;
       passFirstPlayerId = null;
       shotPlayerId = null;
       runArmedPlayerId = null;
@@ -173,6 +178,7 @@
 
   function saveBoardForState(
     _players,
+    _hiddenPlayerIds,
     _moves,
     _penStrokes,
     _nextId,
@@ -196,6 +202,7 @@
   $: if (hydrated) {
     saveBoardForState(
       players,
+      hiddenPlayerIds,
       moves,
       penStrokes,
       nextId,
@@ -225,6 +232,9 @@
   $: canForward = !animating && playhead < maxStep;
   $: animationDuration = BASE_ANIM_DURATION / playbackSpeed;
   $: viewBox = pitchView === 'left' ? `0 0 ${W / 2} ${H}` : pitchView === 'right' ? `${W / 2} 0 ${W / 2} ${H}` : `0 0 ${W} ${H}`;
+  $: visiblePlayers = players.filter((player) => !hiddenPlayerIds.includes(player.id));
+  $: visiblePlayerIds = visiblePlayers.map((player) => player.id);
+  $: hiddenPlayerCount = hiddenPlayerIds.length;
 
   // Cache resolved player positions at each step boundary.
   // Reactive on players + moves. Stable during animation (no edits allowed then).
@@ -241,7 +251,13 @@
     const before = stepPositionCache[animatingStep - 1];
     const after  = stepPositionCache[animatingStep];
     if (!before || !after) return stepPositionCache[playhead] || {};
-    return interpolatePlayerPositions(players, before, after, easeInOut(animProgress));
+    return interpolatePlayerPositionsAlongRuns(
+      players,
+      before,
+      after,
+      moves.filter((move) => move.step === animatingStep),
+      easeInOut(animProgress),
+    );
   })();
 
   $: previousGhostPositions = showPreviousGhosts && !animating && currentStep > 1
@@ -256,6 +272,9 @@
     const t = easeInOut(animProgress);
     return moves
       .filter(m => (m.type === 'pass' || m.type === 'shot') && m.step === animatingStep)
+      .filter(m => m.type === 'shot'
+        ? visiblePlayerIds.includes(m.playerId)
+        : visiblePlayerIds.includes(m.fromPlayerId) && visiblePlayerIds.includes(m.toPlayerId))
       .flatMap(m => {
         const fp = before[m.fromPlayerId || m.playerId];
         const tp = m.type === 'shot' ? m.target : before[m.toPlayerId];
@@ -420,6 +439,7 @@
     if (!confirmAction('Reset the board to the default formation and clear all markings?')) return;
     handleReset();
     players = defaultPlayers();
+    hiddenPlayerIds = [];
     selectedPlayerId = players[0]?.id || null;
     moves = [];
     penStrokes = [];
@@ -432,8 +452,30 @@
     if (!confirmAction('Reset player positions to the default formation? Markings will stay.')) return;
     handleReset();
     players = defaultPlayers();
-    selectedPlayerId = players[0]?.id || null;
+    selectedPlayerId = firstVisiblePlayer()?.id || null;
     resetInteractionState();
+  }
+
+  function firstVisiblePlayer(excludeId = null) {
+    return players.find((player) => player.id !== excludeId && !hiddenPlayerIds.includes(player.id)) || null;
+  }
+
+  function playerIsVisible(playerId) {
+    return visiblePlayerIds.includes(playerId);
+  }
+
+  function handleHideSelectedPlayer() {
+    if (animating || !selectedPlayerId || hiddenPlayerIds.includes(selectedPlayerId)) return;
+    hiddenPlayerIds = [...hiddenPlayerIds, selectedPlayerId];
+    const nextPlayer = firstVisiblePlayer(selectedPlayerId);
+    selectedPlayerId = nextPlayer?.id || null;
+    resetInteractionState();
+  }
+
+  function handleShowAllPlayers() {
+    if (animating || hiddenPlayerIds.length === 0) return;
+    hiddenPlayerIds = [];
+    if (!selectedPlayerId) selectedPlayerId = players[0]?.id || null;
   }
 
   function goToStep(step) {
@@ -466,7 +508,7 @@
     const pt = pointerToPitch(event, svgEl);
     if (!pt) return null;
     let best = null, bestDist = Infinity;
-    for (const p of players) {
+    for (const p of visiblePlayers) {
       const pos = playerPosition(visualPositions, p);
       const dx = (pos.y - pt.y) * W;
       const dy = (pos.x - pt.x) * H;
@@ -638,15 +680,15 @@
   }
 
   function cycleSelectedPlayer(direction = 1) {
-    if (players.length === 0) return;
-    const currentIndex = players.findIndex((player) => player.id === selectedPlayerId);
+    if (visiblePlayers.length === 0) return;
+    const currentIndex = visiblePlayers.findIndex((player) => player.id === selectedPlayerId);
     const baseIndex = currentIndex >= 0 ? currentIndex : 0;
-    const nextIndex = (baseIndex + direction + players.length) % players.length;
-    selectedPlayerId = players[nextIndex].id;
+    const nextIndex = (baseIndex + direction + visiblePlayers.length) % visiblePlayers.length;
+    selectedPlayerId = visiblePlayers[nextIndex].id;
   }
 
   function nudgeSelectedPlayer(dx, dy) {
-    if (!selectedPlayerId) selectedPlayerId = players[0]?.id || null;
+    if (!selectedPlayerId || !playerIsVisible(selectedPlayerId)) selectedPlayerId = visiblePlayers[0]?.id || null;
     if (!selectedPlayerId) return;
     players = players.map((player) => {
       if (player.id !== selectedPlayerId) return player;
@@ -720,12 +762,12 @@
     { value: 'right', label: 'Right half' },
   ];
   const TOOL_OPTIONS = [
-    { value: 'select', label: 'Select' },
-    { value: 'pass', label: 'Pass' },
-    { value: 'run', label: 'Run' },
-    { value: 'shot', label: 'Shot' },
-    { value: 'pen', label: 'Pen' },
-    { value: 'erase', label: 'Erase' },
+    { value: 'select', label: 'Select', title: 'Select: drag a player counter to move it.' },
+    { value: 'pass', label: 'Pass', title: 'Pass: tap the passer, then tap the receiver.' },
+    { value: 'run', label: 'Run', title: 'Run: tap the runner, then drag the run path.' },
+    { value: 'shot', label: 'Shot', title: 'Shot: tap the shooter, then tap the target.' },
+    { value: 'pen', label: 'Pen', title: 'Pen: draw directly on the pitch.' },
+    { value: 'erase', label: 'Erase', title: 'Erase: tap a freehand pen line to remove it.' },
   ];
 
   $: markerMetrics = MARKER_SIZES[markerSize] || MARKER_SIZES.standard;
@@ -764,7 +806,7 @@
   }
 
   function tokenHighlightColor(team) {
-    return mixHex(colorForTeam(team), '#ffffff', 0.24);
+    return mixHex(colorForTeam(team), '#ffffff', team === 'away' ? 0.08 : 0.22);
   }
 
   function tokenBorderColor(player) {
@@ -813,16 +855,16 @@
 
   function toolStatusText() {
     if (exportingSnapshot) return 'Exporting board image...';
-    if (tool === 'pass' && passFirstPlayerId) return 'tap the receiving player.';
-    if (tool === 'pass') return 'tap the passing player, then the receiver.';
-    if (tool === 'shot' && shotPlayerId) return 'tap the target area or goal.';
+    if (tool === 'pass' && passFirstPlayerId) return 'now tap the receiver.';
+    if (tool === 'pass') return 'tap the passer, then tap the receiver.';
+    if (tool === 'shot' && shotPlayerId) return 'now tap the target area or goal.';
     if (tool === 'shot') return 'tap the shooter, then tap the target.';
     if (tool === 'run' && runArmedPlayerId && isDrawingRun) return 'release to save the path.';
-    if (tool === 'run' && runArmedPlayerId) return 'drag on the pitch to draw the movement.';
-    if (tool === 'run') return 'tap a player, then draw the run.';
+    if (tool === 'run' && runArmedPlayerId) return 'drag across the pitch to draw the run path.';
+    if (tool === 'run') return 'tap the runner, then drag the run path.';
     if (tool === 'pen') return 'draw directly on the pitch.';
     if (tool === 'erase') return 'tap a freehand drawing to remove it.';
-    return 'drag players to set positions.';
+    return 'drag a player counter to move it; hide selected counters to isolate a pattern.';
   }
 
   function pitchViewLabel() {
@@ -992,6 +1034,22 @@
             on:click={() => showPreviousGhosts = !showPreviousGhosts}
             disabled={animating}
           >{showPreviousGhosts ? 'Hide previous ghosts' : 'Show previous ghosts'}</button>
+          <div class="tb-side-row">
+            <span>Hidden players</span>
+            <strong>{hiddenPlayerCount}</strong>
+          </div>
+          <button
+            type="button"
+            class="tb-btn tb-panel-btn"
+            on:click={handleHideSelectedPlayer}
+            disabled={!selectedPlayerId || animating}
+          >Hide selected player</button>
+          <button
+            type="button"
+            class="tb-btn tb-panel-btn"
+            on:click={handleShowAllPlayers}
+            disabled={hiddenPlayerCount === 0 || animating}
+          >Show all players</button>
         </section>
 
         <section class="tb-side-section">
@@ -1057,6 +1115,7 @@
             class:active={tool === option.value}
             on:click={() => switchTool(option.value)}
             disabled={animating}
+            title={option.title}
           >
             <span>{option.label}</span>
           </button>
@@ -1069,6 +1128,12 @@
         </button>
         <button class="tb-rail-btn tb-rail-utility" on:click={handleClearAllMarkings} disabled={(moves.length === 0 && penStrokes.length === 0) || animating}>
           <span>Clear marks</span>
+        </button>
+        <button class="tb-rail-btn tb-rail-utility" on:click={handleHideSelectedPlayer} disabled={!selectedPlayerId || animating} title="Hide the selected player counter from the pitch.">
+          <span>Hide player</span>
+        </button>
+        <button class="tb-rail-btn tb-rail-utility" on:click={handleShowAllPlayers} disabled={hiddenPlayerCount === 0 || animating} title="Show all hidden player counters.">
+          <span>Show all</span>
         </button>
         <button class="tb-rail-btn tb-rail-utility" on:click={handleResetPositions} disabled={animating}>
           <span>Reset positions</span>
@@ -1208,15 +1273,17 @@
 
       <!-- Run paths: dashed freehand route with arrowhead at endpoint -->
       {#each moves.filter(m => m.type === 'run') as m (m.id)}
-        {@const op = moveStrokeOpacity(m)}
-        {@const pts = toSvgPoints(m.path)}
-        {@const last = m.path[m.path.length - 1]}
-        {@const prev = m.path[m.path.length - 2] || m.path[0]}
-        {@const runArrow = arrowHead(svgX(prev), svgY(prev), svgX(last), svgY(last))}
-        <polyline points={pts} fill="none" stroke={RUN_COLOR} stroke-width="1.8"
-          stroke-dasharray="3.1 1.9" stroke-linecap="round" stroke-linejoin="round"
-          opacity={op} vector-effect="non-scaling-stroke" />
-        <polygon points={runArrow} fill={RUN_COLOR} opacity={op} />
+        {#if visiblePlayerIds.includes(m.playerId)}
+          {@const op = moveStrokeOpacity(m)}
+          {@const pts = toSvgPoints(m.path)}
+          {@const last = m.path[m.path.length - 1]}
+          {@const prev = m.path[m.path.length - 2] || m.path[0]}
+          {@const runArrow = arrowHead(svgX(prev), svgY(prev), svgX(last), svgY(last))}
+          <polyline points={pts} fill="none" stroke={RUN_COLOR} stroke-width="1.8"
+            stroke-dasharray="3.1 1.9" stroke-linecap="round" stroke-linejoin="round"
+            opacity={op} vector-effect="non-scaling-stroke" />
+          <polygon points={runArrow} fill={RUN_COLOR} opacity={op} />
+        {/if}
       {/each}
 
       <!-- Pass arrows: straight blue arrow, shortened to clear player circles -->
@@ -1224,7 +1291,7 @@
         {@const before = stepPositionCache[m.step - 1] || stepPositionCache[0] || {}}
         {@const fp = before[m.fromPlayerId]}
         {@const tp = before[m.toPlayerId]}
-        {#if fp && tp}
+        {#if fp && tp && visiblePlayerIds.includes(m.fromPlayerId) && visiblePlayerIds.includes(m.toPlayerId)}
           {@const op = moveStrokeOpacity(m)}
           {@const seg = shortenLine(svgX(fp), svgY(fp), svgX(tp), svgY(tp), 4.1)}
           <line x1={seg.x1} y1={seg.y1} x2={seg.x2} y2={seg.y2}
@@ -1239,7 +1306,7 @@
         {@const before = stepPositionCache[m.step - 1] || stepPositionCache[0] || {}}
         {@const from = before[m.playerId]}
         {@const target = shotTargetFor(m, before)}
-        {#if from && target}
+        {#if from && target && visiblePlayerIds.includes(m.playerId)}
           {@const op = moveStrokeOpacity(m)}
           {@const seg = shortenLine(svgX(from), svgY(from), svgX(target), svgY(target), 4)}
           <line x1={seg.x1} y1={seg.y1} x2={seg.x2} y2={seg.y2}
@@ -1258,7 +1325,7 @@
 
       {#if previousGhostPositions}
         <g opacity="0.28" pointer-events="none">
-          {#each players as p (p.id)}
+          {#each visiblePlayers as p (p.id)}
             {@const ghostPos = playerPosition(previousGhostPositions, p)}
             <circle
               cx={svgX(ghostPos)}
@@ -1274,7 +1341,7 @@
       {/if}
 
       <!-- ── Players ───────────────────────────────────────────────────── -->
-      {#each players as p (p.id)}
+      {#each visiblePlayers as p (p.id)}
         {@const pos = playerPosition(visualPositions, p)}
         {@const cx = svgX(pos)}
         {@const cy2 = svgY(pos)}
@@ -1292,7 +1359,7 @@
         {/if}
         <circle
           cx={cx} cy={cy2} r={markerMetrics.radius}
-          fill={isGoalkeeper(p) ? tokenColorForPlayer(p) : (isHome ? 'url(#tb-home-token)' : 'url(#tb-away-token)')}
+          fill={isGoalkeeper(p) ? tokenColorForPlayer(p) : (isHome ? 'url(#tb-home-token)' : awayColor)}
           stroke={tokenBorderColor(p)}
           stroke-width="0.5"
           filter="url(#tb-token-shadow)"
@@ -1504,9 +1571,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-wrap: wrap;
     gap: 7px;
-    min-height: 30px;
-    padding: 5px 14px;
+    min-height: 34px;
+    padding: 6px 14px;
     background: rgba(235,242,230,0.92);
     border-bottom: 1px solid rgba(31,55,42,0.1);
     color: rgba(28,50,39,0.7);
@@ -1524,9 +1592,8 @@
   }
 
   .tb-context-hint span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    max-width: min(760px, 100%);
+    white-space: normal;
   }
 
   .tb-segmented {

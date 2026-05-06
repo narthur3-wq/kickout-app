@@ -55,6 +55,8 @@ Audit baseline: 2026-04-30
 - [ ] Open Capture, Live, Digest, Possession, Pass Destination, Kickouts, Shots, Turnovers, and Events.
 - [ ] Open Tools > Board with and without an active match.
 - [ ] On Board, add a pass, run, shot, and pen mark; confirm one Play press runs the full remaining flow.
+- [ ] On Board, confirm a runner follows the drawn run path during playback.
+- [ ] On Board, hide a selected player counter and restore all players.
 - [ ] On Board, use the bottom strip to add a step, clear the current step, and delete a step.
 - [ ] On Board, use Erase to remove a freehand pen drawing.
 - [ ] On Board, switch speed and half-pitch view; reload and confirm the board restores in the correct match/training context.

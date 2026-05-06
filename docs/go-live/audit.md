@@ -14,7 +14,7 @@ Current validation evidence from this working tree:
 
 - `npm run lint` - passed.
 - `npm run typecheck` - passed.
-- `npm run test:unit` - passed: 38 files, 312 tests on the latest 2026-05-06 gate.
+- `npm run test:unit` - passed: 38 files, 313 tests on the latest 2026-05-06 gate.
 - `npm run test:coverage` - passed.
 - `npm run test:e2e` - passed: 50 tests passed, 3 auth/smoke tests skipped by design.
 - `npm run test:a11y` - passed.
@@ -35,6 +35,13 @@ Tactical board product polish validation on 2026-05-06:
 - `npm.cmd run test:e2e -- tests/e2e/tactical-board.spec.js --project=chromium` - passed.
 - `npm.cmd run test:a11y` - passed during the 2026-05-06 rail/marker polish pass.
 - Board remains lazy-loaded as its own production chunk.
+
+Tactical board UX follow-up validation on 2026-05-06:
+
+- `npm.cmd run check` - passed: lint, typecheck, 38 unit/component files, 313 tests, and production build.
+- `npm.cmd run test:e2e -- tests/e2e/tactical-board.spec.js --project=chromium` - passed with hide/show player coverage.
+- `npm.cmd run test:a11y` - passed.
+- Build output kept the board lazy-loaded as `TacticalBoard-BZVC03Yu.js` at `41.78 kB` minified / `13.25 kB` gzip; main JS was `494.11 kB` minified / `142.33 kB` gzip.
 
 Worktree note:
 
@@ -70,7 +77,7 @@ Conditions before or during launch signoff:
 - Routed digest share failures into the shared diagnostic path.
 - Added quick analysis preset support and coach-handoff copy support as low-risk polish.
 - Excluded the export-only `html2canvas` chunk from the PWA precache, reducing precache size materially.
-- Added the tactical board MVP/product polish: per-context save/restore, autoplay, playback speed, pen marks, shot arrows, half-pitch views, PNG export, compact left tool rail, bottom step strip, smaller tactical counters, distinct navy/green keeper counters, confirmation on destructive board actions, and clearer `Close Board` wording.
+- Added the tactical board MVP/product polish: per-context save/restore, autoplay, playback speed, path-following run animation, hidden player counters, pen marks, shot arrows, half-pitch views, PNG export, compact left tool rail, bottom step strip, smaller tactical counters, distinct navy/green keeper counters, confirmation on destructive board actions, and clearer `Close Board` wording.
 
 ## Resolved Audit Items
 

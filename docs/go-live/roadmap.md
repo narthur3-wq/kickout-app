@@ -51,7 +51,7 @@ Status:
 | `AUD-PL-03` Route digest/share failures into diagnostics | complete | Digest share failures now report into diagnostics. |
 | `AUD-PL-04` Document launch operating model | complete | User guide and release checklist now describe the model clearly. |
 | `AUD-PL-05` Keep Supabase smoke mandatory and separate | complete | Smoke remains outside `check:full` and inside release signoff. |
-| `TB-MVP-01` Tactical board MVP/product polish | complete | Persistence, autoplay, speed control, pen marks, shot arrows, half-pitch views, PNG export, compact tool rail, bottom step strip, smaller counters, navy/green keepers, and safer destructive actions are in the board overlay. |
+| `TB-MVP-01` Tactical board MVP/product polish | complete | Persistence, autoplay, speed control, path-following runs, hidden player counters, pen marks, shot arrows, half-pitch views, PNG export, compact tool rail, bottom step strip, smaller counters, navy/green keepers, and safer destructive actions are in the board overlay. |
 
 ## Phase 2 - Early Post-Launch Strengthening
 

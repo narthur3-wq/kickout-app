@@ -38,7 +38,7 @@ High-level shape:
   - lightweight admin/onboarding operations
 - `src/lib/TacticalBoard.svelte`
   - lazy-loaded full-screen half-time/training tactical board overlay
-  - drag-to-position players, draw passes/runs/shots/freehand pen markings, erase pen drawings, and play step-based tactical sequences
+  - drag-to-position players, hide/show player counters, draw passes/runs/shots/freehand pen markings, erase pen drawings, and play step-based tactical sequences
   - board chrome is split into a top session bar, compact left tool rail, central pitch canvas, settings drawer, and bottom step strip
 - `src/lib/tacticalBoardUtils.js`
   - pure utilities for the tactical board: coordinate conversion, Ramer-Douglas-Peucker path simplification, default GAA formations, snapshot normalization, and per-step position derivation
@@ -348,12 +348,14 @@ Storage:
 - match boards are stored under a match-scoped tactical-board key
 - training boards use a separate no-active-match key
 - snapshots normalize players, moves, pen strokes, pitch view, playback speed, team colours, marker size, labels, movement-track toggles, and current step
+- hidden player counters are persisted as `hiddenPlayerIds` so coaches can isolate a smaller group without deleting player records
 
 Interaction model:
 
-- outfield players render as compact red/yellow counters by default
+- outfield players render as compact red/yellow counters by default; the yellow side uses a flatter fill to avoid a confusing highlight hue
 - goalkeepers render as distinct navy/green counters
 - `Select` drags players and supports keyboard nudge controls on the board application surface
+- selected players can be hidden from the pitch and later restored with `Show all players`
 - `Pass` draws a solid blue arrow between two players
 - `Run` draws a dashed movement route and moves the player at playback
 - `Shot` draws a stronger shot arrow toward a target
@@ -367,7 +369,7 @@ Playback model:
 - the bottom step strip is the canonical step UI
 - one `Play` press autoplays from the current playhead through the remaining steps
 - pass and shot actions show a travelling ball dot during animation
-- run actions interpolate player positions between per-step caches
+- run actions interpolate players along the drawn run path, then resolve to the per-step endpoint cache
 
 ## Analytics visual model
 

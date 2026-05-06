@@ -31,7 +31,9 @@ Last verified: 2026-04-06 — 1 passed (9.8s), Chromium
 - [ ] Open `Tools > Board` with no active match.
 - [ ] Drag a player in Select mode.
 - [ ] Add a pass, run, shot, and pen mark.
+- [ ] Confirm run playback follows the drawn path rather than taking a straight line to the endpoint.
 - [ ] Use Erase to remove a freehand pen drawing.
+- [ ] Hide a selected player counter and then restore all players.
 - [ ] Press Play once and confirm the remaining sequence autoplays.
 - [ ] Add a step, clear the current step, and delete a step.
 - [ ] Confirm `Clear marks`, `Reset positions`, and `Reset board` have distinct behaviour and confirmations.
