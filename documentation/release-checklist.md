@@ -12,6 +12,7 @@ Use this as the PR description checklist before merging a production-ready chang
 - [ ] `supabase/migrations/20260330000100_add_event_indexes.sql` applied for existing projects
 - [ ] If analysis tabs are in launch scope, `supabase/migrations/20260406000100_add_analysis_tables.sql` and `supabase/migrations/20260406000200_add_possession_analysis_metadata.sql` are applied
 - [ ] Docs updated so the explicit match model and `Events` log behavior match reality
+- [ ] Tactical Board docs match the shipped board controls, step strip, and save/restore behaviour
 - [ ] Diagnostics snapshot can be copied from the account menu after a sync or onboarding failure
 - [ ] Browser matrix checked on at least Chromium and WebKit for the release-critical flows
 
@@ -24,13 +25,28 @@ Use this as the PR description checklist before merging a production-ready chang
 
 Last verified: 2026-04-06 — 1 passed (9.8s), Chromium
 
-## P2 - Docs
+## P2 - Tactical Board Smoke
+
+- [ ] Open `Tools > Board` with an active match.
+- [ ] Open `Tools > Board` with no active match.
+- [ ] Drag a player in Select mode.
+- [ ] Add a pass, run, shot, and pen mark.
+- [ ] Use Erase to remove a freehand pen drawing.
+- [ ] Press Play once and confirm the remaining sequence autoplays.
+- [ ] Add a step, clear the current step, and delete a step.
+- [ ] Confirm `Clear marks`, `Reset positions`, and `Reset board` have distinct behaviour and confirmations.
+- [ ] Switch `Full`, `Left half`, and `Right half`.
+- [ ] Change playback speed from Settings.
+- [ ] Export PNG once.
+- [ ] Reload and confirm the board restores in the correct match/training context.
+
+## P3 - Docs
 
 - [ ] Keep [technical-spec.md](technical-spec.md) aligned with the match entity model
 - [ ] Keep [user-guide.md](user-guide.md) aligned with the current user flow
 - [ ] Keep [backlog.md](backlog.md) aligned with what is actually implemented
 
-## P3 - Operations
+## P4 - Operations
 
 - [ ] Verify the onboarding function has `ALLOWED_ORIGIN`, `ADMIN_EMAILS`, and service-role secrets set in Supabase
 - [ ] Verify sync, onboarding, and storage failures write to the diagnostics log

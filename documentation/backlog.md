@@ -1,6 +1,6 @@
 # Pairc — Product Backlog
 
-Last updated: 2026-04-06
+Last updated: 2026-05-06
 
 Status key: `open` · `partial` · `deferred` · `done`
 
@@ -310,6 +310,64 @@ Covers:
 - Automatic deduplication of two analysts logging the same event
 - Competition hierarchy
 - Full season analytics platform
+
+---
+
+## Tactical Board (TB-series)
+
+Half-time/training board work added after the original match-entity backlog.
+
+**TB-01 — Always available board entry**
+Priority: should
+Status: done
+
+Board is available from `Tools > Board` with or without an active match. Active-match boards and training boards use separate local persistence keys.
+File: `src/App.svelte`, `src/lib/TacticalBoard.svelte`
+
+---
+
+**TB-02 — MVP/product board controls**
+Priority: should
+Status: done
+
+Shipped:
+- compact top session bar
+- left tool rail
+- bottom step strip
+- settings drawer
+- select/pass/run/shot/pen/erase tools
+- autoplay through the remaining steps from one `Play` press
+- playback speed
+- half-pitch views
+- PNG export
+- clear markings, clear drawings, reset positions, reset board, clear step, and delete step
+
+File: `src/lib/TacticalBoard.svelte`
+
+---
+
+**TB-03 — Visual polish**
+Priority: should
+Status: done
+
+Shipped:
+- smaller tactical counters
+- red/yellow outfield colours
+- navy/green keeper colours
+- softer pitch and field markings
+- distinct pass/run/shot/pen line semantics
+- clearer contextual helper text
+
+File: `src/lib/TacticalBoard.svelte`
+
+---
+
+**TB-04 — Edit existing tactical-board actions**
+Priority: nice
+Status: deferred
+
+Allow existing passes, runs, shots, and pen strokes to be selected and adjusted without rebuilding the step. This is useful, but not required for the current product release.
+File: `src/lib/TacticalBoard.svelte`
 
 ---
 

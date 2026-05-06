@@ -38,9 +38,10 @@ High-level shape:
   - lightweight admin/onboarding operations
 - `src/lib/TacticalBoard.svelte`
   - lazy-loaded full-screen half-time/training tactical board overlay
-  - drag-to-position players, draw passes and runs, step-based playback
+  - drag-to-position players, draw passes/runs/shots/freehand pen markings, erase pen drawings, and play step-based tactical sequences
+  - board chrome is split into a top session bar, compact left tool rail, central pitch canvas, settings drawer, and bottom step strip
 - `src/lib/tacticalBoardUtils.js`
-  - pure utilities for the tactical board: coordinate conversion, Ramer-Douglas-Peucker path simplification, default GAA formations, per-step position derivation
+  - pure utilities for the tactical board: coordinate conversion, Ramer-Douglas-Peucker path simplification, default GAA formations, snapshot normalization, and per-step position derivation
 
 Supporting helper modules include:
 
@@ -337,6 +338,36 @@ Both consume shared derived logic from:
 
 - `liveInsights.js`
 - `thresholds.js`
+
+## Tactical Board
+
+The tactical board is local-first and lazy-loaded from the app shell. It is available from `Tools > Board` with or without an active match.
+
+Storage:
+
+- match boards are stored under a match-scoped tactical-board key
+- training boards use a separate no-active-match key
+- snapshots normalize players, moves, pen strokes, pitch view, playback speed, team colours, marker size, labels, movement-track toggles, and current step
+
+Interaction model:
+
+- outfield players render as compact red/yellow counters by default
+- goalkeepers render as distinct navy/green counters
+- `Select` drags players and supports keyboard nudge controls on the board application surface
+- `Pass` draws a solid blue arrow between two players
+- `Run` draws a dashed movement route and moves the player at playback
+- `Shot` draws a stronger shot arrow toward a target
+- `Pen` stores simplified freehand strokes
+- `Erase` removes freehand pen drawings only
+- destructive utilities are separated into clear markings, clear drawings, reset positions, reset board, clear step, and delete step
+
+Playback model:
+
+- actions belong to integer steps
+- the bottom step strip is the canonical step UI
+- one `Play` press autoplays from the current playhead through the remaining steps
+- pass and shot actions show a travelling ball dot during animation
+- run actions interpolate player positions between per-step caches
 
 ## Analytics visual model
 

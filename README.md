@@ -1,6 +1,6 @@
 # Pairc - GAA Match Analyst
 
-A mobile-first progressive web app for live GAA match analysis. An analyst captures kickouts, shots, and turnovers during a match by tapping a pitch diagram. The app derives analytics in real time and produces a shareable post-match digest.
+A mobile-first progressive web app for live GAA match analysis. An analyst captures kickouts, shots, and turnovers during a match by tapping a pitch diagram. The app derives analytics in real time, produces a shareable post-match digest, and includes a full-screen Tactical Board for half-time or training presentations.
 
 ## Documentation
 
@@ -32,7 +32,7 @@ VITE_ADMIN_EMAILS=admin1@example.com,admin2@example.com
 
 If neither Supabase variable is set, Supabase is disabled and all data persists to localStorage only.
 
-`VITE_ADMIN_EMAILS` only controls whether the in-app Admin tab is shown. Real admin enforcement happens in the Supabase Edge Function.
+`VITE_ADMIN_EMAILS` only controls whether the in-app admin settings control is shown. Real admin enforcement happens in the Supabase Edge Function.
 
 ### Database setup
 
@@ -51,6 +51,8 @@ Current migrations in order:
 8. `20260330000100_add_event_indexes.sql` — adds indexes on `events.team_id` and `events.match_id`
 9. `20260406000100_add_analysis_tables.sql` — adds the analysis session/event tables
 10. `20260406000200_add_possession_analysis_metadata.sql` — adds `half` and `assist` to possession analysis rows
+11. `20260407000100_add_review_tags.sql` — adds review tags for post-match analysis
+12. `20260409000100_add_possession_event_paths.sql` — adds possession carry path and destination fields
 
 ## Admin Onboarding Automation
 
@@ -62,7 +64,7 @@ Deploy the function and set these secrets in Supabase:
 - `ADMIN_EMAILS` as a comma-separated list, for example `you@example.com,ops@example.com`
 - `ALLOWED_ORIGIN` set to your live app origin, for example `https://your-app-domain.vercel.app`
 
-Once deployed, configured admin emails will see an **Admin** tab in the app where they can:
+Once deployed, configured admin emails will see the admin settings control in the app header where they can:
 
 - add a user to their current club
 - create or find another club and assign a user to it

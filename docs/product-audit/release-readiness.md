@@ -1,5 +1,7 @@
 # Release Readiness
 
+Status note: this is the historical 2026-04 product-audit readiness snapshot. The current launch checklist lives in [`../go-live/release-checklist.md`](../go-live/release-checklist.md).
+
 ## Current Launch Risks
 
 - Access checks can still fail open on a transient network error.

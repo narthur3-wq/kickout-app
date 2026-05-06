@@ -3,6 +3,8 @@
 Roadmap date: 2026-04-08
 Last revised: 2026-04-08
 
+Status note: this roadmap remains as the historical shell-bloat plan. Current release sequencing lives in [`../go-live/roadmap.md`](../go-live/roadmap.md).
+
 This roadmap turns the shell-bloat audit into an execution plan. It is ordered by risk reduction and dependency, not by file size alone. The goal is to get `src/App.svelte` back to a thin shell while keeping behavior stable and tests green.
 
 The line budgets below are guardrails, not the end goal. If a phase preserves behavior, keeps tests green, and clearly improves ownership, that matters more than hitting an exact line count.

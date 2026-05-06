@@ -212,48 +212,72 @@ If you see a retry banner, the data is normally still safe locally unless the ap
 
 ## Tactical Board
 
-The tactical board is a half-time and training presentation tool. Open it with the **Board** tab, which is always available even when no match is active. It opens as a full-screen overlay above the app. Closing it returns you to exactly where you were — no match state is affected.
+The tactical board is a half-time and training presentation tool. Open it from `Tools > Board`, which is always available even when no match is active. It opens as a full-screen overlay above the app. `Close Board` returns you to exactly where you were - no match state is affected.
+
+Boards are saved locally by context:
+
+- active-match boards restore against that match
+- training boards restore when no active match is selected
 
 ### What it does
 
 - Places both teams on a full-pitch diagram (15 vs 15) in default GAA formation
+- Uses compact red/yellow outfield counters, with navy/green keeper counters
 - Lets you drag players to set positions
-- Lets you draw passes and runs for players on either team
-- Groups those actions into numbered steps
-- Plays them back step by step so you can walk through a pattern live
+- Lets you draw passes, runs, shots, and freehand pen markings
+- Groups actions into numbered steps on the bottom sequence strip
+- Plays the whole flow from one `Play` press so you can present a pattern live
+- Exports a PNG for handoff or follow-up
 
-### Tool modes
+### Layout
+
+- Top bar: board title, match title, view switcher, save state, settings, and close
+- Left rail: tactical tools and quick utilities
+- Centre: the pitch canvas
+- Bottom strip: step navigation, playback, add step, clear step, and delete step
+- Settings drawer: team colours, marker size, labels, movement tracks, pen colour, speed, export, and destructive actions
+
+### Tool Modes
 
 - **Select** — drag any player to reposition them
-- **Pass** — tap player A, then tap player B; a dashed arrow is drawn between them
-- **Run** — tap a player to select them (they highlight in yellow), then drag on the pitch to draw a movement path
+- **Pass** — tap player A, then tap player B; a blue pass arrow is drawn between them
+- **Run** — tap a player, then drag on the pitch to draw a movement path
+- **Shot** — tap the shooter, then tap the target area or goal; a stronger shot arrow is drawn
+- **Pen** — draw directly on the pitch for zones, traps, or emphasis
+- **Erase** — tap a freehand pen drawing to remove it
 
 ### Step sequence
 
-Each drawn pass or run is assigned to the current drawing step (shown in the toolbar as "Drawing step N").
+Each pass, run, shot, or pen mark is assigned to the current step in the bottom strip.
 
-Press **+ Next Step** to advance to the next step. This lets you build a sequence — for example: step 1 has a run, step 2 has a pass off that run, step 3 has a response movement from the opposition.
+Press `+` in the step strip to add a new step. This lets you build a sequence - for example: step 1 has a run, step 2 has a pass off that run, step 3 has a response movement from the opposition.
+
+The current step is highlighted. `Back` and `Forward` move through the sequence manually. `Clear step` removes markings assigned to the current step. `Delete step` removes the current step and pulls later steps down.
 
 ### Playback
 
-Press **▶ Play** to animate step 1. Players with runs animate to their path endpoints; pass arrows show a ball dot travelling to the receiver. When step 1 finishes, playback pauses.
+Press `Play` once to animate the full flow from the current playhead. Players with runs move to their path endpoints; pass and shot arrows show a ball dot travelling through the action.
 
-Press **▶ Play** again for step 2, and so on.
+Use `Back`, `Forward`, and `Reset` for manual presentation control. Playback speed lives in the Settings drawer.
 
-**← Back** snaps instantly to the previous step state. **↺ Reset** returns everyone to their pre-play positions without losing the drawn moves.
+Use the view switcher for `Full`, `Left half`, or `Right half` when you want to focus the pitch.
 
 ### Managing the board
 
-- **Undo** — removes the most recently drawn move
-- **Clear** — removes all drawn moves and resets the step counter, keeping player positions
-- **Reset** — removes all moves and returns players to the default formation
-- **Done** — closes the board
+- **Undo** — removes the most recently added move or pen stroke
+- **Erase** — removes individual freehand pen drawings only
+- **Clear marks / Clear all markings** — removes passes, runs, shots, and pen drawings while keeping player positions
+- **Clear drawings / Clear ink** — removes freehand pen drawings only
+- **Reset positions** — returns players to the default formation while keeping markings
+- **Reset board** — returns players to the default formation and clears all markings
+- **Export PNG** — saves the current board image
+- **Close Board** — closes the overlay
 
 ### Typical half-time workflow
 
 1. Open the board just before or at half-time
 2. Drag players to reflect the actual positions you saw in the first half
-3. Draw the key pattern you want to address — opponent press shape, your kickout target zone, etc.
+3. Draw the key pattern you want to address - opponent press shape, your kickout target zone, etc.
 4. Add steps to show how you want to respond
 5. Press Play and walk the coach through it
 6. Close when done

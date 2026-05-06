@@ -1,5 +1,7 @@
 # Backlog
 
+Status note: this is the historical 2026-04 product-audit backlog. The current launch backlog lives in [`../go-live/backlog.md`](../go-live/backlog.md); resolved launch blockers are tracked there.
+
 Priority order is based on launch risk first, then user value, then engineering cost.
 
 ## Improvement Recommendations

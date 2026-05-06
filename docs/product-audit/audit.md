@@ -2,7 +2,9 @@
 
 Audit date: 2026-04-07
 
-Launch recommendation: NO-GO
+Status note: this is a historical audit snapshot. The current launch verdict and release evidence live in [`../go-live/audit.md`](../go-live/audit.md). Several launch blockers listed here have since been resolved.
+
+Historical launch recommendation: NO-GO (superseded by the go-live audit)
 
 ## Executive Summary
 
@@ -16,9 +18,9 @@ The product is coherent without video or GPS. Those constraints do not block a c
 
 The app is good enough for a controlled team pilot. It is not yet excellent enough for a broad production launch.
 
-### Launch Recommendation
+### Historical Launch Recommendation
 
-NO-GO
+NO-GO (superseded)
 
 Reasons:
 
@@ -64,7 +66,7 @@ Reasons:
 - **Category:** product / UX / docs
 - **Why it matters:** Launch-quality software must explain itself accurately.
 - **Evidence:** `documentation/post-match-player-analysis.md` still refers to the older Feature 2 naming and deferred-editing language, and `documentation/technical-spec.md` still trails some of the shipped analysis workflow details.
-- **What is missing or weak:** The deeper product docs do not fully match the product people actually see in the shell.
+- **What was missing or weak:** At the time of this audit, the deeper product docs did not fully match the product people actually saw in the shell. The current documentation set has since been reconciled in the go-live docs and user guide.
 - **Recommended fix:** Update the README, user guide, technical spec, and release checklist so they describe the live tabs, analysis workflows, and verification steps that actually exist.
 - **Effort:** M
 - **Confidence:** high
@@ -83,7 +85,7 @@ Reasons:
 - **Severity:** high
 - **Category:** UX / product architecture
 - **Why it matters:** The app asks the user to process too many equal-priority destinations at once, which makes first-use and fast switching harder than they should be.
-- **Evidence:** `src/App.svelte` exposes Capture, Live, Digest, Possession Analysis, Pass Destination, Kickouts, Shots, Turnovers, Events, and Admin together in one top-level shell, alongside sync and diagnostics chrome.
+- **Historical evidence:** At the time of this audit, `src/App.svelte` exposed Capture, Live, Digest, Possession Analysis, Pass Destination, Kickouts, Shots, Turnovers, Events, and Admin together in one top-level shell, alongside sync and diagnostics chrome. The current shell now groups primary destinations more deliberately.
 - **What is missing or weak:** Stronger progressive disclosure and a clearer primary path per state.
 - **Recommended fix:** Collapse less-used destinations behind a secondary menu or more deliberate task grouping, and reduce banner stacking.
 - **Effort:** M

@@ -20,7 +20,7 @@ Priority is based on release truth, launch risk, user value, and implementation 
 | `AUD-FU-02` | Reduce first-install and precache weight | done | Export-only `html2canvas` is no longer precached. |
 | `AUD-NTH-01` | Saved analysis presets | done | Quick preset save/apply added to analysis panels. |
 | `AUD-NTH-03` | Coach handoff export polish | done | Digest panel now includes a quick copy-brief handoff path. |
-| `TB-MVP-01` | Tactical board MVP polish | done | Board is always available from Tools, persists per match/training context, supports autoplay, speed, pen marks, shots, half-pitch views, PNG export, and safer close/reset wording. |
+| `TB-MVP-01` | Tactical board MVP/product polish | done | Board is always available from Tools, persists per match/training context, supports autoplay, speed, pen marks, shots, half-pitch views, PNG export, compact tool rail, bottom step strip, smaller counters, navy/green keepers, and distinct clear/reset controls. |
 
 ## Remaining Post-Launch Improvements
 

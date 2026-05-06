@@ -8,7 +8,7 @@ This roadmap is ordered by release truth first: keep the validation signal trust
 
 - Phase 0 is complete in the current tree.
 - Phase 1 is complete for the minimum launch-hardening scope.
-- Tactical board MVP polish is complete in the 2026-05-04 update.
+- Tactical board MVP/product polish is complete through the 2026-05-06 update.
 - Phase 2 remains the main post-launch engineering work.
 - Phase 3 stays intentionally out of launch scope.
 
@@ -51,7 +51,7 @@ Status:
 | `AUD-PL-03` Route digest/share failures into diagnostics | complete | Digest share failures now report into diagnostics. |
 | `AUD-PL-04` Document launch operating model | complete | User guide and release checklist now describe the model clearly. |
 | `AUD-PL-05` Keep Supabase smoke mandatory and separate | complete | Smoke remains outside `check:full` and inside release signoff. |
-| `TB-MVP-01` Tactical board MVP polish | complete | Persistence, autoplay, speed control, pen marks, shot arrows, half-pitch views, PNG export, and safer destructive actions are in the board overlay. |
+| `TB-MVP-01` Tactical board MVP/product polish | complete | Persistence, autoplay, speed control, pen marks, shot arrows, half-pitch views, PNG export, compact tool rail, bottom step strip, smaller counters, navy/green keepers, and safer destructive actions are in the board overlay. |
 
 ## Phase 2 - Early Post-Launch Strengthening
 
