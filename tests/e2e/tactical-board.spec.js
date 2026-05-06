@@ -59,6 +59,17 @@ test('tactical board controls stay usable after the visual refactor', async ({ p
   await dragSvg(page, svg, 68, 29, 86, 34);
 
   await page.getByRole('button', { name: /^Undo$/i }).click();
+  await page.getByRole('button', { name: /^Pen$/i }).click();
+  await dragSvg(page, svg, 68, 29, 86, 34);
+  await page.getByRole('button', { name: /^Erase$/i }).click();
+  await clickSvg(page, svg, 76, 32);
+
+  await page.getByRole('button', { name: /^\+$/i }).click();
+  await expect(page.getByText(/^Step 2\/2$/i)).toBeVisible();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: /^Delete step$/i }).click();
+  await expect(page.getByText(/^Step 1\/1$/i)).toBeVisible();
+
   await page.getByRole('button', { name: /^Play$/i }).click();
   await expect(page.getByRole('button', { name: /^Pause$/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Play$/i })).toBeVisible({ timeout: 3000 });
@@ -69,6 +80,6 @@ test('tactical board controls stay usable after the visual refactor', async ({ p
   await expect(page.getByRole('button', { name: /^2x$/i })).toHaveClass(/active/);
 
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: /^Clear moves$/i }).click();
+  await page.getByRole('button', { name: /^Clear all markings$/i }).click();
   await expect(page.getByRole('button', { name: /^Play$/i })).toBeDisabled();
 });

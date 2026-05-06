@@ -184,6 +184,7 @@ export function normalizeBoardSnapshot(snapshot = {}) {
         id: String(stroke.id || ''),
         color: ['#facc15', '#60a5fa', '#ef4444', '#ffffff'].includes(stroke.color) ? stroke.color : '#facc15',
         width: Math.max(0.7, Math.min(3, Number(stroke.width) || 2.2)),
+        step: Math.max(1, Number(stroke.step) || 1),
         path: stroke.path.map(clampPoint),
         createdOrder: Math.max(1, Number(stroke.createdOrder) || 1),
       }))
@@ -203,5 +204,7 @@ export function normalizeBoardSnapshot(snapshot = {}) {
     awayColor: normalizeBoardColor(board.awayColor, '#f2c94c'),
     markerSize: ['compact', 'standard'].includes(board.markerSize) ? board.markerSize : 'standard',
     showTeamLabels: board.showTeamLabels === true,
+    showMovementTracks: board.showMovementTracks !== false,
+    showPreviousGhosts: board.showPreviousGhosts !== false,
   };
 }

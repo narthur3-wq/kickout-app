@@ -27,13 +27,15 @@
   let awayColor = '#f2c94c';
   let markerSize = 'standard';
   let showTeamLabels = false;
+  let showMovementTracks = true;
+  let showPreviousGhosts = true;
   let saveStatus = 'Not saved yet';
   let hydrated = false;
   let loadedBoardKey = null;
   let settingsOpen = false;
 
   // ── Tool ────────────────────────────────────────────────────────────────
-  let tool = 'select'; // 'select' | 'pass' | 'run' | 'shot' | 'pen'
+  let tool = 'select'; // 'select' | 'pass' | 'run' | 'shot' | 'pen' | 'erase'
 
   // ── Interaction ─────────────────────────────────────────────────────────
   let svgEl;
@@ -79,6 +81,8 @@
       awayColor,
       markerSize,
       showTeamLabels,
+      showMovementTracks,
+      showPreviousGhosts,
     };
   }
 
@@ -109,6 +113,8 @@
         awayColor = DEFAULT_AWAY_COLOR;
         markerSize = 'standard';
         showTeamLabels = false;
+        showMovementTracks = true;
+        showPreviousGhosts = true;
         saveStatus = 'New board';
       } else {
         const snapshot = normalizeBoardSnapshot(JSON.parse(raw));
@@ -123,6 +129,8 @@
         awayColor = snapshot.awayColor;
         markerSize = snapshot.markerSize;
         showTeamLabels = snapshot.showTeamLabels;
+        showMovementTracks = snapshot.showMovementTracks;
+        showPreviousGhosts = snapshot.showPreviousGhosts;
         playhead = 0;
         saveStatus = 'Restored';
       }
@@ -138,6 +146,8 @@
       awayColor = DEFAULT_AWAY_COLOR;
       markerSize = 'standard';
       showTeamLabels = false;
+      showMovementTracks = true;
+      showPreviousGhosts = true;
       saveStatus = 'Could not restore';
     } finally {
       selectedPlayerId = players[0]?.id || null;
@@ -173,6 +183,8 @@
     _awayColor,
     _markerSize,
     _showTeamLabels,
+    _showMovementTracks,
+    _showPreviousGhosts,
   ) {
     saveBoard();
   }
@@ -182,12 +194,33 @@
   }
 
   $: if (hydrated) {
-    saveBoardForState(players, moves, penStrokes, nextId, currentStep, pitchView, playbackSpeed, homeColor, awayColor, markerSize, showTeamLabels);
+    saveBoardForState(
+      players,
+      moves,
+      penStrokes,
+      nextId,
+      currentStep,
+      pitchView,
+      playbackSpeed,
+      homeColor,
+      awayColor,
+      markerSize,
+      showTeamLabels,
+      showMovementTracks,
+      showPreviousGhosts,
+    );
   }
 
   // ── Derived ──────────────────────────────────────────────────────────────
-  $: maxStep = moves.length > 0 ? Math.max(...moves.map(m => m.step)) : 0;
-  $: canPlay = !animating && playhead < maxStep;
+  $: stepCount = Math.max(
+    1,
+    currentStep,
+    moves.length > 0 ? Math.max(...moves.map(m => m.step)) : 1,
+    penStrokes.length > 0 ? Math.max(...penStrokes.map(stroke => stroke.step || 1)) : 1,
+  );
+  $: hasAnyTimelineContent = moves.length > 0 || penStrokes.length > 0;
+  $: maxStep = stepCount;
+  $: canPlay = !animating && hasAnyTimelineContent && playhead < maxStep;
   $: canBack = !animating && playhead > 0;
   $: canForward = !animating && playhead < maxStep;
   $: animationDuration = BASE_ANIM_DURATION / playbackSpeed;
@@ -195,7 +228,7 @@
 
   // Cache resolved player positions at each step boundary.
   // Reactive on players + moves. Stable during animation (no edits allowed then).
-  $: stepPositionCache = buildStepPositionCache(players, moves, maxStep);
+  $: stepPositionCache = buildStepPositionCache(players, moves, stepCount);
 
   // Animated player positions — interpolates between adjacent step cache entries.
   // When not animating, show positions relevant to the current drawing context so that
@@ -210,6 +243,10 @@
     if (!before || !after) return stepPositionCache[playhead] || {};
     return interpolatePlayerPositions(players, before, after, easeInOut(animProgress));
   })();
+
+  $: previousGhostPositions = showPreviousGhosts && !animating && currentStep > 1
+    ? stepPositionCache[Math.max(0, currentStep - 2)] || null
+    : null;
 
   // Ball dots that travel along pass and shot lines during animation.
   $: ballAnimDots = (() => {
@@ -292,22 +329,36 @@
     if (canForward) playhead++;
   }
 
+  function resetInteractionState() {
+    passFirstPlayerId = null;
+    shotPlayerId = null;
+    runArmedPlayerId = null;
+    rawPath = [];
+    isDrawingRun = false;
+    isDrawingPen = false;
+  }
+
   function handleUndo() {
     if ((moves.length === 0 && penStrokes.length === 0) || animating) return;
     const maxOrder = highestCreatedOrder();
     const removed = moves.find(m => m.createdOrder === maxOrder);
     if (!removed) {
+      const removedStroke = penStrokes.find((stroke) => stroke.createdOrder === maxOrder);
       penStrokes = penStrokes.filter((stroke) => stroke.createdOrder !== maxOrder);
+      if (removedStroke && playhead >= removedStroke.step) playhead = Math.max(0, removedStroke.step - 1);
       return;
     }
     moves = moves.filter(m => m.createdOrder !== maxOrder);
     if (removed) {
-      const stepIsNowEmpty = !moves.some(m => m.step === removed.step);
+      const stepIsNowEmpty = !moves.some(m => m.step === removed.step) && !penStrokes.some(stroke => stroke.step === removed.step);
       if (stepIsNowEmpty && removed.step === currentStep && currentStep > 1) {
         currentStep--;
       }
       // Pull currentStep back if it's drifted beyond the new frontier
-      const newMaxStep = moves.length > 0 ? Math.max(...moves.map(m => m.step)) : 0;
+      const newMaxStep = Math.max(
+        moves.length > 0 ? Math.max(...moves.map(m => m.step)) : 0,
+        penStrokes.length > 0 ? Math.max(...penStrokes.map(stroke => stroke.step || 1)) : 0,
+      );
       if (currentStep > newMaxStep + 1) currentStep = Math.max(1, newMaxStep + 1);
       if (playhead >= removed.step) playhead = Math.max(0, removed.step - 1);
     }
@@ -318,23 +369,50 @@
     return window.confirm(message);
   }
 
-  function handleClearMoves() {
+  function handleClearAllMarkings() {
     if (animating) return;
-    if (!confirmAction('Clear all passes, runs and shots from this board? Player positions and pen marks will stay.')) return;
+    if (!confirmAction('Clear all passes, runs, shots and freehand drawings? Player positions will stay.')) return;
     handleReset();
     moves = [];
+    penStrokes = [];
     currentStep = 1;
-    passFirstPlayerId = null;
-    shotPlayerId = null;
-    runArmedPlayerId = null;
+    resetInteractionState();
   }
 
   function handleClearInk() {
     if (animating || penStrokes.length === 0) return;
-    if (!confirmAction('Clear all pen marks from this board?')) return;
+    if (!confirmAction('Clear all freehand drawings from this board?')) return;
     penStrokes = [];
-    rawPath = [];
-    isDrawingPen = false;
+    resetInteractionState();
+  }
+
+  function handleClearStep() {
+    if (animating) return;
+    if (!moves.some(m => m.step === currentStep) && !penStrokes.some(stroke => stroke.step === currentStep)) return;
+    if (!confirmAction(`Clear all markings from Step ${currentStep}?`)) return;
+    moves = moves.filter(m => m.step !== currentStep);
+    penStrokes = penStrokes.filter(stroke => stroke.step !== currentStep);
+    if (playhead >= currentStep) playhead = Math.max(0, currentStep - 1);
+    resetInteractionState();
+  }
+
+  function handleDeleteStep() {
+    if (animating) return;
+    if (stepCount <= 1) {
+      handleClearStep();
+      return;
+    }
+    if (!confirmAction(`Delete Step ${currentStep}? Later steps will move down.`)) return;
+    const removedStep = currentStep;
+    moves = moves
+      .filter(m => m.step !== removedStep)
+      .map(m => m.step > removedStep ? { ...m, step: m.step - 1 } : m);
+    penStrokes = penStrokes
+      .filter(stroke => stroke.step !== removedStep)
+      .map(stroke => stroke.step > removedStep ? { ...stroke, step: stroke.step - 1 } : stroke);
+    currentStep = Math.min(removedStep, Math.max(1, stepCount - 1));
+    playhead = Math.max(0, currentStep - 1);
+    resetInteractionState();
   }
 
   function handleResetFormation() {
@@ -346,36 +424,29 @@
     moves = [];
     penStrokes = [];
     currentStep = 1;
-    passFirstPlayerId = null;
-    shotPlayerId = null;
-    runArmedPlayerId = null;
-    rawPath = [];
-    isDrawingRun = false;
-    isDrawingPen = false;
+    resetInteractionState();
   }
 
-  function advanceStep() {
+  function goToStep(step) {
+    if (animating) handlePause();
+    const nextStep = Math.max(1, Math.min(stepCount, Number(step) || 1));
+    currentStep = nextStep;
+    playhead = Math.max(0, nextStep - 1);
+    resetInteractionState();
+  }
+
+  function handleAddStep() {
     if (animating) return;
-    if (!moves.some(m => m.step === currentStep)) return; // require at least one move in current step
-    currentStep = Math.min(currentStep + 1, 20);
-    passFirstPlayerId = null;
-    shotPlayerId = null;
-    runArmedPlayerId = null;
-    rawPath = [];
-    isDrawingRun = false;
-    isDrawingPen = false;
+    currentStep = Math.min(stepCount + 1, 20);
+    playhead = Math.max(0, currentStep - 1);
+    resetInteractionState();
   }
 
   // ── Tool switching ────────────────────────────────────────────────────────
   function switchTool(t) {
     if (animating) return;
     tool = t;
-    passFirstPlayerId = null;
-    shotPlayerId = null;
-    runArmedPlayerId = null;
-    rawPath = [];
-    isDrawingRun = false;
-    isDrawingPen = false;
+    resetInteractionState();
   }
 
   // ── Pointer handling ──────────────────────────────────────────────────────
@@ -394,6 +465,31 @@
       if (d < bestDist) { bestDist = d; best = p; }
     }
     return bestDist <= HIT_RADIUS ? best : null;
+  }
+
+  function distanceToSegment(point, start, end) {
+    const px = svgX(point), py = svgY(point);
+    const ax = svgX(start), ay = svgY(start);
+    const bx = svgX(end), by = svgY(end);
+    const dx = bx - ax, dy = by - ay;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return Math.hypot(px - ax, py - ay);
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  }
+
+  function nearestPenStroke(point) {
+    let best = null, bestDist = Infinity;
+    for (const stroke of penStrokes.filter(item => item.step === currentStep)) {
+      for (let i = 1; i < stroke.path.length; i++) {
+        const distance = distanceToSegment(point, stroke.path[i - 1], stroke.path[i]);
+        if (distance < bestDist) {
+          bestDist = distance;
+          best = stroke;
+        }
+      }
+    }
+    return bestDist <= 3.6 ? best : null;
   }
 
   function onPointerDown(event) {
@@ -469,6 +565,9 @@
     } else if (tool === 'pen') {
       isDrawingPen = true;
       rawPath = [pt];
+    } else if (tool === 'erase') {
+      const stroke = nearestPenStroke(pt);
+      if (stroke) penStrokes = penStrokes.filter(item => item.id !== stroke.id);
     }
   }
 
@@ -520,6 +619,7 @@
             color: penColor,
             width: penWidth,
             path,
+            step: currentStep,
             createdOrder: nextId++,
           }];
         }
@@ -584,6 +684,8 @@
   const PASS_COLOR = '#38a3ff';
   const RUN_COLOR = '#f8fafc';
   const SHOT_COLOR = '#f59e0b';
+  const HOME_KEEPER_COLOR = '#1e3a8a';
+  const AWAY_KEEPER_COLOR = '#15803d';
   const PEN_COLORS = [
     { label: 'Yellow', value: '#facc15' },
     { label: 'Blue', value: '#60a5fa' },
@@ -614,12 +716,22 @@
     { value: 'run', label: 'Run' },
     { value: 'shot', label: 'Shot' },
     { value: 'pen', label: 'Pen' },
+    { value: 'erase', label: 'Erase' },
   ];
 
   $: markerMetrics = MARKER_SIZES[markerSize] || MARKER_SIZES.standard;
 
   function colorForTeam(team) {
     return team === 'home' ? homeColor : awayColor;
+  }
+
+  function isGoalkeeper(player) {
+    return Number(player?.number) === 1;
+  }
+
+  function tokenColorForPlayer(player) {
+    if (isGoalkeeper(player)) return player.team === 'home' ? HOME_KEEPER_COLOR : AWAY_KEEPER_COLOR;
+    return colorForTeam(player.team);
   }
 
   function hexToRgb(hex) {
@@ -646,12 +758,12 @@
     return mixHex(colorForTeam(team), '#ffffff', 0.24);
   }
 
-  function tokenBorderColor(team) {
-    return mixHex(colorForTeam(team), '#07120c', 0.42);
+  function tokenBorderColor(player) {
+    return mixHex(tokenColorForPlayer(player), '#07120c', isGoalkeeper(player) ? 0.28 : 0.42);
   }
 
-  function teamTextColor(team) {
-    return contrastText(colorForTeam(team));
+  function teamTextColor(player) {
+    return contrastText(tokenColorForPlayer(player));
   }
 
   function setTeamColor(team, color) {
@@ -663,9 +775,17 @@
   }
 
   function moveStrokeOpacity(m) {
+    if (m.step < currentStep && !showMovementTracks) return 0.1;
+    if (m.step < currentStep) return 0.34;
     if (m.step <= playhead) return 0.94;
     if (m.step === currentStep || m.step === animatingStep) return 0.86;
-    return 0.34;
+    return 0.18;
+  }
+
+  function annotationOpacity(step) {
+    if (step === currentStep || step === animatingStep) return 0.96;
+    if (step < currentStep) return showMovementTracks ? 0.26 : 0.08;
+    return 0.12;
   }
 
   function arrowHead(x1, y1, x2, y2, size = 2.6) {
@@ -692,6 +812,7 @@
     if (tool === 'run' && runArmedPlayerId) return 'Run: drag on the pitch to draw the movement.';
     if (tool === 'run') return 'Run: tap a player, then draw the run.';
     if (tool === 'pen') return 'Pen: draw directly on the pitch.';
+    if (tool === 'erase') return 'Erase: tap a freehand drawing to remove it.';
     return `Select: drag players to set positions - ${teamName || 'Home'} vs ${opponentName || 'Away'}.`;
   }
 
@@ -701,6 +822,10 @@
 
   function activeToolLabel() {
     return TOOL_OPTIONS.find((option) => option.value === tool)?.label || 'Select';
+  }
+
+  function stepHasContent(step) {
+    return moves.some(m => m.step === step) || penStrokes.some(stroke => stroke.step === step);
   }
 
   function shotTargetFor(move, before = {}) {
@@ -754,57 +879,18 @@
       <strong>{teamName || 'Home'} v {opponentName || 'Away'}</strong>
     </div>
 
-    <div class="tb-toolbar-main">
-      <div class="tb-cluster tb-tools">
-        <span class="tb-section-label">Tools</span>
-        <div class="tb-btn-group">
-          {#each TOOL_OPTIONS as option (option.value)}
-            <button
-              class="tb-btn tb-tool-btn"
-              class:active={tool === option.value}
-              on:click={() => switchTool(option.value)}
-              disabled={animating}
-            >{option.label}</button>
-          {/each}
-          <button class="tb-btn tb-undo-btn" on:click={handleUndo} disabled={(moves.length === 0 && penStrokes.length === 0) || animating}>Undo</button>
-        </div>
-      </div>
-
-      <div class="tb-cluster tb-playback">
-        <span class="tb-section-label">Playback</span>
-        <div class="tb-btn-group">
-          <button class="tb-btn" on:click={handleBack} disabled={!canBack}>Back</button>
-          <button class="tb-btn tb-play" on:click={animating ? handlePause : handlePlay} disabled={!animating && !canPlay}>
-            {animating ? 'Pause' : 'Play'}
-          </button>
-          <button class="tb-btn" on:click={handleForward} disabled={!canForward}>Forward</button>
-          <span class="tb-step-info">
-            {#if animating}
-              {animatingStep}/{maxStep}
-            {:else}
-              {playhead}/{maxStep}
-            {/if}
-          </span>
-        </div>
-      </div>
-
-      <div class="tb-cluster tb-view">
-        <span class="tb-section-label">View</span>
-        <div class="tb-segmented" aria-label="Pitch view">
-          {#each PITCH_VIEWS as option (option.value)}
-            <button
-              type="button"
-              class="tb-segment-btn"
-              class:active={pitchView === option.value}
-              on:click={() => pitchView = option.value}
-              disabled={animating}
-            >{option.label}</button>
-          {/each}
-        </div>
-      </div>
-    </div>
-
     <div class="tb-toolbar-actions">
+      <div class="tb-segmented tb-view-control" aria-label="Pitch view">
+        {#each PITCH_VIEWS as option (option.value)}
+          <button
+            type="button"
+            class="tb-segment-btn"
+            class:active={pitchView === option.value}
+            on:click={() => pitchView = option.value}
+            disabled={animating}
+          >{option.label}</button>
+        {/each}
+      </div>
       <span class="tb-save-state" aria-live="polite">{saveStatus}</span>
       <button class="tb-btn tb-settings-btn" class:active={settingsOpen} on:click={() => settingsOpen = !settingsOpen}>
         Settings
@@ -878,6 +964,20 @@
             on:click={() => showTeamLabels = !showTeamLabels}
             disabled={animating}
           >{showTeamLabels ? 'Hide pitch labels' : 'Show pitch labels'}</button>
+          <button
+            type="button"
+            class="tb-btn tb-panel-btn"
+            class:active={showMovementTracks}
+            on:click={() => showMovementTracks = !showMovementTracks}
+            disabled={animating}
+          >{showMovementTracks ? 'Hide movement tracks' : 'Show movement tracks'}</button>
+          <button
+            type="button"
+            class="tb-btn tb-panel-btn"
+            class:active={showPreviousGhosts}
+            on:click={() => showPreviousGhosts = !showPreviousGhosts}
+            disabled={animating}
+          >{showPreviousGhosts ? 'Hide previous ghosts' : 'Show previous ghosts'}</button>
         </section>
 
         <section class="tb-side-section">
@@ -901,10 +1001,9 @@
         <section class="tb-side-section">
           <h3>Sequence</h3>
           <div class="tb-side-row">
-            <span>Drawing step</span>
-            <strong>{currentStep}</strong>
+            <span>Current step</span>
+            <strong>{currentStep}/{stepCount}</strong>
           </div>
-          <button class="tb-btn tb-panel-btn" on:click={advanceStep} disabled={animating || !moves.some(m => m.step === currentStep)} title="Start drawing the next step">Next Step</button>
           <div class="tb-side-label">Playback speed</div>
           <div class="tb-segmented tb-segmented-panel" aria-label="Playback speed">
             {#each SPEED_OPTIONS as speed (speed)}
@@ -927,11 +1026,35 @@
 
         <section class="tb-side-section tb-danger-section">
           <h3>Clear</h3>
-          <button class="tb-btn tb-panel-btn" on:click={handleClearMoves} disabled={moves.length === 0 || animating}>Clear moves</button>
+          <button class="tb-btn tb-panel-btn" on:click={handleClearAllMarkings} disabled={(moves.length === 0 && penStrokes.length === 0) || animating}>Clear all markings</button>
+          <button class="tb-btn tb-panel-btn" on:click={handleClearInk} disabled={penStrokes.length === 0 || animating}>Clear drawings</button>
           <button class="tb-btn tb-panel-btn tb-reset-btn" on:click={handleResetFormation} disabled={animating}>Reset formation</button>
         </section>
       </aside>
     {/if}
+
+    <aside class="tb-tool-rail" aria-label="Tactical board tools">
+      <div class="tb-rail-tools">
+        {#each TOOL_OPTIONS as option (option.value)}
+          <button
+            type="button"
+            class="tb-rail-btn"
+            class:active={tool === option.value}
+            on:click={() => switchTool(option.value)}
+            disabled={animating}
+          >
+            <span>{option.label}</span>
+          </button>
+        {/each}
+      </div>
+      <button class="tb-rail-btn tb-rail-utility" on:click={handleUndo} disabled={(moves.length === 0 && penStrokes.length === 0) || animating}>
+        <span>Undo</span>
+      </button>
+      <div class="tb-tool-hint">
+        <strong>{activeToolLabel()}</strong>
+        <span>{toolStatusText()}</span>
+      </div>
+    </aside>
 
     <!-- Pitch -->
     <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (custom SVG board exposes keyboard controls) -->
@@ -939,7 +1062,7 @@
       class="tb-pitch-wrap"
       class:tb-tool-select={tool === 'select'}
       class:tb-tool-draw={tool === 'run' || tool === 'pen'}
-      class:tb-tool-target={tool === 'pass' || tool === 'shot'}
+      class:tb-tool-target={tool === 'pass' || tool === 'shot' || tool === 'erase'}
       role="application"
       tabindex="0"
       aria-label="Tactical board. In select mode, bracket keys choose a player and arrow keys move them."
@@ -949,20 +1072,6 @@
       on:pointercancel={onPointerUp}
       on:keydown={onBoardKeyDown}
     >
-    <div class="tb-inline-hint">
-      <span>{activeToolLabel()}</span>
-      <strong>{toolStatusText()}</strong>
-    </div>
-    <div class="tb-canvas-state" aria-live="polite">
-      <span>View: {pitchViewLabel()}</span>
-      <span>
-        {#if animating}
-          Step {animatingStep}/{maxStep}
-        {:else}
-          Step {playhead}/{maxStep}
-        {/if}
-      </span>
-    </div>
     <svg
       bind:this={svgEl}
       viewBox={viewBox}
@@ -1057,7 +1166,7 @@
           stroke-width={Math.max(stroke.width || penWidth, 2)}
           stroke-linecap="round"
           stroke-linejoin="round"
-          opacity="0.96"
+          opacity={annotationOpacity(stroke.step || 1)}
           vector-effect="non-scaling-stroke"
         />
       {/each}
@@ -1124,6 +1233,23 @@
           vector-effect="non-scaling-stroke" />
       {/each}
 
+      {#if previousGhostPositions}
+        <g opacity="0.28" pointer-events="none">
+          {#each players as p (p.id)}
+            {@const ghostPos = playerPosition(previousGhostPositions, p)}
+            <circle
+              cx={svgX(ghostPos)}
+              cy={svgY(ghostPos)}
+              r={markerMetrics.radius}
+              fill={tokenColorForPlayer(p)}
+              stroke="rgba(246,244,226,0.58)"
+              stroke-width="0.42"
+              vector-effect="non-scaling-stroke"
+            />
+          {/each}
+        </g>
+      {/if}
+
       <!-- ── Players ───────────────────────────────────────────────────── -->
       {#each players as p (p.id)}
         {@const pos = playerPosition(visualPositions, p)}
@@ -1143,8 +1269,8 @@
         {/if}
         <circle
           cx={cx} cy={cy2} r={markerMetrics.radius}
-          fill={isHome ? 'url(#tb-home-token)' : 'url(#tb-away-token)'}
-          stroke={tokenBorderColor(p.team)}
+          fill={isGoalkeeper(p) ? tokenColorForPlayer(p) : (isHome ? 'url(#tb-home-token)' : 'url(#tb-away-token)')}
+          stroke={tokenBorderColor(p)}
           stroke-width="0.58"
           filter="url(#tb-token-shadow)"
           vector-effect="non-scaling-stroke"
@@ -1153,8 +1279,8 @@
           x={cx} y={cy2 + 0.05}
           text-anchor="middle" dominant-baseline="central"
           font-size={markerMetrics.font} font-weight="850"
-          fill={teamTextColor(p.team)}
-          stroke={teamTextColor(p.team) === '#ffffff' ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.24)'}
+          fill={teamTextColor(p)}
+          stroke={teamTextColor(p) === '#ffffff' ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.24)'}
           stroke-width="0.24"
           paint-order="stroke"
           pointer-events="none"
@@ -1174,6 +1300,48 @@
       {/if}
     </svg>
   </div>
+  </div>
+
+  <div class="tb-step-strip" aria-label="Tactical board sequence">
+    <div class="tb-step-playback">
+      <button class="tb-btn" on:click={handleBack} disabled={!canBack}>Back</button>
+      <button class="tb-btn tb-play" on:click={animating ? handlePause : handlePlay} disabled={!animating && !canPlay}>
+        {animating ? 'Pause' : 'Play'}
+      </button>
+      <button class="tb-btn" on:click={handleForward} disabled={!canForward}>Forward</button>
+      <button class="tb-btn" on:click={handleReset} disabled={!animating && playhead === 0}>Reset</button>
+    </div>
+
+    <div class="tb-step-list" aria-label="Steps">
+      {#each Array.from({ length: stepCount }, (_, index) => index + 1) as step (step)}
+        <button
+          type="button"
+          class="tb-step-chip"
+          class:active={currentStep === step}
+          class:played={playhead >= step}
+          on:click={() => goToStep(step)}
+          disabled={animating}
+        >
+          <span>{step}</span>
+          {#if stepHasContent(step)}
+            <i aria-hidden="true"></i>
+          {/if}
+        </button>
+      {/each}
+      <button class="tb-step-add" on:click={handleAddStep} disabled={animating || stepCount >= 20}>+</button>
+    </div>
+
+    <div class="tb-step-actions">
+      <span class="tb-step-summary">
+        {#if animating}
+          Playing {animatingStep}/{stepCount}
+        {:else}
+          Step {currentStep}/{stepCount}
+        {/if}
+      </span>
+      <button class="tb-btn" on:click={handleClearStep} disabled={!stepHasContent(currentStep) || animating}>Clear step</button>
+      <button class="tb-btn tb-reset-btn" on:click={handleDeleteStep} disabled={animating || (stepCount <= 1 && !stepHasContent(currentStep))}>Delete step</button>
+    </div>
   </div>
 </div>
 
@@ -1213,10 +1381,7 @@
     box-shadow: 0 5px 16px rgba(7,18,13,0.1);
   }
 
-  .tb-toolbar-main,
   .tb-toolbar-actions,
-  .tb-cluster,
-  .tb-btn-group,
   .tb-segmented,
   .tb-color-row {
     display: flex;
@@ -1248,45 +1413,9 @@
     letter-spacing: 0;
   }
 
-  .tb-toolbar-main {
-    flex: 1;
-    justify-content: center;
-    gap: 8px;
-    min-width: 0;
-    max-width: 1040px;
-    flex-wrap: wrap;
-  }
-
   .tb-toolbar-actions {
     gap: 8px;
     flex-shrink: 0;
-  }
-
-  .tb-cluster {
-    gap: 6px;
-    min-height: 36px;
-    padding: 3px;
-    border: 1px solid rgba(31,55,42,0.08);
-    border-radius: 10px;
-    background: rgba(255,255,255,0.46);
-  }
-
-  .tb-cluster + .tb-cluster {
-    padding-left: 3px;
-  }
-
-  .tb-section-label {
-    font-size: 10px;
-    font-weight: 800;
-    color: rgba(28,50,39,0.46);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    white-space: nowrap;
-    margin-left: 4px;
-  }
-
-  .tb-btn-group {
-    gap: 4px;
   }
 
   .tb-btn {
@@ -1327,26 +1456,12 @@
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.16), 0 2px 8px rgba(119,18,32,0.22);
   }
 
-  .tb-tool-btn {
-    min-width: 56px;
-  }
-
-  .tb-tool-btn.active {
-    background: var(--tb-red);
-    color: #fff;
-  }
-
   .tb-play {
     min-width: 62px;
     background: var(--tb-blue);
     border-color: rgba(22,76,155,0.38);
     color: #fff;
     box-shadow: 0 2px 8px rgba(47,125,225,0.22);
-  }
-
-  .tb-undo-btn {
-    color: #374151;
-    background: rgba(255,255,255,0.54);
   }
 
   .tb-done {
@@ -1359,22 +1474,6 @@
     background: #20392d;
     border-color: #20392d;
     color: #fff;
-  }
-
-  .tb-step-info {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 38px;
-    min-height: 26px;
-    padding: 0 8px;
-    border-radius: 999px;
-    background: rgba(28,50,39,0.08);
-    color: rgba(28,50,39,0.72);
-    font-size: 12px;
-    font-weight: 800;
-    text-align: center;
-    font-variant-numeric: tabular-nums;
   }
 
   .tb-segmented {
@@ -1426,14 +1525,89 @@
     flex: 1;
     display: flex;
     justify-content: center;
-    align-items: center;
-    gap: 12px;
+    align-items: stretch;
+    gap: 14px;
     min-height: 0;
-    padding: 22px 28px 26px;
+    padding: 18px 24px 16px;
     position: relative;
     background:
       linear-gradient(135deg, rgba(255,255,255,0.04), transparent 38%),
       var(--tb-bg);
+  }
+
+  .tb-tool-rail {
+    width: 96px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    padding: 10px;
+    border-radius: 14px;
+    background: rgba(239,245,234,0.95);
+    border: 1px solid rgba(255,255,255,0.16);
+    box-shadow: 0 14px 28px rgba(6,18,12,0.18);
+  }
+
+  .tb-rail-tools {
+    display: grid;
+    gap: 6px;
+  }
+
+  .tb-rail-btn {
+    min-height: 42px;
+    border-radius: 10px;
+    border: 1px solid rgba(44,72,55,0.16);
+    background: rgba(255,255,255,0.74);
+    color: var(--tb-ink);
+    font-size: 12px;
+    font-weight: 850;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(15,35,24,0.08);
+    transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+  }
+
+  .tb-rail-btn:not(:disabled):hover {
+    border-color: rgba(47,125,225,0.42);
+    box-shadow: 0 3px 9px rgba(15,35,24,0.14);
+  }
+
+  .tb-rail-btn.active {
+    background: var(--tb-red);
+    border-color: rgba(105,14,28,0.34);
+    color: #fff;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.16), 0 4px 10px rgba(119,18,32,0.2);
+  }
+
+  .tb-rail-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+    box-shadow: none;
+  }
+
+  .tb-rail-utility {
+    background: rgba(28,50,39,0.08);
+  }
+
+  .tb-tool-hint {
+    margin-top: auto;
+    display: grid;
+    gap: 4px;
+    padding: 9px;
+    border-radius: 10px;
+    background: rgba(28,50,39,0.08);
+    color: rgba(28,50,39,0.7);
+  }
+
+  .tb-tool-hint strong {
+    color: var(--tb-ink);
+    font-size: 12px;
+    line-height: 1.15;
+  }
+
+  .tb-tool-hint span {
+    font-size: 11px;
+    line-height: 1.25;
   }
 
   .tb-side-panel {
@@ -1597,67 +1771,6 @@
       0 16px 34px rgba(6,18,12,0.24);
   }
 
-  .tb-inline-hint,
-  .tb-canvas-state {
-    position: absolute;
-    z-index: 2;
-    pointer-events: none;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .tb-inline-hint {
-    top: 14px;
-    left: 16px;
-    max-width: min(560px, calc(100% - 32px));
-    padding: 7px 10px;
-    border-radius: 999px;
-    background: rgba(14,31,23,0.72);
-    color: rgba(247,249,243,0.82);
-    box-shadow: 0 6px 18px rgba(5,18,11,0.16);
-    backdrop-filter: blur(6px);
-  }
-
-  .tb-inline-hint span {
-    flex-shrink: 0;
-    min-height: 22px;
-    display: inline-flex;
-    align-items: center;
-    padding: 0 8px;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.14);
-    color: #fff;
-    font-size: 11px;
-    font-weight: 850;
-  }
-
-  .tb-inline-hint strong {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 12px;
-    font-weight: 800;
-  }
-
-  .tb-canvas-state {
-    right: 16px;
-    top: 14px;
-    color: rgba(247,249,243,0.7);
-    font-size: 11px;
-    font-weight: 800;
-  }
-
-  .tb-canvas-state span {
-    min-height: 24px;
-    display: inline-flex;
-    align-items: center;
-    padding: 0 8px;
-    border-radius: 999px;
-    background: rgba(14,31,23,0.54);
-    backdrop-filter: blur(6px);
-  }
-
   .tb-pitch-wrap:focus {
     outline: 3px solid rgba(125,211,252,0.72);
     outline-offset: -4px;
@@ -1686,6 +1799,93 @@
     cursor: pointer;
   }
 
+  .tb-step-strip {
+    flex-shrink: 0;
+    display: grid;
+    grid-template-columns: auto minmax(180px, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 14px;
+    background: rgba(238,244,232,0.96);
+    border-top: 1px solid rgba(31,55,42,0.14);
+    box-shadow: 0 -7px 18px rgba(7,18,13,0.12);
+  }
+
+  .tb-step-playback,
+  .tb-step-actions,
+  .tb-step-list {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tb-step-list {
+    min-width: 0;
+    overflow-x: auto;
+    padding: 2px;
+    justify-content: center;
+  }
+
+  .tb-step-chip,
+  .tb-step-add {
+    position: relative;
+    flex: 0 0 auto;
+    min-width: 38px;
+    min-height: 34px;
+    border-radius: 10px;
+    border: 1px solid rgba(44,72,55,0.16);
+    background: rgba(255,255,255,0.68);
+    color: rgba(28,50,39,0.76);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 900;
+    box-shadow: 0 1px 3px rgba(15,35,24,0.08);
+  }
+
+  .tb-step-chip.active {
+    background: var(--tb-blue);
+    border-color: rgba(22,76,155,0.34);
+    color: #fff;
+    box-shadow: 0 4px 10px rgba(47,125,225,0.24);
+  }
+
+  .tb-step-chip.played:not(.active) {
+    background: rgba(47,125,225,0.12);
+    color: rgba(28,50,39,0.86);
+  }
+
+  .tb-step-chip i {
+    position: absolute;
+    left: 50%;
+    bottom: 5px;
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: currentColor;
+    transform: translateX(-50%);
+    opacity: 0.72;
+  }
+
+  .tb-step-add {
+    color: #14532d;
+    background: rgba(220,252,231,0.82);
+    border-color: rgba(34,133,77,0.26);
+  }
+
+  .tb-step-summary {
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 9px;
+    border-radius: 999px;
+    background: rgba(28,50,39,0.08);
+    color: rgba(28,50,39,0.68);
+    font-size: 11px;
+    font-weight: 850;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
   @media (max-width: 920px) {
     .tb-toolbar {
       align-items: stretch;
@@ -1693,7 +1893,6 @@
       gap: 8px;
     }
 
-    .tb-toolbar-main,
     .tb-toolbar-actions {
       width: 100%;
       justify-content: space-between;
@@ -1704,15 +1903,39 @@
       max-width: none;
     }
 
-    .tb-cluster {
-      padding-left: 0;
-      border-left: 0;
-    }
-
     .tb-board-body {
       flex-direction: column;
       padding: 12px;
       gap: 8px;
+    }
+
+    .tb-tool-rail {
+      width: auto;
+      flex-direction: row;
+      align-items: stretch;
+      overflow-x: auto;
+    }
+
+    .tb-rail-tools {
+      display: flex;
+      flex: 0 0 auto;
+    }
+
+    .tb-rail-btn {
+      min-width: 72px;
+    }
+
+    .tb-tool-hint {
+      min-width: 180px;
+      margin-top: 0;
+    }
+
+    .tb-step-strip {
+      grid-template-columns: 1fr;
+    }
+
+    .tb-step-list {
+      justify-content: flex-start;
     }
 
     .tb-side-panel {
@@ -1730,20 +1953,9 @@
       overflow-y: auto;
     }
 
-    .tb-toolbar-main,
-    .tb-cluster,
-    .tb-btn-group {
-      align-items: flex-start;
-      width: 100%;
-    }
-
-    .tb-cluster {
-      flex-direction: column;
-      gap: 5px;
-    }
-
     .tb-toolbar-actions,
-    .tb-btn-group {
+    .tb-step-playback,
+    .tb-step-actions {
       flex-wrap: wrap;
       justify-content: flex-start;
     }
@@ -1752,20 +1964,17 @@
       padding: 10px;
     }
 
-    .tb-inline-hint {
-      left: 10px;
-      right: 10px;
-      top: 10px;
-      max-width: none;
-      border-radius: 10px;
+    .tb-tool-rail {
+      padding: 8px;
     }
 
-    .tb-canvas-state {
-      right: 10px;
-      top: auto;
-      bottom: 10px;
-      flex-wrap: wrap;
-      justify-content: flex-end;
+    .tb-rail-btn {
+      min-width: 64px;
+      min-height: 38px;
+    }
+
+    .tb-tool-hint {
+      display: none;
     }
   }
 

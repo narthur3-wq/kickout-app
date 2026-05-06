@@ -23,6 +23,7 @@ describe('TacticalBoard', () => {
           id: 'pen-1',
           color: '#facc15',
           width: 2.2,
+          step: 1,
           path: [{ x: 0.2, y: 0.2 }, { x: 0.35, y: 0.4 }],
           createdOrder: 2,
         },
@@ -59,6 +60,8 @@ describe('TacticalBoard', () => {
     expect(screen.getByRole('button', { name: '2x' })).toHaveClass('active');
     expect(screen.getByRole('button', { name: 'Compact' })).toHaveClass('active');
     expect(screen.getByRole('button', { name: 'Hide pitch labels' })).toBeInTheDocument();
-    expect(screen.getByText(/View: Left half/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide movement tracks' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide previous ghosts' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Left half' })).toHaveClass('active');
   });
 });

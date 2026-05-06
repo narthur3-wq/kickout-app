@@ -26,6 +26,7 @@ describe('tacticalBoardUtils', () => {
           id: 'pen-1',
           color: '#60a5fa',
           width: 9,
+          step: 3,
           path: [{ x: 0.2, y: 0.3 }, { x: 1.3, y: -0.2 }],
           createdOrder: 4,
         },
@@ -47,10 +48,13 @@ describe('tacticalBoardUtils', () => {
       id: 'pen-1',
       color: '#60a5fa',
       width: 3,
+      step: 3,
       path: [{ x: 0.2, y: 0.3 }, { x: 1, y: 0 }],
     });
     expect(snapshot.pitchView).toBe('right');
     expect(snapshot.playbackSpeed).toBe(2);
+    expect(snapshot.showMovementTracks).toBe(true);
+    expect(snapshot.showPreviousGhosts).toBe(true);
   });
 
   it('keys saved boards by match or training context', () => {
