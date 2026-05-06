@@ -710,8 +710,8 @@
     { label: 'White', value: '#f8fafc' },
   ];
   const MARKER_SIZES = {
-    compact: { label: 'Compact', radius: 2.55, selectedRadius: 3.02, keeperRadius: 3.16, font: 2.04 },
-    standard: { label: 'Standard', radius: 2.72, selectedRadius: 3.2, keeperRadius: 3.34, font: 2.18 },
+    compact: { label: 'Compact', radius: 2.55, selectedRadius: 3.02, font: 2.04 },
+    standard: { label: 'Standard', radius: 2.72, selectedRadius: 3.2, font: 2.18 },
   };
   const SPEED_OPTIONS = [0.5, 1, 2];
   const PITCH_VIEWS = [
@@ -739,6 +739,7 @@
   }
 
   function tokenColorForPlayer(player) {
+    if (isGoalkeeper(player)) return player.team === 'home' ? HOME_KEEPER_COLOR : AWAY_KEEPER_COLOR;
     return colorForTeam(player.team);
   }
 
@@ -767,11 +768,7 @@
   }
 
   function tokenBorderColor(player) {
-    return mixHex(tokenColorForPlayer(player), '#07120c', 0.44);
-  }
-
-  function goalkeeperAccentColor(player) {
-    return player.team === 'home' ? HOME_KEEPER_COLOR : AWAY_KEEPER_COLOR;
+    return mixHex(tokenColorForPlayer(player), '#07120c', isGoalkeeper(player) ? 0.28 : 0.44);
   }
 
   function teamTextColor(player) {
@@ -1267,7 +1264,7 @@
               cx={svgX(ghostPos)}
               cy={svgY(ghostPos)}
               r={markerMetrics.radius}
-              fill={colorForTeam(p.team)}
+              fill={tokenColorForPlayer(p)}
               stroke="rgba(246,244,226,0.58)"
               stroke-width="0.42"
               vector-effect="non-scaling-stroke"
@@ -1293,19 +1290,9 @@
             vector-effect="non-scaling-stroke"
           />
         {/if}
-        {#if isGoalkeeper(p)}
-          <circle
-            cx={cx} cy={cy2} r={markerMetrics.keeperRadius}
-            fill="none"
-            stroke={goalkeeperAccentColor(p)}
-            stroke-width="0.58"
-            opacity="0.95"
-            vector-effect="non-scaling-stroke"
-          />
-        {/if}
         <circle
           cx={cx} cy={cy2} r={markerMetrics.radius}
-          fill={isHome ? 'url(#tb-home-token)' : 'url(#tb-away-token)'}
+          fill={isGoalkeeper(p) ? tokenColorForPlayer(p) : (isHome ? 'url(#tb-home-token)' : 'url(#tb-away-token)')}
           stroke={tokenBorderColor(p)}
           stroke-width="0.5"
           filter="url(#tb-token-shadow)"
