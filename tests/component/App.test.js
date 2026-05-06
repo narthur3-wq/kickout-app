@@ -306,7 +306,8 @@ describe('App shell auth and sync', () => {
     expect(boardTab).toBeInTheDocument();
 
     expect(await screen.findByRole('application', { name: /Tactical board/i })).toBeInTheDocument();
-    expect(screen.getByText(/Select: drag players to set positions - Home vs Away\./i)).toBeInTheDocument();
+    expect(screen.getByText('Select mode')).toBeInTheDocument();
+    expect(screen.getByText('drag players to set positions.')).toBeInTheDocument();
   });
 
   it('shows a paused sync warning and blocks saving when the user has no team assignment', async () => {

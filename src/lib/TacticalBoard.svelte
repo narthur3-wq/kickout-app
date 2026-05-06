@@ -417,13 +417,22 @@
 
   function handleResetFormation() {
     if (animating) return;
-    if (!confirmAction('Reset the board to the default formation and clear all drawings?')) return;
+    if (!confirmAction('Reset the board to the default formation and clear all markings?')) return;
     handleReset();
     players = defaultPlayers();
     selectedPlayerId = players[0]?.id || null;
     moves = [];
     penStrokes = [];
     currentStep = 1;
+    resetInteractionState();
+  }
+
+  function handleResetPositions() {
+    if (animating) return;
+    if (!confirmAction('Reset player positions to the default formation? Markings will stay.')) return;
+    handleReset();
+    players = defaultPlayers();
+    selectedPlayerId = players[0]?.id || null;
     resetInteractionState();
   }
 
@@ -701,8 +710,8 @@
     { label: 'White', value: '#f8fafc' },
   ];
   const MARKER_SIZES = {
-    compact: { label: 'Compact', radius: 2.82, selectedRadius: 3.42, font: 2.22 },
-    standard: { label: 'Standard', radius: 3.02, selectedRadius: 3.62, font: 2.36 },
+    compact: { label: 'Compact', radius: 2.55, selectedRadius: 3.02, keeperRadius: 3.16, font: 2.04 },
+    standard: { label: 'Standard', radius: 2.72, selectedRadius: 3.2, keeperRadius: 3.34, font: 2.18 },
   };
   const SPEED_OPTIONS = [0.5, 1, 2];
   const PITCH_VIEWS = [
@@ -730,7 +739,6 @@
   }
 
   function tokenColorForPlayer(player) {
-    if (isGoalkeeper(player)) return player.team === 'home' ? HOME_KEEPER_COLOR : AWAY_KEEPER_COLOR;
     return colorForTeam(player.team);
   }
 
@@ -759,7 +767,11 @@
   }
 
   function tokenBorderColor(player) {
-    return mixHex(tokenColorForPlayer(player), '#07120c', isGoalkeeper(player) ? 0.28 : 0.42);
+    return mixHex(tokenColorForPlayer(player), '#07120c', 0.44);
+  }
+
+  function goalkeeperAccentColor(player) {
+    return player.team === 'home' ? HOME_KEEPER_COLOR : AWAY_KEEPER_COLOR;
   }
 
   function teamTextColor(player) {
@@ -804,16 +816,16 @@
 
   function toolStatusText() {
     if (exportingSnapshot) return 'Exporting board image...';
-    if (tool === 'pass' && passFirstPlayerId) return 'Pass: tap the receiving player.';
-    if (tool === 'pass') return 'Pass: tap the passing player, then the receiver.';
-    if (tool === 'shot' && shotPlayerId) return 'Shot: tap the target area or goal.';
-    if (tool === 'shot') return 'Shot: tap the shooter, then tap the target.';
-    if (tool === 'run' && runArmedPlayerId && isDrawingRun) return 'Run: release to save the path.';
-    if (tool === 'run' && runArmedPlayerId) return 'Run: drag on the pitch to draw the movement.';
-    if (tool === 'run') return 'Run: tap a player, then draw the run.';
-    if (tool === 'pen') return 'Pen: draw directly on the pitch.';
-    if (tool === 'erase') return 'Erase: tap a freehand drawing to remove it.';
-    return `Select: drag players to set positions - ${teamName || 'Home'} vs ${opponentName || 'Away'}.`;
+    if (tool === 'pass' && passFirstPlayerId) return 'tap the receiving player.';
+    if (tool === 'pass') return 'tap the passing player, then the receiver.';
+    if (tool === 'shot' && shotPlayerId) return 'tap the target area or goal.';
+    if (tool === 'shot') return 'tap the shooter, then tap the target.';
+    if (tool === 'run' && runArmedPlayerId && isDrawingRun) return 'release to save the path.';
+    if (tool === 'run' && runArmedPlayerId) return 'drag on the pitch to draw the movement.';
+    if (tool === 'run') return 'tap a player, then draw the run.';
+    if (tool === 'pen') return 'draw directly on the pitch.';
+    if (tool === 'erase') return 'tap a freehand drawing to remove it.';
+    return 'drag players to set positions.';
   }
 
   function pitchViewLabel() {
@@ -897,6 +909,11 @@
       </button>
       <button class="tb-btn tb-done" on:click={() => dispatch('close')}>Close Board</button>
     </div>
+  </div>
+
+  <div class="tb-context-hint" aria-live="polite">
+    <strong>{activeToolLabel()} mode</strong>
+    <span>{toolStatusText()}</span>
   </div>
 
   <div class="tb-board-body" class:settings-open={settingsOpen}>
@@ -1028,7 +1045,8 @@
           <h3>Clear</h3>
           <button class="tb-btn tb-panel-btn" on:click={handleClearAllMarkings} disabled={(moves.length === 0 && penStrokes.length === 0) || animating}>Clear all markings</button>
           <button class="tb-btn tb-panel-btn" on:click={handleClearInk} disabled={penStrokes.length === 0 || animating}>Clear drawings</button>
-          <button class="tb-btn tb-panel-btn tb-reset-btn" on:click={handleResetFormation} disabled={animating}>Reset formation</button>
+          <button class="tb-btn tb-panel-btn tb-reset-btn" on:click={handleResetPositions} disabled={animating}>Reset positions</button>
+          <button class="tb-btn tb-panel-btn tb-reset-btn" on:click={handleResetFormation} disabled={animating}>Reset board</button>
         </section>
       </aside>
     {/if}
@@ -1047,12 +1065,20 @@
           </button>
         {/each}
       </div>
-      <button class="tb-rail-btn tb-rail-utility" on:click={handleUndo} disabled={(moves.length === 0 && penStrokes.length === 0) || animating}>
-        <span>Undo</span>
-      </button>
-      <div class="tb-tool-hint">
-        <strong>{activeToolLabel()}</strong>
-        <span>{toolStatusText()}</span>
+      <div class="tb-rail-divider" aria-hidden="true"></div>
+      <div class="tb-rail-utilities">
+        <button class="tb-rail-btn tb-rail-utility" on:click={handleUndo} disabled={(moves.length === 0 && penStrokes.length === 0) || animating}>
+          <span>Undo</span>
+        </button>
+        <button class="tb-rail-btn tb-rail-utility" on:click={handleClearAllMarkings} disabled={(moves.length === 0 && penStrokes.length === 0) || animating}>
+          <span>Clear marks</span>
+        </button>
+        <button class="tb-rail-btn tb-rail-utility" on:click={handleResetPositions} disabled={animating}>
+          <span>Reset positions</span>
+        </button>
+        <button class="tb-rail-btn tb-rail-utility tb-rail-danger" on:click={handleResetFormation} disabled={animating}>
+          <span>Reset board</span>
+        </button>
       </div>
     </aside>
 
@@ -1100,7 +1126,7 @@
           <stop offset="100%" stop-color={awayColor} />
         </radialGradient>
         <filter id="tb-token-shadow" x="-40%" y="-40%" width="180%" height="180%">
-          <feDropShadow dx="0.18" dy="0.36" stdDeviation="0.42" flood-color="#102016" flood-opacity="0.36" />
+          <feDropShadow dx="0.14" dy="0.28" stdDeviation="0.34" flood-color="#102016" flood-opacity="0.32" />
         </filter>
       </defs>
 
@@ -1241,7 +1267,7 @@
               cx={svgX(ghostPos)}
               cy={svgY(ghostPos)}
               r={markerMetrics.radius}
-              fill={tokenColorForPlayer(p)}
+              fill={colorForTeam(p.team)}
               stroke="rgba(246,244,226,0.58)"
               stroke-width="0.42"
               vector-effect="non-scaling-stroke"
@@ -1261,17 +1287,27 @@
           <circle
             cx={cx} cy={cy2} r={markerMetrics.selectedRadius}
             fill="none"
-            stroke="rgba(255,255,255,0.9)"
-            stroke-width="0.58"
+            stroke="rgba(125,211,252,0.92)"
+            stroke-width="0.46"
             opacity="1"
+            vector-effect="non-scaling-stroke"
+          />
+        {/if}
+        {#if isGoalkeeper(p)}
+          <circle
+            cx={cx} cy={cy2} r={markerMetrics.keeperRadius}
+            fill="none"
+            stroke={goalkeeperAccentColor(p)}
+            stroke-width="0.58"
+            opacity="0.95"
             vector-effect="non-scaling-stroke"
           />
         {/if}
         <circle
           cx={cx} cy={cy2} r={markerMetrics.radius}
-          fill={isGoalkeeper(p) ? tokenColorForPlayer(p) : (isHome ? 'url(#tb-home-token)' : 'url(#tb-away-token)')}
+          fill={isHome ? 'url(#tb-home-token)' : 'url(#tb-away-token)'}
           stroke={tokenBorderColor(p)}
-          stroke-width="0.58"
+          stroke-width="0.5"
           filter="url(#tb-token-shadow)"
           vector-effect="non-scaling-stroke"
         />
@@ -1280,8 +1316,8 @@
           text-anchor="middle" dominant-baseline="central"
           font-size={markerMetrics.font} font-weight="850"
           fill={teamTextColor(p)}
-          stroke={teamTextColor(p) === '#ffffff' ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.24)'}
-          stroke-width="0.24"
+          stroke={teamTextColor(p) === '#ffffff' ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.22)'}
+          stroke-width="0.18"
           paint-order="stroke"
           pointer-events="none"
           style="user-select:none;letter-spacing:0"
@@ -1476,6 +1512,36 @@
     color: #fff;
   }
 
+  .tb-context-hint {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 30px;
+    padding: 5px 14px;
+    background: rgba(235,242,230,0.92);
+    border-bottom: 1px solid rgba(31,55,42,0.1);
+    color: rgba(28,50,39,0.7);
+    font-size: 12px;
+    line-height: 1.3;
+  }
+
+  .tb-context-hint strong {
+    color: var(--tb-ink);
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+  }
+
+  .tb-context-hint span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .tb-segmented {
     gap: 2px;
     padding: 3px;
@@ -1522,13 +1588,13 @@
   }
 
   .tb-board-body {
-    flex: 1;
+    flex: 1 1 0;
     display: flex;
     justify-content: center;
-    align-items: stretch;
+    align-items: center;
     gap: 14px;
     min-height: 0;
-    padding: 18px 24px 16px;
+    padding: 14px 22px 12px;
     position: relative;
     background:
       linear-gradient(135deg, rgba(255,255,255,0.04), transparent 38%),
@@ -1536,12 +1602,12 @@
   }
 
   .tb-tool-rail {
-    width: 96px;
+    width: 108px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    min-height: 0;
+    align-self: center;
+    gap: 8px;
     padding: 10px;
     border-radius: 14px;
     background: rgba(239,245,234,0.95);
@@ -1549,13 +1615,21 @@
     box-shadow: 0 14px 28px rgba(6,18,12,0.18);
   }
 
-  .tb-rail-tools {
+  .tb-rail-tools,
+  .tb-rail-utilities {
     display: grid;
     gap: 6px;
   }
 
+  .tb-rail-divider {
+    height: 1px;
+    margin: 3px 4px;
+    background: rgba(28,50,39,0.14);
+  }
+
   .tb-rail-btn {
-    min-height: 42px;
+    min-height: 39px;
+    padding: 6px 5px;
     border-radius: 10px;
     border: 1px solid rgba(44,72,55,0.16);
     background: rgba(255,255,255,0.74);
@@ -1565,6 +1639,11 @@
     cursor: pointer;
     box-shadow: 0 1px 3px rgba(15,35,24,0.08);
     transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+  }
+
+  .tb-rail-btn span {
+    display: block;
+    line-height: 1.08;
   }
 
   .tb-rail-btn:not(:disabled):hover {
@@ -1587,27 +1666,14 @@
 
   .tb-rail-utility {
     background: rgba(28,50,39,0.08);
-  }
-
-  .tb-tool-hint {
-    margin-top: auto;
-    display: grid;
-    gap: 4px;
-    padding: 9px;
-    border-radius: 10px;
-    background: rgba(28,50,39,0.08);
-    color: rgba(28,50,39,0.7);
-  }
-
-  .tb-tool-hint strong {
-    color: var(--tb-ink);
-    font-size: 12px;
-    line-height: 1.15;
-  }
-
-  .tb-tool-hint span {
+    color: rgba(28,50,39,0.74);
     font-size: 11px;
-    line-height: 1.25;
+  }
+
+  .tb-rail-danger {
+    color: #7c2d12;
+    background: rgba(255,247,237,0.88);
+    border-color: rgba(180,83,9,0.22);
   }
 
   .tb-side-panel {
@@ -1760,7 +1826,7 @@
     width: 100%;
     max-width: 1540px;
     height: 100%;
-    padding: 20px;
+    padding: 18px;
     border-radius: 16px;
     background:
       linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
@@ -1907,27 +1973,31 @@
       flex-direction: column;
       padding: 12px;
       gap: 8px;
+      align-items: stretch;
     }
 
     .tb-tool-rail {
       width: auto;
       flex-direction: row;
       align-items: stretch;
+      align-self: stretch;
       overflow-x: auto;
     }
 
-    .tb-rail-tools {
+    .tb-rail-tools,
+    .tb-rail-utilities {
       display: flex;
       flex: 0 0 auto;
     }
 
-    .tb-rail-btn {
-      min-width: 72px;
+    .tb-rail-divider {
+      width: 1px;
+      height: auto;
+      margin: 4px 2px;
     }
 
-    .tb-tool-hint {
-      min-width: 180px;
-      margin-top: 0;
+    .tb-rail-btn {
+      min-width: 72px;
     }
 
     .tb-step-strip {
@@ -1964,6 +2034,10 @@
       padding: 10px;
     }
 
+    .tb-context-hint {
+      justify-content: flex-start;
+    }
+
     .tb-tool-rail {
       padding: 8px;
     }
@@ -1971,10 +2045,6 @@
     .tb-rail-btn {
       min-width: 64px;
       min-height: 38px;
-    }
-
-    .tb-tool-hint {
-      display: none;
     }
   }
 
