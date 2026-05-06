@@ -23,6 +23,10 @@
   let playhead = 0;      // 0 = before step 1, N = after step N played
   let pitchView = 'full';
   let playbackSpeed = 1;
+  let homeColor = '#c81f32';
+  let awayColor = '#f2c94c';
+  let markerSize = 'standard';
+  let showTeamLabels = false;
   let saveStatus = 'Not saved yet';
   let hydrated = false;
   let loadedBoardKey = null;
@@ -71,6 +75,10 @@
       currentStep,
       pitchView,
       playbackSpeed,
+      homeColor,
+      awayColor,
+      markerSize,
+      showTeamLabels,
     };
   }
 
@@ -97,6 +105,10 @@
         currentStep = 1;
         pitchView = 'full';
         playbackSpeed = 1;
+        homeColor = DEFAULT_HOME_COLOR;
+        awayColor = DEFAULT_AWAY_COLOR;
+        markerSize = 'standard';
+        showTeamLabels = false;
         saveStatus = 'New board';
       } else {
         const snapshot = normalizeBoardSnapshot(JSON.parse(raw));
@@ -107,6 +119,10 @@
         currentStep = snapshot.currentStep;
         pitchView = snapshot.pitchView;
         playbackSpeed = snapshot.playbackSpeed;
+        homeColor = snapshot.homeColor;
+        awayColor = snapshot.awayColor;
+        markerSize = snapshot.markerSize;
+        showTeamLabels = snapshot.showTeamLabels;
         playhead = 0;
         saveStatus = 'Restored';
       }
@@ -118,6 +134,10 @@
       currentStep = 1;
       pitchView = 'full';
       playbackSpeed = 1;
+      homeColor = DEFAULT_HOME_COLOR;
+      awayColor = DEFAULT_AWAY_COLOR;
+      markerSize = 'standard';
+      showTeamLabels = false;
       saveStatus = 'Could not restore';
     } finally {
       selectedPlayerId = players[0]?.id || null;
@@ -141,7 +161,19 @@
     }
   }
 
-  function saveBoardForState(_players, _moves, _penStrokes, _nextId, _currentStep, _pitchView, _playbackSpeed) {
+  function saveBoardForState(
+    _players,
+    _moves,
+    _penStrokes,
+    _nextId,
+    _currentStep,
+    _pitchView,
+    _playbackSpeed,
+    _homeColor,
+    _awayColor,
+    _markerSize,
+    _showTeamLabels,
+  ) {
     saveBoard();
   }
 
@@ -150,7 +182,7 @@
   }
 
   $: if (hydrated) {
-    saveBoardForState(players, moves, penStrokes, nextId, currentStep, pitchView, playbackSpeed);
+    saveBoardForState(players, moves, penStrokes, nextId, currentStep, pitchView, playbackSpeed, homeColor, awayColor, markerSize, showTeamLabels);
   }
 
   // ── Derived ──────────────────────────────────────────────────────────────
@@ -547,9 +579,10 @@
   }
 
   // ── Rendering helpers ─────────────────────────────────────────────────────
-  const HOME_COLOR = '#c81f32';
-  const AWAY_COLOR = '#f2c94c';
-  const MOVE_COLOR = '#38a3ff';
+  const DEFAULT_HOME_COLOR = '#c81f32';
+  const DEFAULT_AWAY_COLOR = '#f2c94c';
+  const PASS_COLOR = '#38a3ff';
+  const RUN_COLOR = '#f8fafc';
   const SHOT_COLOR = '#f59e0b';
   const PEN_COLORS = [
     { label: 'Yellow', value: '#facc15' },
@@ -557,6 +590,18 @@
     { label: 'Red', value: '#ef4444' },
     { label: 'White', value: '#ffffff' },
   ];
+  const TEAM_COLORS = [
+    { label: 'Red', value: '#c81f32' },
+    { label: 'Yellow', value: '#f2c94c' },
+    { label: 'Blue', value: '#2563eb' },
+    { label: 'Green', value: '#16a34a' },
+    { label: 'Black', value: '#111827' },
+    { label: 'White', value: '#f8fafc' },
+  ];
+  const MARKER_SIZES = {
+    compact: { label: 'Compact', radius: 2.82, selectedRadius: 3.42, font: 2.22 },
+    standard: { label: 'Standard', radius: 3.02, selectedRadius: 3.62, font: 2.36 },
+  };
   const SPEED_OPTIONS = [0.5, 1, 2];
   const PITCH_VIEWS = [
     { value: 'full', label: 'Full' },
@@ -571,7 +616,51 @@
     { value: 'pen', label: 'Pen' },
   ];
 
-  function teamTextColor(team) { return team === 'home' ? '#fff' : '#111'; }
+  $: markerMetrics = MARKER_SIZES[markerSize] || MARKER_SIZES.standard;
+
+  function colorForTeam(team) {
+    return team === 'home' ? homeColor : awayColor;
+  }
+
+  function hexToRgb(hex) {
+    const clean = String(hex || '').replace('#', '');
+    if (!/^[0-9a-fA-F]{6}$/.test(clean)) return { r: 200, g: 31, b: 50 };
+    const value = Number.parseInt(clean, 16);
+    return { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255 };
+  }
+
+  function mixHex(hex, mix = '#ffffff', amount = 0.2) {
+    const a = hexToRgb(hex);
+    const b = hexToRgb(mix);
+    const channel = (from, to) => Math.round(from + (to - from) * amount).toString(16).padStart(2, '0');
+    return `#${channel(a.r, b.r)}${channel(a.g, b.g)}${channel(a.b, b.b)}`;
+  }
+
+  function contrastText(hex) {
+    const { r, g, b } = hexToRgb(hex);
+    const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    return luminance > 0.58 ? '#101510' : '#ffffff';
+  }
+
+  function tokenHighlightColor(team) {
+    return mixHex(colorForTeam(team), '#ffffff', 0.24);
+  }
+
+  function tokenBorderColor(team) {
+    return mixHex(colorForTeam(team), '#07120c', 0.42);
+  }
+
+  function teamTextColor(team) {
+    return contrastText(colorForTeam(team));
+  }
+
+  function setTeamColor(team, color) {
+    if (team === 'home') {
+      homeColor = color;
+    } else {
+      awayColor = color;
+    }
+  }
 
   function moveStrokeOpacity(m) {
     if (m.step <= playhead) return 0.94;
@@ -716,28 +805,11 @@
     </div>
 
     <div class="tb-toolbar-actions">
+      <span class="tb-save-state" aria-live="polite">{saveStatus}</span>
       <button class="tb-btn tb-settings-btn" class:active={settingsOpen} on:click={() => settingsOpen = !settingsOpen}>
         Settings
       </button>
       <button class="tb-btn tb-done" on:click={() => dispatch('close')}>Close Board</button>
-    </div>
-  </div>
-
-  <div class="tb-coach-strip">
-    <div class="tb-coach-hint">
-      <span class="tb-mode-pill">{activeToolLabel()}</span>
-      <strong>{toolStatusText()}</strong>
-    </div>
-    <div class="tb-board-state" aria-live="polite">
-      <span>{saveStatus}</span>
-      <span>View: {pitchViewLabel()}</span>
-      <span>
-        {#if animating}
-          Step {animatingStep}/{maxStep}
-        {:else}
-          Step {playhead}/{maxStep}
-        {/if}
-      </span>
     </div>
   </div>
 
@@ -749,6 +821,66 @@
         </section>
 
         <section class="tb-side-section">
+          <h3>Team colours</h3>
+          <div class="tb-team-color-grid">
+            <div class="tb-team-color-row">
+              <span>{teamName || 'Home'}</span>
+              <div class="tb-color-row">
+                {#each TEAM_COLORS as color (color.value)}
+                  <button
+                    type="button"
+                    class="tb-color-btn"
+                    class:active={homeColor === color.value}
+                    style={`--swatch-color:${color.value}`}
+                    aria-label={`Set ${teamName || 'home'} colour to ${color.label}`}
+                    on:click={() => setTeamColor('home', color.value)}
+                    disabled={animating}
+                  ></button>
+                {/each}
+              </div>
+            </div>
+            <div class="tb-team-color-row">
+              <span>{opponentName || 'Away'}</span>
+              <div class="tb-color-row">
+                {#each TEAM_COLORS as color (color.value)}
+                  <button
+                    type="button"
+                    class="tb-color-btn"
+                    class:active={awayColor === color.value}
+                    style={`--swatch-color:${color.value}`}
+                    aria-label={`Set ${opponentName || 'away'} colour to ${color.label}`}
+                    on:click={() => setTeamColor('away', color.value)}
+                    disabled={animating}
+                  ></button>
+                {/each}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tb-side-section">
+          <h3>Player display</h3>
+          <div class="tb-segmented tb-segmented-panel" aria-label="Counter size">
+            {#each Object.entries(MARKER_SIZES) as [value, option] (value)}
+              <button
+                type="button"
+                class="tb-segment-btn"
+                class:active={markerSize === value}
+                on:click={() => markerSize = value}
+                disabled={animating}
+              >{option.label}</button>
+            {/each}
+          </div>
+          <button
+            type="button"
+            class="tb-btn tb-panel-btn"
+            class:active={showTeamLabels}
+            on:click={() => showTeamLabels = !showTeamLabels}
+            disabled={animating}
+          >{showTeamLabels ? 'Hide pitch labels' : 'Show pitch labels'}</button>
+        </section>
+
+        <section class="tb-side-section">
           <h3>Pen</h3>
           <div class="tb-color-row">
             {#each PEN_COLORS as color (color.value)}
@@ -756,7 +888,7 @@
                 type="button"
                 class="tb-color-btn"
                 class:active={penColor === color.value}
-                style={`--pen-color:${color.value}`}
+                style={`--swatch-color:${color.value}`}
                 aria-label={`Use ${color.label} pen`}
                 on:click={() => penColor = color.value}
                 disabled={animating}
@@ -817,6 +949,20 @@
       on:pointercancel={onPointerUp}
       on:keydown={onBoardKeyDown}
     >
+    <div class="tb-inline-hint">
+      <span>{activeToolLabel()}</span>
+      <strong>{toolStatusText()}</strong>
+    </div>
+    <div class="tb-canvas-state" aria-live="polite">
+      <span>View: {pitchViewLabel()}</span>
+      <span>
+        {#if animating}
+          Step {animatingStep}/{maxStep}
+        {:else}
+          Step {playhead}/{maxStep}
+        {/if}
+      </span>
+    </div>
     <svg
       bind:this={svgEl}
       viewBox={viewBox}
@@ -837,12 +983,12 @@
           <stop offset="100%" stop-color="#436f43" />
         </linearGradient>
         <radialGradient id="tb-home-token" cx="35%" cy="28%" r="75%">
-          <stop offset="0%" stop-color="#df3346" />
-          <stop offset="100%" stop-color={HOME_COLOR} />
+          <stop offset="0%" stop-color={tokenHighlightColor('home')} />
+          <stop offset="100%" stop-color={homeColor} />
         </radialGradient>
         <radialGradient id="tb-away-token" cx="35%" cy="28%" r="75%">
-          <stop offset="0%" stop-color="#ffe071" />
-          <stop offset="100%" stop-color={AWAY_COLOR} />
+          <stop offset="0%" stop-color={tokenHighlightColor('away')} />
+          <stop offset="100%" stop-color={awayColor} />
         </radialGradient>
         <filter id="tb-token-shadow" x="-40%" y="-40%" width="180%" height="180%">
           <feDropShadow dx="0.18" dy="0.36" stdDeviation="0.42" flood-color="#102016" flood-opacity="0.36" />
@@ -873,9 +1019,9 @@
       <rect x={W - SMALL_D} y={cy - SMALL_W/2} width={SMALL_D} height={SMALL_W}
         fill="rgba(43,75,46,0.42)" stroke="rgba(246,244,226,0.62)" stroke-width="0.7" vector-effect="non-scaling-stroke" />
       <line x1="0" y1={cy - SMALL_W/2} x2="0" y2={cy + SMALL_W/2}
-        stroke={HOME_COLOR} stroke-width="2.1" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+        stroke={homeColor} stroke-width="2.1" stroke-linecap="round" vector-effect="non-scaling-stroke" />
       <line x1={W} y1={cy - SMALL_W/2} x2={W} y2={cy + SMALL_W/2}
-        stroke={AWAY_COLOR} stroke-width="2.1" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+        stroke={awayColor} stroke-width="2.1" stroke-linecap="round" vector-effect="non-scaling-stroke" />
 
       <!-- 40m arcs -->
       <g clip-path="url(#tb-field-clip)">
@@ -891,13 +1037,14 @@
         <circle cx={W - L20} cy={cy} r={R_D} fill="none" stroke="rgba(246,244,226,0.58)" stroke-width="0.66" vector-effect="non-scaling-stroke" />
       </g>
 
-      <!-- Team labels -->
-      <text x="5" y="4.2" font-size="2.45" font-weight="800" fill="rgba(246,244,226,0.34)" pointer-events="none" style="user-select:none">
-        {teamName || 'Home'}
-      </text>
-      <text x={W - 5} y="4.2" font-size="2.45" font-weight="800" fill="rgba(246,244,226,0.34)" text-anchor="end" pointer-events="none" style="user-select:none">
-        {opponentName || 'Away'}
-      </text>
+      {#if showTeamLabels}
+        <text x="5" y="4.2" font-size="2.2" font-weight="800" fill="rgba(246,244,226,0.22)" pointer-events="none" style="user-select:none">
+          {teamName || 'Home'}
+        </text>
+        <text x={W - 5} y="4.2" font-size="2.2" font-weight="800" fill="rgba(246,244,226,0.22)" text-anchor="end" pointer-events="none" style="user-select:none">
+          {opponentName || 'Away'}
+        </text>
+      {/if}
 
       <!-- ── Moves layer ──────────────────────────────────────────────── -->
 
@@ -927,20 +1074,20 @@
         />
       {/if}
 
-      <!-- Run paths (dashed lines with arrowhead at endpoint) -->
+      <!-- Run paths: dashed freehand route with arrowhead at endpoint -->
       {#each moves.filter(m => m.type === 'run') as m (m.id)}
         {@const op = moveStrokeOpacity(m)}
         {@const pts = toSvgPoints(m.path)}
         {@const last = m.path[m.path.length - 1]}
         {@const prev = m.path[m.path.length - 2] || m.path[0]}
         {@const runArrow = arrowHead(svgX(prev), svgY(prev), svgX(last), svgY(last))}
-        <polyline points={pts} fill="none" stroke={MOVE_COLOR} stroke-width="1.75"
+        <polyline points={pts} fill="none" stroke={RUN_COLOR} stroke-width="1.8"
           stroke-dasharray="3.1 1.9" stroke-linecap="round" stroke-linejoin="round"
           opacity={op} vector-effect="non-scaling-stroke" />
-        <polygon points={runArrow} fill={MOVE_COLOR} opacity={op} />
+        <polygon points={runArrow} fill={RUN_COLOR} opacity={op} />
       {/each}
 
-      <!-- Pass arrows (dashed line with arrowhead, shortened to clear player circles) -->
+      <!-- Pass arrows: straight blue arrow, shortened to clear player circles -->
       {#each moves.filter(m => m.type === 'pass') as m (m.id)}
         {@const before = stepPositionCache[m.step - 1] || stepPositionCache[0] || {}}
         {@const fp = before[m.fromPlayerId]}
@@ -949,9 +1096,9 @@
           {@const op = moveStrokeOpacity(m)}
           {@const seg = shortenLine(svgX(fp), svgY(fp), svgX(tp), svgY(tp), 4.1)}
           <line x1={seg.x1} y1={seg.y1} x2={seg.x2} y2={seg.y2}
-            stroke={MOVE_COLOR} stroke-width="1.9"
+            stroke={PASS_COLOR} stroke-width="1.9"
             stroke-linecap="round" opacity={op} vector-effect="non-scaling-stroke" />
-          <polygon points={arrowHead(seg.x1, seg.y1, seg.x2, seg.y2, 3.05)} fill={MOVE_COLOR} opacity={op} />
+          <polygon points={arrowHead(seg.x1, seg.y1, seg.x2, seg.y2, 3.05)} fill={PASS_COLOR} opacity={op} />
         {/if}
       {/each}
 
@@ -986,37 +1133,29 @@
         {@const highlighted = selectedPlayerId === p.id || runArmedPlayerId === p.id || passFirstPlayerId === p.id || shotPlayerId === p.id || draggingPlayerId === p.id}
         {#if highlighted}
           <circle
-            cx={cx} cy={cy2} r="4.18"
+            cx={cx} cy={cy2} r={markerMetrics.selectedRadius}
             fill="none"
-            stroke="rgba(19,33,25,0.72)"
-            stroke-width="0.72"
-            opacity="0.9"
-            vector-effect="non-scaling-stroke"
-          />
-          <circle
-            cx={cx} cy={cy2} r="3.86"
-            fill="none"
-            stroke="rgba(255,255,255,0.92)"
-            stroke-width="0.82"
+            stroke="rgba(255,255,255,0.9)"
+            stroke-width="0.58"
             opacity="1"
             vector-effect="non-scaling-stroke"
           />
         {/if}
         <circle
-          cx={cx} cy={cy2} r="3.15"
+          cx={cx} cy={cy2} r={markerMetrics.radius}
           fill={isHome ? 'url(#tb-home-token)' : 'url(#tb-away-token)'}
-          stroke={isHome ? 'rgba(92,13,25,0.82)' : 'rgba(99,72,14,0.82)'}
-          stroke-width="0.62"
+          stroke={tokenBorderColor(p.team)}
+          stroke-width="0.58"
           filter="url(#tb-token-shadow)"
           vector-effect="non-scaling-stroke"
         />
         <text
           x={cx} y={cy2 + 0.05}
           text-anchor="middle" dominant-baseline="central"
-          font-size="2.48" font-weight="850"
+          font-size={markerMetrics.font} font-weight="850"
           fill={teamTextColor(p.team)}
-          stroke={isHome ? 'rgba(0,0,0,0.22)' : 'rgba(255,255,255,0.2)'}
-          stroke-width="0.28"
+          stroke={teamTextColor(p.team) === '#ffffff' ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.24)'}
+          stroke-width="0.24"
           paint-order="stroke"
           pointer-events="none"
           style="user-select:none;letter-spacing:0"
@@ -1027,7 +1166,7 @@
       {#if isDrawingRun && rawPath.length >= 2}
         <polyline
           points={toSvgPoints(rawPath)}
-          fill="none" stroke={MOVE_COLOR} stroke-width="1.75"
+          fill="none" stroke={RUN_COLOR} stroke-width="1.8"
           stroke-dasharray="3.1 1.9" stroke-linecap="round" stroke-linejoin="round"
           opacity="0.86"
           vector-effect="non-scaling-stroke"
@@ -1067,11 +1206,11 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    padding: 11px 18px;
-    background: linear-gradient(180deg, #f7f9f3, #edf4e8);
-    border-bottom: 1px solid rgba(31,55,42,0.14);
-    box-shadow: 0 10px 24px rgba(7,18,13,0.16);
+    gap: 14px;
+    padding: 8px 14px;
+    background: rgba(246,249,241,0.96);
+    border-bottom: 1px solid rgba(31,55,42,0.12);
+    box-shadow: 0 5px 16px rgba(7,18,13,0.1);
   }
 
   .tb-toolbar-main,
@@ -1086,9 +1225,9 @@
 
   .tb-board-meta {
     display: grid;
-    gap: 2px;
-    min-width: 172px;
-    max-width: 230px;
+    gap: 1px;
+    min-width: 248px;
+    max-width: 330px;
     color: var(--tb-ink);
   }
 
@@ -1104,7 +1243,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.2;
     letter-spacing: 0;
   }
@@ -1112,8 +1251,9 @@
   .tb-toolbar-main {
     flex: 1;
     justify-content: center;
-    gap: 10px;
+    gap: 8px;
     min-width: 0;
+    max-width: 1040px;
     flex-wrap: wrap;
   }
 
@@ -1123,18 +1263,16 @@
   }
 
   .tb-cluster {
-    gap: 7px;
-    min-height: 40px;
-    padding: 4px;
-    border: 1px solid rgba(31,55,42,0.1);
-    border-radius: 12px;
-    background: rgba(255,255,255,0.54);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.72), 0 1px 5px rgba(15,35,24,0.06);
+    gap: 6px;
+    min-height: 36px;
+    padding: 3px;
+    border: 1px solid rgba(31,55,42,0.08);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.46);
   }
 
   .tb-cluster + .tb-cluster {
-    padding-left: 4px;
-    border-left: 1px solid rgba(31,55,42,0.1);
+    padding-left: 3px;
   }
 
   .tb-section-label {
@@ -1152,8 +1290,8 @@
   }
 
   .tb-btn {
-    min-height: 34px;
-    padding: 7px 12px;
+    min-height: 31px;
+    padding: 6px 11px;
     font-size: 12px;
     font-weight: 800;
     border-radius: 8px;
@@ -1190,7 +1328,7 @@
   }
 
   .tb-tool-btn {
-    min-width: 58px;
+    min-width: 56px;
   }
 
   .tb-tool-btn.active {
@@ -1199,7 +1337,7 @@
   }
 
   .tb-play {
-    min-width: 66px;
+    min-width: 62px;
     background: var(--tb-blue);
     border-color: rgba(22,76,155,0.38);
     color: #fff;
@@ -1228,7 +1366,7 @@
     align-items: center;
     justify-content: center;
     min-width: 38px;
-    min-height: 28px;
+    min-height: 26px;
     padding: 0 8px;
     border-radius: 999px;
     background: rgba(28,50,39,0.08);
@@ -1248,7 +1386,7 @@
   }
 
   .tb-segment-btn {
-    min-height: 28px;
+    min-height: 26px;
     padding: 5px 9px;
     border: 0;
     border-radius: 7px;
@@ -1271,73 +1409,27 @@
     cursor: default;
   }
 
-  .tb-coach-strip {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    min-height: 42px;
-    padding: 7px 18px;
-    background: linear-gradient(180deg, rgba(19,43,31,0.94), rgba(15,35,26,0.94));
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-    color: rgba(241,245,238,0.8);
-    font-size: 13px;
-  }
-
-  .tb-coach-hint {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    min-width: 0;
-  }
-
-  .tb-mode-pill {
-    flex-shrink: 0;
+  .tb-save-state {
+    min-height: 28px;
     display: inline-flex;
     align-items: center;
-    min-height: 24px;
     padding: 0 9px;
     border-radius: 999px;
-    background: rgba(255,255,255,0.12);
-    color: #f6f8f1;
+    background: rgba(28,50,39,0.08);
+    color: rgba(28,50,39,0.66);
     font-size: 11px;
-    font-weight: 850;
-    letter-spacing: 0;
-  }
-
-  .tb-coach-strip strong {
-    color: rgba(249,250,247,0.96);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .tb-board-state {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    color: rgba(241,245,238,0.64);
-    font-size: 12px;
-  }
-
-  .tb-board-state span {
-    min-height: 24px;
-    display: inline-flex;
-    align-items: center;
-    padding: 0 8px;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.08);
+    font-weight: 800;
     white-space: nowrap;
   }
 
   .tb-board-body {
     flex: 1;
     display: flex;
+    justify-content: center;
+    align-items: center;
     gap: 12px;
     min-height: 0;
-    padding: 12px;
+    padding: 22px 28px 26px;
     position: relative;
     background:
       linear-gradient(135deg, rgba(255,255,255,0.04), transparent 38%),
@@ -1350,7 +1442,7 @@
     top: 12px;
     right: 12px;
     bottom: 12px;
-    width: min(320px, calc(100% - 24px));
+    width: min(340px, calc(100% - 24px));
     overflow: auto;
     border: 1px solid rgba(255,255,255,0.2);
     border-radius: 14px;
@@ -1443,6 +1535,26 @@
 
   .tb-color-row {
     gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .tb-team-color-grid {
+    display: grid;
+    gap: 12px;
+  }
+
+  .tb-team-color-row {
+    display: grid;
+    gap: 6px;
+  }
+
+  .tb-team-color-row > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: rgba(28,50,39,0.68);
+    font-size: 12px;
+    font-weight: 800;
   }
 
   .tb-color-btn {
@@ -1450,7 +1562,7 @@
     height: 31px;
     border-radius: 999px;
     border: 2px solid rgba(28,50,39,0.18);
-    background: var(--pen-color);
+    background: var(--swatch-color);
     cursor: pointer;
     box-shadow: inset 0 0 0 2px rgba(255,255,255,0.3), 0 1px 4px rgba(15,35,24,0.18);
   }
@@ -1466,11 +1578,15 @@
   }
 
   .tb-pitch-wrap {
-    flex: 1;
+    position: relative;
+    flex: 1 1 auto;
     display: flex;
     min-height: 0;
     min-width: 0;
-    padding: 12px;
+    width: 100%;
+    max-width: 1540px;
+    height: 100%;
+    padding: 20px;
     border-radius: 16px;
     background:
       linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
@@ -1479,6 +1595,67 @@
       inset 0 0 0 1px rgba(255,255,255,0.1),
       inset 0 0 28px rgba(0,0,0,0.12),
       0 16px 34px rgba(6,18,12,0.24);
+  }
+
+  .tb-inline-hint,
+  .tb-canvas-state {
+    position: absolute;
+    z-index: 2;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tb-inline-hint {
+    top: 14px;
+    left: 16px;
+    max-width: min(560px, calc(100% - 32px));
+    padding: 7px 10px;
+    border-radius: 999px;
+    background: rgba(14,31,23,0.72);
+    color: rgba(247,249,243,0.82);
+    box-shadow: 0 6px 18px rgba(5,18,11,0.16);
+    backdrop-filter: blur(6px);
+  }
+
+  .tb-inline-hint span {
+    flex-shrink: 0;
+    min-height: 22px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.14);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 850;
+  }
+
+  .tb-inline-hint strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .tb-canvas-state {
+    right: 16px;
+    top: 14px;
+    color: rgba(247,249,243,0.7);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .tb-canvas-state span {
+    min-height: 24px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: rgba(14,31,23,0.54);
+    backdrop-filter: blur(6px);
   }
 
   .tb-pitch-wrap:focus {
@@ -1534,7 +1711,7 @@
 
     .tb-board-body {
       flex-direction: column;
-      padding: 8px;
+      padding: 12px;
       gap: 8px;
     }
 
@@ -1571,18 +1748,24 @@
       justify-content: flex-start;
     }
 
-    .tb-coach-strip {
-      align-items: flex-start;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .tb-board-state {
-      flex-wrap: wrap;
-    }
-
     .tb-pitch-wrap {
-      padding: 8px;
+      padding: 10px;
+    }
+
+    .tb-inline-hint {
+      left: 10px;
+      right: 10px;
+      top: 10px;
+      max-width: none;
+      border-radius: 10px;
+    }
+
+    .tb-canvas-state {
+      right: 10px;
+      top: auto;
+      bottom: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
   }
 

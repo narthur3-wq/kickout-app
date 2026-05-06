@@ -142,6 +142,11 @@ export function clampPoint(point) {
   };
 }
 
+function normalizeBoardColor(color, fallback) {
+  const value = String(color || '').trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(value) ? value : fallback;
+}
+
 export function normalizeBoardSnapshot(snapshot = {}) {
   const board = snapshot && typeof snapshot === 'object'
     ? /** @type {Record<string, any>} */ (snapshot)
@@ -178,7 +183,7 @@ export function normalizeBoardSnapshot(snapshot = {}) {
       .map((stroke) => ({
         id: String(stroke.id || ''),
         color: ['#facc15', '#60a5fa', '#ef4444', '#ffffff'].includes(stroke.color) ? stroke.color : '#facc15',
-        width: Math.max(0.7, Math.min(3, Number(stroke.width) || 1.4)),
+        width: Math.max(0.7, Math.min(3, Number(stroke.width) || 2.2)),
         path: stroke.path.map(clampPoint),
         createdOrder: Math.max(1, Number(stroke.createdOrder) || 1),
       }))
@@ -194,5 +199,9 @@ export function normalizeBoardSnapshot(snapshot = {}) {
     currentStep: Math.max(1, Number(board.currentStep) || 1),
     pitchView: ['full', 'left', 'right'].includes(board.pitchView) ? board.pitchView : 'full',
     playbackSpeed: [0.5, 1, 2].includes(Number(board.playbackSpeed)) ? Number(board.playbackSpeed) : 1,
+    homeColor: normalizeBoardColor(board.homeColor, '#c81f32'),
+    awayColor: normalizeBoardColor(board.awayColor, '#f2c94c'),
+    markerSize: ['compact', 'standard'].includes(board.markerSize) ? board.markerSize : 'standard',
+    showTeamLabels: board.showTeamLabels === true,
   };
 }

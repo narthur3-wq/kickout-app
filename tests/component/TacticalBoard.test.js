@@ -22,13 +22,17 @@ describe('TacticalBoard', () => {
         {
           id: 'pen-1',
           color: '#facc15',
-          width: 1.4,
+          width: 2.2,
           path: [{ x: 0.2, y: 0.2 }, { x: 0.35, y: 0.4 }],
           createdOrder: 2,
         },
       ],
       pitchView: 'left',
       playbackSpeed: 2,
+      homeColor: '#16a34a',
+      awayColor: '#2563eb',
+      markerSize: 'compact',
+      showTeamLabels: true,
       currentStep: 1,
       nextId: 3,
     }));
@@ -53,6 +57,8 @@ describe('TacticalBoard', () => {
 
     expect(screen.getByRole('button', { name: 'Export PNG' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '2x' })).toHaveClass('active');
+    expect(screen.getByRole('button', { name: 'Compact' })).toHaveClass('active');
+    expect(screen.getByRole('button', { name: 'Hide pitch labels' })).toBeInTheDocument();
     expect(screen.getByText(/View: Left half/i)).toBeInTheDocument();
   });
 });
