@@ -15,8 +15,9 @@ const mockState = vi.hoisted(() => {
   const deleteEqMock = vi.fn();
   const deleteMock = vi.fn(() => ({ eq: deleteEqMock }));
   const analysisSelectOrderMock = vi.fn();
-  const analysisSelectEqMock = vi.fn(() => ({ order: analysisSelectOrderMock }));
-  const analysisSelectMock = vi.fn(() => ({ eq: analysisSelectEqMock, order: analysisSelectOrderMock }));
+  const analysisSelectInMock = vi.fn(() => ({ order: analysisSelectOrderMock }));
+  const analysisSelectEqMock = vi.fn(() => ({ in: analysisSelectInMock, order: analysisSelectOrderMock }));
+  const analysisSelectMock = vi.fn(() => ({ eq: analysisSelectEqMock, in: analysisSelectInMock, order: analysisSelectOrderMock }));
   const analysisUpsertMock = vi.fn();
   const analysisDeleteEqMock = vi.fn();
   const analysisDeleteMock = vi.fn(() => ({ eq: analysisDeleteEqMock }));
@@ -52,6 +53,7 @@ const mockState = vi.hoisted(() => {
     deleteEqMock,
     deleteMock,
     analysisSelectOrderMock,
+    analysisSelectInMock,
     analysisSelectEqMock,
     analysisSelectMock,
     analysisUpsertMock,
@@ -115,6 +117,16 @@ function seedScopedActiveMatchId(scope, id) {
   } else {
     localStorage.removeItem(storageKey(MATCH_KEYS.activeMatchId, scope));
   }
+}
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 function getDeepAnalysisButton(label) {
@@ -190,8 +202,13 @@ describe('App shell auth and sync', () => {
     mockState.deleteEqMock.mockReset().mockResolvedValue({ error: null });
     mockState.deleteMock.mockReset().mockImplementation(() => ({ eq: mockState.deleteEqMock }));
     mockState.analysisSelectOrderMock.mockReset().mockResolvedValue({ data: [], error: null });
-    mockState.analysisSelectEqMock.mockReset().mockImplementation(() => ({ order: mockState.analysisSelectOrderMock }));
-    mockState.analysisSelectMock.mockReset().mockImplementation(() => ({ eq: mockState.analysisSelectEqMock, order: mockState.analysisSelectOrderMock }));
+    mockState.analysisSelectInMock.mockReset().mockImplementation(() => ({ order: mockState.analysisSelectOrderMock }));
+    mockState.analysisSelectEqMock.mockReset().mockImplementation(() => ({ in: mockState.analysisSelectInMock, order: mockState.analysisSelectOrderMock }));
+    mockState.analysisSelectMock.mockReset().mockImplementation(() => ({
+      eq: mockState.analysisSelectEqMock,
+      in: mockState.analysisSelectInMock,
+      order: mockState.analysisSelectOrderMock,
+    }));
     mockState.analysisUpsertMock.mockReset().mockResolvedValue({ error: null });
     mockState.analysisDeleteEqMock.mockReset().mockResolvedValue({ error: null });
     mockState.analysisDeleteMock.mockReset().mockImplementation(() => ({ eq: mockState.analysisDeleteEqMock }));
@@ -277,7 +294,48 @@ describe('App shell auth and sync', () => {
     expect(await screen.findByText(/Moved 1 local event\(s\) into your signed-in storage/i)).toBeInTheDocument();
     expect(localStorage.getItem(storageKey(STORAGE_KEYS.events, LOCAL_STORAGE_SCOPE))).toBeNull();
     expect(JSON.parse(localStorage.getItem(storageKey(STORAGE_KEYS.events, 'user:user-1')))).toHaveLength(1);
-    expect(mockState.upsertMock).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(mockState.upsertMock).toHaveBeenCalled();
+    });
+  });
+
+  it('opens the authenticated shell before initial cloud sync finishes', async () => {
+    const session = { user: { id: 'user-fast-open', email: 'analyst@example.com' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    const remoteMatches = deferred();
+    mockState.selectOrderMock
+      .mockReturnValueOnce(remoteMatches.promise)
+      .mockResolvedValue({ data: [], error: null });
+
+    await renderApp();
+
+    expect(await screen.findByRole('button', { name: /Tap to create your first match/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Loading/i)).not.toBeInTheDocument();
+
+    remoteMatches.resolve({ data: [], error: null });
+    await waitFor(() => {
+      expect(mockState.selectOrderMock).toHaveBeenCalled();
+    });
+  });
+
+  it('limits analysis event sync to sessions belonging to the user team', async () => {
+    const session = { user: { id: 'user-analysis-fast', email: 'analyst@example.com' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+    mockState.analysisSelectOrderMock
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: [{ id: 'pos-session-1', team_id: 'team-1' }], error: null })
+      .mockResolvedValueOnce({ data: [{ id: 'pass-session-1', team_id: 'team-1' }], error: null })
+      .mockResolvedValue({ data: [], error: null });
+
+    await renderApp();
+
+    await waitFor(() => {
+      expect(mockState.analysisSelectInMock).toHaveBeenCalledWith('session_id', ['pos-session-1']);
+      expect(mockState.analysisSelectInMock).toHaveBeenCalledWith('session_id', ['pass-session-1']);
+    });
   });
 
   it('shows the post-match analysis tabs in the authenticated shell', async () => {

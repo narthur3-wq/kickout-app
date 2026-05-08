@@ -179,6 +179,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   let authSubscription = null;
   let realtimeChannel = null;
   let realtimeRefreshTimer = null;
+  let startupCloudSyncKey = null;
   let accountOpen = false;
   let isAdminUser = false;
   let storageScope = supabaseConfigured ? null : LOCAL_STORAGE_SCOPE;
@@ -1221,6 +1222,17 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     analysisRefreshToken += 1;
   }
 
+  async function fetchAnalysisEventRows(tableName, sessionIds = []) {
+    const ids = [...new Set(sessionIds.filter(Boolean))];
+    if (!supabase || ids.length === 0) return { data: [], error: null };
+
+    return supabase
+      .from(tableName)
+      .select('*')
+      .in('session_id', ids)
+      .order('created_at', { ascending: true });
+  }
+
   async function syncAnalysisFromSupabase() {
     if (!supabase || !user) return;
     if (!teamId) {
@@ -1244,20 +1256,24 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
       const [
         { data: squadData, error: squadError },
         { data: possessionSessionData, error: possessionSessionError },
-        { data: possessionEventData, error: possessionEventError },
         { data: passSessionData, error: passSessionError },
-        { data: passEventData, error: passEventError },
       ] = await Promise.all([
         supabase.from('squad_players').select('*').eq('team_id', teamId).order('updated_at', { ascending: true }),
         supabase.from('possession_sessions').select('*').eq('team_id', teamId).order('updated_at', { ascending: true }),
-        supabase.from('possession_events').select('*').order('created_at', { ascending: true }),
         supabase.from('pass_sessions').select('*').eq('team_id', teamId).order('updated_at', { ascending: true }),
-        supabase.from('pass_events').select('*').order('created_at', { ascending: true }),
       ]);
       if (squadError) throw squadError;
       if (possessionSessionError) throw possessionSessionError;
-      if (possessionEventError) throw possessionEventError;
       if (passSessionError) throw passSessionError;
+
+      const [
+        { data: possessionEventData, error: possessionEventError },
+        { data: passEventData, error: passEventError },
+      ] = await Promise.all([
+        fetchAnalysisEventRows('possession_events', (possessionSessionData || []).map((session) => session.id)),
+        fetchAnalysisEventRows('pass_events', (passSessionData || []).map((session) => session.id)),
+      ]);
+      if (possessionEventError) throw possessionEventError;
       if (passEventError) throw passEventError;
 
       const remoteState = analysisStateFromSupabaseRows({
@@ -1331,6 +1347,25 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
         scheduleAnalysisSync();
       }
     }
+  }
+
+  function startCloudSyncAfterRender(shouldContinue = () => true) {
+    const syncKey = `${user?.id || 'anonymous'}:${teamId || 'no-team'}:${storageScope || 'no-scope'}`;
+    if (startupCloudSyncKey === syncKey) return;
+    startupCloudSyncKey = syncKey;
+
+    void (async () => {
+      if (!shouldContinue()) return;
+      await syncFromSupabase();
+      if (!shouldContinue()) return;
+      await syncAnalysisFromSupabase();
+      if (!shouldContinue()) return;
+      startRealtimeSync();
+    })().finally(() => {
+      if (startupCloudSyncKey === syncKey) {
+        startupCloudSyncKey = null;
+      }
+    });
   }
 
   function handleAnalysisChange(detail = {}) {
@@ -1645,9 +1680,8 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
               if (migration) {
                 showNotice('success', `Moved ${migration.eventCount} local event(s) into your signed-in storage.`, 7000);
               }
-              await syncFromSupabase();
-              await syncAnalysisFromSupabase();
-              if (!disposed) startRealtimeSync();
+              authChecked = true;
+              startCloudSyncAfterRender(() => !disposed);
             } else {
               await supabase.auth.signOut();
             }
@@ -1694,9 +1728,8 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
           if (migration) {
             showNotice('success', `Moved ${migration.eventCount} local event(s) into your signed-in storage.`, 7000);
           }
-          await syncFromSupabase();
-          await syncAnalysisFromSupabase();
-          if (!disposed) startRealtimeSync();
+          authChecked = true;
+          startCloudSyncAfterRender(() => !disposed);
         });
         authSubscription = subscription;
       }
@@ -1726,9 +1759,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     if (migration) {
       showNotice('success', `Moved ${migration.eventCount} local event(s) into your signed-in storage.`, 7000);
     }
-    await syncFromSupabase();
-    await syncAnalysisFromSupabase();
-    startRealtimeSync();
+    startCloudSyncAfterRender();
   }
 
   async function signOut() {
