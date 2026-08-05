@@ -1979,4 +1979,98 @@ describe('App shell auth and sync', () => {
       expect(localStorage.getItem('ko_recent_events_collapsed')).toBe('0');
     });
   });
+
+  describe('quick capture', () => {
+    const userScope = 'user:user-1';
+
+    function seedOpenMatch() {
+      const session = { user: { id: 'user-1', email: 'analyst@example.com' } };
+      mockState.sessionState.session = session;
+      mockState.getSessionMock.mockResolvedValue({ data: { session } });
+      seedScopedMatches(userScope, [{
+        id: 'match-1', team: 'Clontarf', opponent: 'Crokes', match_date: '2026-03-29',
+        status: 'open', created_at: '2026-03-29T09:00:00.000Z', updated_at: '2026-03-29T09:00:00.000Z',
+        last_event_at: null, closed_at: null,
+      }]);
+      seedScopedActiveMatchId(userScope, 'match-1');
+      seedScopedEvents(userScope, []);
+    }
+
+    function storedEventCount() {
+      return JSON.parse(localStorage.getItem(storageKey(STORAGE_KEYS.events, userScope)) || '[]').length;
+    }
+
+    // jsdom implements neither createSVGPoint nor getScreenCTM, so without
+    // these the tap resolves to NaN coordinates and never validates. Same stub
+    // Pitch.test.js uses.
+    async function tapPitch(user) {
+      const svg = document.querySelector('.pitch-card svg');
+      Object.defineProperty(svg, 'createSVGPoint', {
+        configurable: true,
+        value: () => ({ x: 40, y: 30, matrixTransform() { return { x: this.x, y: this.y }; } }),
+      });
+      Object.defineProperty(svg, 'getScreenCTM', {
+        configurable: true,
+        value: () => ({ inverse: () => ({}) }),
+      });
+      await user.click(svg);
+    }
+
+    it('does not save on a pitch tap when quick capture is off', async () => {
+      const user = userEvent.setup();
+      seedOpenMatch();
+
+      await renderApp();
+      await screen.findByRole('button', { name: /Save Event/i });
+      await tapPitch(user);
+
+      expect(storedEventCount()).toBe(0);
+    });
+
+    it('saves straight from a pitch tap when quick capture is on', async () => {
+      const user = userEvent.setup();
+      localStorage.setItem('ko_quick_capture', '1');
+      seedOpenMatch();
+
+      await renderApp();
+      await screen.findByRole('button', { name: /Save Event/i });
+      await tapPitch(user);
+
+      await waitFor(() => expect(storedEventCount()).toBe(1));
+      // Confirmation names what was recorded, so a wrong setting is obvious.
+      expect(await screen.findByRole('status')).toHaveTextContent(/Kickout/i);
+    });
+
+    it('offers an immediate undo without a confirm dialog', async () => {
+      const user = userEvent.setup();
+      localStorage.setItem('ko_quick_capture', '1');
+      seedOpenMatch();
+
+      await renderApp();
+      await screen.findByRole('button', { name: /Save Event/i });
+      await tapPitch(user);
+      await waitFor(() => expect(storedEventCount()).toBe(1));
+
+      // A stray tap now creates a real event, so the correction must be as
+      // fast as the mistake — no confirm step in between.
+      await user.click(await screen.findByRole('button', { name: /^Undo$/ }));
+
+      await waitFor(() => expect(storedEventCount()).toBe(0));
+      expect(document.querySelector('.confirm-card')).toBeNull();
+    });
+
+    it('leaves break contests alone, since they need a second tap', async () => {
+      const user = userEvent.setup();
+      localStorage.setItem('ko_quick_capture', '1');
+      seedOpenMatch();
+
+      await renderApp();
+      await screen.findByRole('button', { name: /Save Event/i });
+      await user.click(getCaptureFormButton('break'));
+      await tapPitch(user);
+
+      // Landing only — the pickup tap has not happened yet.
+      expect(storedEventCount()).toBe(0);
+    });
+  });
 });

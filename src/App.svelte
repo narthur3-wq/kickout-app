@@ -1898,8 +1898,97 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   }
 
   // ── Capture helpers ───────────────────────────────────────────────────────
-  function onLanding(e) { landing = e.detail; }
+  /*
+   * Quick capture. The full form is up to eight interactions per event — type,
+   * team, period, contest, outcome, restart, player, pitch, save — which is
+   * more than a fast passage of play allows, and missed events undermine every
+   * number downstream.
+   *
+   * In quick mode a pitch tap saves straight away using whatever the form is
+   * already set to. A run of similar events becomes one tap each; you only
+   * touch the form when something changes.
+   */
+  const QUICK_CAPTURE_KEY = 'ko_quick_capture';
+  let quickCapture = readQuickCapture();
+  let quickSaveToast = null;
+  let quickSaveToastTimer = null;
+
+  function readQuickCapture() {
+    try {
+      return localStorage.getItem(QUICK_CAPTURE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  function toggleQuickCapture() {
+    quickCapture = !quickCapture;
+    try {
+      localStorage.setItem(QUICK_CAPTURE_KEY, quickCapture ? '1' : '0');
+    } catch {
+      // Preference only.
+    }
+    if (!quickCapture) dismissQuickSaveToast();
+  }
+
+  // A break needs two taps (landing then pickup), editing must not be
+  // overwritten by a stray tap, and a closed match takes no events at all.
+  $: quickCaptureArmed = quickCapture && contest !== 'break' && !editingId && !isMatchClosed;
+
+  function dismissQuickSaveToast() {
+    if (quickSaveToastTimer) clearTimeout(quickSaveToastTimer);
+    quickSaveToastTimer = null;
+    quickSaveToast = null;
+  }
+
+  function showQuickSaveToast(summary) {
+    if (quickSaveToastTimer) clearTimeout(quickSaveToastTimer);
+    quickSaveToast = summary;
+    quickSaveToastTimer = setTimeout(() => { quickSaveToast = null; }, 5000);
+  }
+
+  /**
+   * Immediate undo for the event just quick-saved. Deliberately skips the
+   * confirm dialog that `undoLast` uses: a stray tap now creates a real event,
+   * so the correction has to be as fast as the mistake was.
+   */
+  function undoQuickSave() {
+    dismissQuickSaveToast();
+    if (undoStack.length === 0) return;
+    const nextEvents = undoStack[undoStack.length - 1];
+    const prevEvents = events;
+    events = applyDerivedScoreDisplays(nextEvents);
+    undoStack = undoStack.slice(0, -1);
+    persistLocal();
+    markDraftPristine();
+
+    const nextIds = new Set(nextEvents.map((e) => e.id));
+    for (const ev of prevEvents) {
+      if (!nextIds.has(ev.id)) deleteFromSupabase(ev.id);
+    }
+  }
+
+  function onLanding(e) {
+    landing = e.detail;
+    if (quickCaptureArmed) quickSave();
+  }
   function onPickup(e)  { pickup  = e.detail; }
+
+  async function quickSave() {
+    const before = events.length;
+    await saveEvent();
+    // saveEvent refuses on validation errors and surfaces its own message;
+    // only claim a save when one actually happened.
+    if (events.length > before) {
+      showQuickSaveToast(describeQuickSave());
+    }
+  }
+
+  function describeQuickSave() {
+    const who = direction === 'ours' ? (team || 'Ours') : (opponent || 'Theirs');
+    const type = eventType === 'kickout' ? 'Kickout' : eventType === 'shot' ? 'Shot' : 'Turnover';
+    return `${type} · ${who} · ${outcome}`;
+  }
   function clearPoints()  {
     landing = {x:NaN, y:NaN};
     pickup = {x:NaN, y:NaN};
@@ -3249,6 +3338,16 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
         <span class="timer-status {timerRunning ? 'running' : 'paused'}" aria-live="polite">
           {timerRunning ? 'Running' : 'Paused'}
         </span>
+        <button
+          type="button"
+          class="quick-toggle"
+          class:on={quickCapture}
+          aria-pressed={quickCapture}
+          title="Quick capture — a pitch tap saves the event straight away"
+          on:click={toggleQuickCapture}
+        >
+          ⚡ Quick
+        </button>
         <span class="timer-period">{period}</span>
       </div>
       <div class="pitch-card">
@@ -3289,11 +3388,15 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
           <span class="ps-coords">{sideBand(landing.x)} · {Math.round(depthMetersFromOwnGoal(landing.y))}m</span>
         {:else}
           <span class="ps-prompt">
-            {eventType === 'shot'
-              ? 'Tap pitch — set shot location'
-              : eventType === 'turnover'
-                ? 'Tap pitch — set turnover location'
-                : 'Tap pitch — set landing point'}
+            {#if quickCaptureArmed}
+              ⚡ Tap pitch — saves {describeQuickSave()}
+            {:else}
+              {eventType === 'shot'
+                ? 'Tap pitch — set shot location'
+                : eventType === 'turnover'
+                  ? 'Tap pitch — set turnover location'
+                  : 'Tap pitch — set landing point'}
+            {/if}
           </span>
         {/if}
       </div>
@@ -3593,12 +3696,27 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     </div>
   {/if}
 
-  <!-- Backup reminder toast -->
-  {#if backupReminder}
-    <div class="toast">
-      💾 {events.length} events — back up your data
-      <button class="small" on:click={exportJSON}>Export JSON</button>
-      <button class="small" on:click={() => backupReminder = false}>✕</button>
+  <!-- Stacked: quick capture makes the backup reminder far more likely to fire
+       while a save toast is still up, and both used to sit at the same spot. -->
+  {#if backupReminder || quickSaveToast}
+    <div class="toast-stack">
+      <!-- A stray pitch tap now creates a real event, so the correction has to
+           be as quick as the mistake. No confirm dialog on this one. -->
+      {#if quickSaveToast}
+        <div class="toast quick-toast" role="status">
+          <span class="quick-toast-tick" aria-hidden="true">✓</span>
+          <span>{quickSaveToast}</span>
+          <button class="small" on:click={undoQuickSave}>Undo</button>
+          <button class="small" on:click={dismissQuickSaveToast} aria-label="Dismiss">✕</button>
+        </div>
+      {/if}
+      {#if backupReminder}
+        <div class="toast">
+          💾 {events.length} events — back up your data
+          <button class="small" on:click={exportJSON}>Export JSON</button>
+          <button class="small" on:click={() => backupReminder = false}>✕</button>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -4235,10 +4353,27 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     background: rgba(255,255,255,0.08);
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14);
   }
+  .quick-toggle {
+    margin-left: auto;
+    padding: 5px 12px; border-radius: 999px;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.04em;
+    font-family: inherit; cursor: pointer; line-height: 1;
+    background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.72);
+    border: 1px solid rgba(255,255,255,0.2);
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    transition: background 0.12s, color 0.12s;
+  }
+  .quick-toggle:hover { background: rgba(255,255,255,0.2); color: #fff; }
+  .quick-toggle.on {
+    background: #fbbf24; color: #4a2c00; border-color: #fbbf24;
+  }
   .timer-period {
     font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.55);
-    text-transform: uppercase; letter-spacing: 0.08em; margin-left: auto;
+    text-transform: uppercase; letter-spacing: 0.08em; margin-left: 10px;
   }
+
+  .quick-toast { background: #14532d; }
+  .quick-toast-tick { color: #4ade80; font-weight: 800; }
   @keyframes timerPulse {
     0%, 100% { opacity: 0.45; transform: scale(0.95); }
     50% { opacity: 1; transform: scale(1.05); }
@@ -4277,11 +4412,16 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   .small { padding: 5px 12px; font-size: 12px; }
 
   /* ── Toast ── */
-  .toast {
+  .toast-stack {
     position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    z-index: 100; display: flex; flex-direction: column-reverse;
+    align-items: center; gap: 8px; max-width: calc(100vw - 24px);
+  }
+  .toast {
     background: #1f2937; color: #fff; padding: 10px 16px; border-radius: 12px;
     font-size: 13px; display: flex; align-items: center; gap: 10px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.3); z-index: 100; white-space: nowrap;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3); white-space: nowrap;
+    max-width: 100%;
   }
   .toast button { color: #fff; border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); font-size: 12px; }
   .toast button:hover { background: rgba(255,255,255,0.18); }

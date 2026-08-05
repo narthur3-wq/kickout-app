@@ -327,3 +327,31 @@ Before release, check the core match-day flow with keyboard controls:
 - confirm Login and Events search fields have visible labels
 
 The automated smoke for this is `npm run test:a11y`.
+
+## Quick capture
+
+The full form is up to eight interactions per event. During a fast passage of
+play that is more than there is time for, and a missed event weakens every
+number that follows.
+
+Turn on **⚡ Quick** in the timer strip above the pitch. A tap on the pitch then
+saves the event immediately using whatever the form is already set to — so a run
+of similar events is one tap each, and you only touch the form when something
+actually changes.
+
+The pitch prompt always names what a tap will record, for example
+"⚡ Tap pitch — saves Kickout · Clontarf · Retained", so a wrong setting is
+visible before you commit it rather than after.
+
+Every quick save shows a confirmation with an **Undo** button for a few seconds.
+That undo is immediate and has no confirm step, because in quick mode a stray
+tap creates a real event and the correction has to be as fast as the mistake.
+
+Quick capture stays out of the way where a single tap is not enough:
+
+- **break** contests still need two taps (landing, then pickup), so they save
+  the normal way
+- while **editing** an existing event, so a stray tap cannot overwrite it
+- on a **closed** match, which takes no events at all
+
+The setting is remembered between sessions.
