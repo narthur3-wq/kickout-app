@@ -11,6 +11,14 @@
   export let landing = { x: NaN, y: NaN };
   export let pickup  = { x: NaN, y: NaN };
   export let overlays: Array<any> = [];
+  /**
+   * Fan out markers that land on the same spot so stacked events stay visible.
+   * Off by default: the possession and pass views draw connection paths to the
+   * true coordinates, so nudging their markers would pull them off the lines.
+   * The analytics maps have no such paths and are where the stacking hurts —
+   * repeat kickouts to one zone are exactly the pattern being looked for.
+   */
+  export let spreadCoincident = false;
   export let connections: Array<any> = [];
   export let editHandles: Array<any> = [];
   export let interactive = true;
@@ -314,6 +322,56 @@
   }
 
   const SZ = 2.0;
+
+  /**
+   * Offsets, in SVG units, that fan coincident markers into a small ring around
+   * their shared point. Deterministic — driven by position in the group — so
+   * markers do not jump between renders.
+   *
+   * Grouping is by rounded SVG position, so it catches near-misses as well as
+   * exact ties: two taps a few centimetres apart still render on top of each
+   * other at this scale.
+   */
+  function coincidentOffsets(list: Array<any>) {
+    /** @type {Array<{ ox: number, oy: number } | null>} */
+    const offsets: Array<{ ox: number; oy: number } | null> = [];
+    if (!spreadCoincident || !Array.isArray(list)) return offsets;
+
+    /** @type {Record<string, number[]>} */
+    const buckets: Record<string, number[]> = Object.create(null);
+    list.forEach((o, index) => {
+      if (!Number.isFinite(o?.x) || !Number.isFinite(o?.y)) return;
+      const key = `${Math.round(svgX(o) / SZ)}:${Math.round(svgY(o) / SZ)}`;
+      if (buckets[key]) buckets[key].push(index);
+      else buckets[key] = [index];
+    });
+
+    for (const indexes of Object.values(buckets)) {
+      if (indexes.length < 2) continue;
+      // One ring is enough up to 6; past that add a second, wider ring so a
+      // large stack still reads as a cluster rather than a solid blob.
+      const perRing = 6;
+      indexes.forEach((overlayIndex, position) => {
+        const ring = Math.floor(position / perRing) + 1;
+        const slot = position % perRing;
+        const count = Math.min(indexes.length - (ring - 1) * perRing, perRing);
+        const angle = (2 * Math.PI * slot) / count - Math.PI / 2;
+        // Radius has to grow with how many share the ring, or the markers
+        // simply overlap again: n markers of radius SZ only clear each other
+        // on a circle of SZ/sin(pi/n). A fixed radius turned 6-stacks into a
+        // solid blob.
+        const spacing = count > 1 ? SZ * 1.08 / Math.sin(Math.PI / count) : SZ * 1.15;
+        const radius = Math.max(SZ * 1.15, spacing) * ring;
+        offsets[overlayIndex] = {
+          ox: Math.cos(angle) * radius,
+          oy: Math.sin(angle) * radius,
+        };
+      });
+    }
+    return offsets;
+  }
+
+  $: overlayOffsets = coincidentOffsets(overlays);
 </script>
 
 <style>
@@ -588,8 +646,9 @@
   <!-- overlays -->
   <g>
     {#each overlays as o, index (`${o.id ?? 'overlay'}-${index}`)}
-      {@const sx = svgX(o)}
-      {@const sy = svgY(o)}
+      {@const nudge = overlayOffsets[index]}
+      {@const sx = svgX(o) + (nudge?.ox ?? 0)}
+      {@const sy = svgY(o) + (nudge?.oy ?? 0)}
       {@const col = overlayFill(o)}
       {@const shape = overlayShape(o)}
       {@const ring = overlayRing(o)}

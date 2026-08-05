@@ -45,6 +45,18 @@
     return item.team === 'ours' ? 'U' : 'T';
   }
 
+  // The visible chip is just "P" or "G", so spell out who scored what for
+  // screen readers and on hover — the team is otherwise carried by shape and
+  // colour only.
+  function markerTitle(item, type) {
+    const side = (type === 'score' ? item.team : item.controller) === 'ours' ? 'Us' : 'Them';
+    const what = type === 'score'
+      ? (item.label === 'G' ? 'goal' : 'point')
+      : 'kickout won';
+    const when = item.clock ? ` at ${item.clock}` : '';
+    return `${side}: ${what}${when}`;
+  }
+
   function markerClass(item, type) {
     if (type === 'score') return item.team === 'ours' ? 'ours' : 'theirs';
     return item.controller === 'ours' ? 'ours' : 'theirs';
@@ -98,7 +110,7 @@
             <span class="empty-copy">No scoring events yet.</span>
           {:else}
             {#each insights.scoreMomentum.items as item (item.id)}
-              <span class="marker score {markerClass(item, 'score')}" title={item.clock || item.label}>{markerLabel(item, 'score')}</span>
+              <span class="marker score {markerClass(item, 'score')}" title={markerTitle(item, 'score')} aria-label={markerTitle(item, 'score')}>{markerLabel(item, 'score')}</span>
             {/each}
           {/if}
         </div>
@@ -111,7 +123,7 @@
             <span class="empty-copy">No kickout events yet.</span>
           {:else}
             {#each insights.kickoutMomentum.items as item (item.id)}
-              <span class="marker battle {markerClass(item, 'kickout')}" title={item.lane}>{markerLabel(item, 'kickout')}</span>
+              <span class="marker battle {markerClass(item, 'kickout')}" title={markerTitle(item, 'kickout')} aria-label={markerTitle(item, 'kickout')}>{markerLabel(item, 'kickout')}</span>
             {/each}
           {/if}
         </div>
@@ -128,7 +140,7 @@
             <span class="empty-copy">No score flow yet.</span>
           {:else}
             {#each insights.flow.scoreItems as item (item.id)}
-              <span class="marker score flow {item.team === 'ours' ? 'ours' : 'theirs'}" title={item.clock || item.label}>{item.label}</span>
+              <span class="marker score flow {item.team === 'ours' ? 'ours' : 'theirs'}" title={markerTitle(item, 'score')} aria-label={markerTitle(item, 'score')}>{item.label}</span>
             {/each}
           {/if}
         </div>
@@ -409,6 +421,18 @@
     font-size: 11px;
     font-weight: 800;
     color: #fff;
+  }
+  /*
+   * Score chips read "P" or "G" — the score type — so which team scored was
+   * carried by red vs green alone. That is the one pair red/green colour
+   * blindness removes, and this audience skews male.
+   *
+   * Shape now carries the team, matching the grammar the pitch maps already
+   * use (documentation/visual-language.md: circle = ours, square = theirs).
+   * The kickout row does not need this: its "U" / "T" letters already say it.
+   */
+  .marker.score.theirs {
+    border-radius: 7px;
   }
   .marker.flow {
     min-width: 24px;

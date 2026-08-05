@@ -471,6 +471,7 @@ import {
               landing={{x:NaN,y:NaN}}
               pickup={{x:NaN,y:NaN}}
               {overlays}
+              spreadCoincident={true}
               showZoneLabels={true}
               showZoneLegend={false}
             />

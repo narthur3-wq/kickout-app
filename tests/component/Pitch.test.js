@@ -209,4 +209,44 @@ describe('Pitch', () => {
     expect(onHandleDrag.mock.calls[0][0].detail.point.x).toBeCloseTo(0.2, 6);
     expect(onHandleDrag.mock.calls[0][0].detail.point.y).toBeCloseTo(0.4, 6);
   });
+
+  describe('coincident markers', () => {
+    const stacked = Array.from({ length: 4 }, (_, i) => ({
+      id: `stack-${i}`, x: 0.5, y: 0.5, outcome: 'Point', marker_shape: 'circle', marker_fill: '#38bdf8',
+    }));
+
+    function markerCentres(container) {
+      return [...container.querySelectorAll('g[aria-label]')]
+        .map((g) => g.querySelector('circle,rect,polygon'))
+        .filter(Boolean)
+        .map((s) => `${s.getAttribute('cx') ?? s.getAttribute('x')},${s.getAttribute('cy') ?? s.getAttribute('y')}`);
+    }
+
+    it('stacks markers on top of each other by default', () => {
+      // Off by default because the possession and pass views draw connection
+      // paths to the true coordinates; nudging markers would pull them off.
+      const { container } = renderPitch({ overlays: stacked });
+
+      expect(new Set(markerCentres(container)).size).toBe(1);
+    });
+
+    it('fans coincident markers apart when asked', () => {
+      const { container } = renderPitch({ overlays: stacked, spreadCoincident: true });
+
+      const centres = markerCentres(container);
+      expect(centres).toHaveLength(4);
+      expect(new Set(centres).size).toBe(4);
+    });
+
+    it('leaves a lone marker on its true position', () => {
+      const { container } = renderPitch({
+        overlays: [{ id: 'solo', x: 0.5, y: 0.5, outcome: 'Point', marker_shape: 'circle' }],
+        spreadCoincident: true,
+      });
+
+      const [centre] = markerCentres(container);
+      // svgX = y * 145, svgY = x * 90 for an unflipped pitch.
+      expect(centre).toBe('72.5,45');
+    });
+  });
 });
