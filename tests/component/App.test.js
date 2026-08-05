@@ -381,17 +381,19 @@ describe('App shell auth and sync', () => {
       await renderApp();
       await waitFor(() => expect(document.querySelectorAll('.recent-event-row')).toHaveLength(3));
 
-      const header = document.querySelector('.re-header');
-      expect(header.getAttribute('aria-expanded')).toBe('true');
+      // The header now also carries the view switcher, so collapse lives on
+      // its own toggle button rather than the whole bar.
+      const toggle = document.querySelector('.re-toggle');
+      expect(toggle.getAttribute('aria-expanded')).toBe('true');
 
-      await user.click(header);
+      await user.click(toggle);
 
       expect(document.querySelectorAll('.recent-event-row')).toHaveLength(0);
-      expect(document.querySelector('.re-header').getAttribute('aria-expanded')).toBe('false');
+      expect(document.querySelector('.re-toggle').getAttribute('aria-expanded')).toBe('false');
       // Persisted so a mid-match reload does not silently give the space back.
       expect(localStorage.getItem('ko_recent_events_collapsed')).toBe('1');
 
-      await user.click(document.querySelector('.re-header'));
+      await user.click(document.querySelector('.re-toggle'));
 
       expect(document.querySelectorAll('.recent-event-row')).toHaveLength(3);
       expect(localStorage.getItem('ko_recent_events_collapsed')).toBe('0');
@@ -1892,5 +1894,89 @@ describe('App shell auth and sync', () => {
     } finally {
       setItemSpy.mockRestore();
     }
+  });
+
+  describe('capture strip live read', () => {
+    const userScope = 'user:user-1';
+
+    // The analyst is pinned to Capture during play, so the strip has to answer
+    // "who is hurting us" and "where are their restarts going" without a tab
+    // change. These need opposition events, not ours.
+    function seedOppositionMatch() {
+      const session = { user: { id: 'user-1', email: 'analyst@example.com' } };
+      mockState.sessionState.session = session;
+      mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+      seedScopedMatches(userScope, [{
+        id: 'match-1', team: 'Clontarf', opponent: 'Crokes', match_date: '2026-03-29',
+        status: 'open', created_at: '2026-03-29T09:00:00.000Z', updated_at: '2026-03-29T09:00:00.000Z',
+        last_event_at: '2026-03-29T09:05:00.000Z', closed_at: null,
+      }]);
+      seedScopedActiveMatchId(userScope, 'match-1');
+
+      const base = {
+        match_id: 'match-1', match_date: '2026-03-29', team: 'Clontarf', opponent: 'Crokes',
+        period: 'H1', direction: 'theirs', x: 0.5, y: 0.3, schema_version: 1,
+      };
+      seedScopedEvents(userScope, [
+        ...Array.from({ length: 4 }, (_, i) => ({
+          ...base, id: `their-shot-${i}`, created_at: `2026-03-29T09:1${i}:00.000Z`,
+          clock: `1${i}:00`, event_type: 'shot', outcome: 'Point', shot_type: 'point',
+          target_player: '11',
+        })),
+        ...Array.from({ length: 5 }, (_, i) => ({
+          ...base, id: `their-ko-${i}`, created_at: `2026-03-29T09:2${i}:00.000Z`,
+          clock: `2${i}:00`, event_type: 'kickout', outcome: 'Retained',
+          contest_type: 'clean', target_player: '8',
+        })),
+      ]);
+    }
+
+    it('offers recent, scorers and kickouts without leaving the capture screen', async () => {
+      seedOppositionMatch();
+
+      await renderApp();
+
+      const tabs = await screen.findAllByRole('tab');
+      expect(tabs.map((t) => t.textContent.trim())).toEqual([
+        'Recent', 'Crokes scorers', 'Crokes kickouts',
+      ]);
+    });
+
+    it('names the opposition danger man on the capture screen', async () => {
+      const user = userEvent.setup();
+      seedOppositionMatch();
+
+      await renderApp();
+      await user.click(await screen.findByRole('tab', { name: /Crokes scorers/i }));
+
+      const body = document.querySelector('#capture-strip-body');
+      expect(body.textContent).toContain('#11');
+    });
+
+    it('shows where their restarts are going', async () => {
+      const user = userEvent.setup();
+      seedOppositionMatch();
+
+      await renderApp();
+      await user.click(await screen.findByRole('tab', { name: /Crokes kickouts/i }));
+
+      const body = document.querySelector('#capture-strip-body');
+      expect(body.textContent).toMatch(/#8|own restarts/);
+    });
+
+    it('remembers the chosen view and expands the strip when switching', async () => {
+      const user = userEvent.setup();
+      localStorage.setItem('ko_recent_events_collapsed', '1');
+      seedOppositionMatch();
+
+      await renderApp();
+      await user.click(await screen.findByRole('tab', { name: /Crokes kickouts/i }));
+
+      // Choosing a view and still seeing nothing would read as broken.
+      expect(document.querySelector('#capture-strip-body')).not.toBeNull();
+      expect(localStorage.getItem('ko_capture_strip_view')).toBe('kickouts');
+      expect(localStorage.getItem('ko_recent_events_collapsed')).toBe('0');
+    });
   });
 });

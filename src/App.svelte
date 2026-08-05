@@ -21,6 +21,7 @@
   } from './lib/appShellHelpers.js';
   import { buildDraftSignature, isSetupDraftDirty } from './lib/captureDraft.js';
   import { CURRENT_EVENT_SCHEMA_VERSION, normalizeEventRecord } from './lib/eventRecord.js';
+  import { buildLiveInsights } from './lib/liveInsights.js';
   import {
     describeEventSyncCompatibility,
     parseMissingEventSyncColumn,
@@ -260,6 +261,43 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   const RECENT_EVENTS_LIMIT = 3;
   const RECENT_EVENTS_COLLAPSED_KEY = 'ko_recent_events_collapsed';
   $: recentMatchEvents = [...currentMatchEvents].sort((a,b) => (b.created_at||'').localeCompare(a.created_at||'')).slice(0, RECENT_EVENTS_LIMIT);
+
+  // The capture screen is where an analyst is pinned during play, but every
+  // read of the game lived a tab or two away. This strip is already on screen,
+  // already collapsible, and already at the bottom where a glance is cheap, so
+  // it doubles as the live read rather than costing new space — which on an
+  // iPad in landscape there is none of (68px spare beside the pitch).
+  const CAPTURE_STRIP_VIEWS = ['recent', 'scorers', 'kickouts'];
+  const CAPTURE_STRIP_VIEW_KEY = 'ko_capture_strip_view';
+  let captureStripView = readCaptureStripView();
+  function readCaptureStripView() {
+    try {
+      const stored = localStorage.getItem(CAPTURE_STRIP_VIEW_KEY);
+      if (CAPTURE_STRIP_VIEWS.includes(stored)) return stored;
+    } catch {
+      return 'recent';
+    }
+    return 'recent';
+  }
+  function setCaptureStripView(view) {
+    captureStripView = view;
+    // Expanding on switch: choosing a view and seeing nothing would read as broken.
+    recentEventsCollapsed = false;
+    try {
+      localStorage.setItem(CAPTURE_STRIP_VIEW_KEY, view);
+      localStorage.setItem(RECENT_EVENTS_COLLAPSED_KEY, '0');
+    } catch {
+      // View preference only; not worth surfacing a failure.
+    }
+  }
+
+  // Reuses the same engine the Live panel and digest run on — no new maths, so
+  // the number on the capture screen can never disagree with the one a tab away.
+  $: captureInsights = buildLiveInsights(currentMatchEvents);
+  $: theirScorers = [
+    captureInsights.threat?.mainThreat,
+    captureInsights.threat?.secondaryThreat,
+  ].filter(Boolean);
 
   let recentEventsCollapsed = readRecentEventsCollapsed();
   function readRecentEventsCollapsed() {
@@ -3265,31 +3303,104 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
 
   {#if recentMatchEvents.length > 0}
   <div class="recent-events-strip">
-    <button
-      type="button"
-      class="re-header"
-      aria-expanded={!recentEventsCollapsed}
-      aria-controls="recent-events-list"
-      on:click={toggleRecentEvents}
-    >
-      <span class="re-label">Recent events</span>
-      <span class="re-count">{recentMatchEvents.length}</span>
-      {#if !recentEventsCollapsed}<span class="re-hint">Tap a row to edit</span>{/if}
-      <span class="re-chevron" class:collapsed={recentEventsCollapsed} aria-hidden="true">⌃</span>
-    </button>
-    {#if !recentEventsCollapsed}
-    <div id="recent-events-list">
-    {#each recentMatchEvents as ev (ev.id)}
-      <button class="recent-event-row" on:click={() => loadToForm(ev)}>
-        <span class="re-type-tag re-type-{ev.event_type}">{ev.event_type === 'kickout' ? 'KO' : ev.event_type === 'shot' ? 'Shot' : 'TO'}</span>
-        <span class="re-period">{ev.period || ''}</span>
-        {#if ev.clock}<span class="re-clock">{ev.clock}</span>{/if}
-        <span class="re-team">{ev.team || ''}</span>
-        <span class="re-outcome">{ev.outcome || ''}</span>
-        {#if ev.target_player}<span class="re-muted">{ev.target_player}</span>{/if}
-        {#if ev.turnover_lost_player}<span class="re-muted">Lost: {ev.turnover_lost_player}</span>{/if}
+    <div class="re-header">
+      <div class="re-views" role="tablist" aria-label="Capture strip view">
+        {#each CAPTURE_STRIP_VIEWS as view (view)}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={captureStripView === view}
+            class="re-view-btn"
+            class:active={captureStripView === view}
+            on:click={() => setCaptureStripView(view)}
+          >
+            {view === 'recent' ? 'Recent' : view === 'scorers' ? `${opponent || 'Their'} scorers` : `${opponent || 'Their'} kickouts`}
+          </button>
+        {/each}
+      </div>
+      {#if captureStripView === 'recent'}
+        <span class="re-count">{recentMatchEvents.length}</span>
+        {#if !recentEventsCollapsed}<span class="re-hint">Tap a row to edit</span>{/if}
+      {/if}
+      <button
+        type="button"
+        class="re-toggle"
+        aria-expanded={!recentEventsCollapsed}
+        aria-controls="capture-strip-body"
+        aria-label={recentEventsCollapsed ? 'Expand capture strip' : 'Collapse capture strip'}
+        on:click={toggleRecentEvents}
+      >
+        <span class="re-chevron" class:collapsed={recentEventsCollapsed} aria-hidden="true">⌃</span>
       </button>
-    {/each}
+    </div>
+    {#if !recentEventsCollapsed}
+    <div id="capture-strip-body">
+      {#if captureStripView === 'recent'}
+        {#each recentMatchEvents as ev (ev.id)}
+          <button class="recent-event-row" on:click={() => loadToForm(ev)}>
+            <span class="re-type-tag re-type-{ev.event_type}">{ev.event_type === 'kickout' ? 'KO' : ev.event_type === 'shot' ? 'Shot' : 'TO'}</span>
+            <span class="re-period">{ev.period || ''}</span>
+            {#if ev.clock}<span class="re-clock">{ev.clock}</span>{/if}
+            <span class="re-team">{ev.team || ''}</span>
+            <span class="re-outcome">{ev.outcome || ''}</span>
+            {#if ev.target_player}<span class="re-muted">{ev.target_player}</span>{/if}
+            {#if ev.turnover_lost_player}<span class="re-muted">Lost: {ev.turnover_lost_player}</span>{/if}
+          </button>
+        {/each}
+      {:else if captureStripView === 'scorers'}
+        <div class="re-intel">
+          {#if theirScorers.length === 0}
+            <p class="re-intel-empty">{captureInsights.threat?.line || 'No opposition shooting data yet.'}</p>
+          {:else}
+            <div class="re-intel-cards">
+              {#each theirScorers as t (t.key)}
+                <div class="re-intel-card">
+                  <span class="re-intel-key">{t.label}</span>
+                  <span class="re-intel-value">{t.points} pt{t.points === 1 ? '' : 's'}</span>
+                  <span class="re-intel-sub">{t.chances} shot{t.chances === 1 ? '' : 's'}</span>
+                </div>
+              {/each}
+              {#if captureInsights.threat?.channelThreat}
+                <div class="re-intel-card">
+                  <span class="re-intel-key">Channel</span>
+                  <span class="re-intel-value">{captureInsights.threat.channelThreat.label}</span>
+                  <span class="re-intel-sub">{captureInsights.threat.channelThreat.chances} shots</span>
+                </div>
+              {/if}
+            </div>
+            <p class="re-intel-line">{captureInsights.threat.line}</p>
+          {/if}
+        </div>
+      {:else}
+        <div class="re-intel">
+          {#if !captureInsights.kickoutPattern?.total}
+            <p class="re-intel-empty">{captureInsights.kickoutPattern?.line || 'No opposition kickouts logged yet.'}</p>
+          {:else}
+            <div class="re-intel-cards">
+              {#if captureInsights.kickoutPattern.primaryTarget}
+                <div class="re-intel-card">
+                  <span class="re-intel-key">Target</span>
+                  <span class="re-intel-value">{captureInsights.kickoutPattern.primaryTarget.label}</span>
+                  <span class="re-intel-sub">{captureInsights.kickoutPattern.primaryTarget.pct}% of theirs</span>
+                </div>
+              {/if}
+              {#if captureInsights.kickoutPattern.primaryLane}
+                <div class="re-intel-card">
+                  <span class="re-intel-key">Lane</span>
+                  <span class="re-intel-value">{captureInsights.kickoutPattern.primaryLane.label}</span>
+                  <span class="re-intel-sub">{captureInsights.kickoutPattern.primaryLane.pct}%</span>
+                </div>
+              {/if}
+              <div class="re-intel-card">
+                <span class="re-intel-key">They won</span>
+                <span class="re-intel-value">{captureInsights.kickoutPattern.wonTotal}/{captureInsights.kickoutPattern.total}</span>
+                <span class="re-intel-sub">own restarts</span>
+              </div>
+            </div>
+            <p class="re-intel-line">{captureInsights.kickoutPattern.trendLine || captureInsights.kickoutPattern.line}</p>
+          {/if}
+        </div>
+      {/if}
     </div>
     {/if}
   </div>
@@ -3736,12 +3847,45 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   .recent-events-strip { border-top: 1px solid #e5e7eb; background: #fafafa; flex-shrink: 0; }
   .re-header {
     display: flex; align-items: center; gap: 8px; width: 100%;
-    padding: 6px 14px; background: none; border: none;
-    cursor: pointer; text-align: left; font-family: inherit;
+    padding: 5px 10px 5px 14px;
+  }
+  /* Club names run long ("Kilmacud Crokes kickouts"), so scroll rather than
+     wrap or overflow — same pattern as the tab bars above. */
+  .re-views {
+    display: flex; gap: 2px; background: #eef0f2; border-radius: 8px; padding: 2px;
+    overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; min-width: 0;
+  }
+  .re-views::-webkit-scrollbar { display: none; }
+  .re-view-btn {
+    padding: 4px 10px; border-radius: 6px; border: none; background: transparent;
+    font-size: 11px; font-weight: 700; color: #4b5563; font-family: inherit;
+    cursor: pointer; white-space: nowrap;
     touch-action: manipulation; -webkit-tap-highlight-color: transparent;
   }
-  .re-header:hover { background: #f3f4f6; }
+  .re-view-btn.active { background: #fff; color: #1c3f8a; box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+  .re-toggle {
+    margin-left: auto; padding: 4px 8px; border: none; background: none;
+    cursor: pointer; font-family: inherit; line-height: 1;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  }
+  .re-toggle:hover { background: #f3f4f6; border-radius: 6px; }
   .re-label { font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* Live read, sized to sit in the same band as the recent-events rows. */
+  .re-intel { padding: 4px 14px 8px; }
+  .re-intel-cards { display: flex; gap: 8px; flex-wrap: wrap; }
+  .re-intel-card {
+    display: flex; align-items: baseline; gap: 6px;
+    background: #f3f4f6; border-radius: 8px; padding: 5px 10px;
+  }
+  .re-intel-key {
+    font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+    color: #6b7280;
+  }
+  .re-intel-value { font-size: 15px; font-weight: 800; color: #111827; font-variant-numeric: tabular-nums; }
+  .re-intel-sub { font-size: 11px; color: #4b5563; }
+  .re-intel-line { margin: 6px 0 0; font-size: 12px; color: #374151; }
+  .re-intel-empty { margin: 0; font-size: 12px; color: #4b5563; }
   .re-count {
     font-size: 10px; font-weight: 700; color: #4b5563; background: #e5e7eb;
     padding: 1px 6px; border-radius: 999px; line-height: 1.5;
