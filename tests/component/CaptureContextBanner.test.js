@@ -9,6 +9,9 @@ vi.mock('../../src/lib/supabase.js', () => ({
   userHasAccess: vi.fn(),
   getUserTeamDetails: vi.fn(),
   isConfiguredAdmin: vi.fn(),
+  isDemoAccount: vi.fn(() => false),
+  demoCredentials: null,
+  demoLoginEnabled: false,
 }));
 
 vi.mock('../../src/lib/diagnostics.js', () => ({

@@ -66,7 +66,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     storageKey,
     storageScopeForUser,
   } from './lib/storageScope.js';
-  import { supabase, supabaseConfigured, userHasAccess, getUserTeamDetails, isConfiguredAdmin } from './lib/supabase.js';
+  import { supabase, supabaseConfigured, userHasAccess, getUserTeamDetails, isConfiguredAdmin, isDemoAccount } from './lib/supabase.js';
   import {
     clearMatchStorage,
     closeMatch,
@@ -110,6 +110,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   let teamName = null;
   let authChecked = false; // prevents login flash on load
   let authRecoveryMode = false;
+  $: isDemoSession = isDemoAccount(user?.email);
 
   // ── Match setup (set once per match, persisted to localStorage) ──────────
   let team = '', opponent = '', matchDate = new Date().toISOString().slice(0,10);
@@ -2922,6 +2923,13 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     </div>
   </header>
 
+  {#if isDemoSession}
+    <div class="demo-banner">
+      <span class="demo-banner-tag">Demo</span>
+      <span>You are signed in to the shared demo account. Anything you record here is visible to other demo visitors.</span>
+    </div>
+  {/if}
+
   {#if syncMessage || pendingSync.size > 0 || pendingMatchSync.size > 0 || syncStatus === 'error'}
     <div class="sync-banner">
       <span>
@@ -3680,6 +3688,18 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     padding: 6px 10px; border: 1.5px solid #93c5fd; border-radius: 999px;
     background: #fff; color: #1d4ed8; cursor: pointer;
     font-size: 12px; font-weight: 700; font-family: inherit;
+  }
+
+  .demo-banner {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 8px 14px; background: #f5f3ff; color: #4c1d95;
+    border-bottom: 1px solid #ddd6fe; font-size: 12px; font-weight: 600;
+    flex-shrink: 0;
+  }
+  .demo-banner-tag {
+    font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+    background: #4c1d95; color: #fff; padding: 2px 7px; border-radius: 999px;
+    flex-shrink: 0;
   }
 
   .sync-banner {

@@ -9,6 +9,9 @@ const mockState = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
   signOutMock: vi.fn(),
   userHasAccessMock: vi.fn(),
+  // Mutable so a test can flip the deployment between demo-enabled and not.
+  demoCredentials: null,
+  demoLoginEnabled: false,
 }));
 
 vi.mock('../../src/lib/supabase.js', () => ({
@@ -22,6 +25,8 @@ vi.mock('../../src/lib/supabase.js', () => ({
     },
   },
   userHasAccess: mockState.userHasAccessMock,
+  get demoCredentials() { return mockState.demoCredentials; },
+  get demoLoginEnabled() { return mockState.demoLoginEnabled; },
 }));
 
 import Login from '../../src/lib/Login.svelte';
@@ -36,6 +41,8 @@ describe('Login', () => {
     mockState.userHasAccessMock.mockReset();
     mockState.userHasAccessMock.mockResolvedValue(true);
     mockState.getSessionMock.mockResolvedValue({ data: { session: { access_token: 'token' } } });
+    mockState.demoCredentials = null;
+    mockState.demoLoginEnabled = false;
   });
 
   it('dispatches login after a successful sign-in', async () => {
@@ -109,6 +116,19 @@ describe('Login', () => {
     expect(screen.getByText(/Password reset email sent/i)).toBeInTheDocument();
   });
 
+  it('explains network reset failures when Supabase cannot be reached', async () => {
+    const user = userEvent.setup();
+    mockState.resetPasswordForEmailMock.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    render(Login);
+
+    await user.type(screen.getByLabelText('Email'), 'analyst@example.com');
+    await user.click(screen.getByRole('button', { name: /Send password reset email/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Could not reach the configured Supabase project/i);
+    expect(screen.getByRole('button', { name: /Send password reset email/i })).toBeEnabled();
+  });
+
   it('shows a password mismatch error in recovery mode', async () => {
     const user = userEvent.setup();
 
@@ -136,5 +156,62 @@ describe('Login', () => {
 
     expect(mockState.updateUserMock).toHaveBeenCalledWith({ password: 'temporary123' });
     expect(onLogin).toHaveBeenCalledWith(expect.objectContaining({ detail: { access_token: 'token' } }));
+  });
+
+  describe('demo access', () => {
+    const demoCredentials = { email: 'demo@pairc.app', password: 'demo-pass' };
+
+    it('hides the demo button when no demo account is configured', () => {
+      render(Login);
+
+      expect(screen.queryByRole('button', { name: /Explore the demo/i })).not.toBeInTheDocument();
+    });
+
+    it('signs in with the configured demo credentials without any typing', async () => {
+      const user = userEvent.setup();
+      const onLogin = vi.fn();
+      mockState.demoCredentials = demoCredentials;
+      mockState.demoLoginEnabled = true;
+      mockState.signInWithPasswordMock.mockResolvedValue({
+        data: { session: { user: { email: demoCredentials.email } } },
+        error: null,
+      });
+
+      render(Login, { events: { login: onLogin } });
+      await user.click(screen.getByRole('button', { name: /Explore the demo/i }));
+
+      expect(mockState.signInWithPasswordMock).toHaveBeenCalledWith(demoCredentials);
+      expect(onLogin).toHaveBeenCalled();
+    });
+
+    it('still enforces the allowlist for the demo account', async () => {
+      const user = userEvent.setup();
+      const onLogin = vi.fn();
+      mockState.demoCredentials = demoCredentials;
+      mockState.demoLoginEnabled = true;
+      mockState.signInWithPasswordMock.mockResolvedValue({
+        data: { session: { user: { email: demoCredentials.email } } },
+        error: null,
+      });
+      mockState.userHasAccessMock.mockResolvedValue(false);
+
+      render(Login, { events: { login: onLogin } });
+      await user.click(screen.getByRole('button', { name: /Explore the demo/i }));
+
+      expect(mockState.signOutMock).toHaveBeenCalledTimes(1);
+      expect(onLogin).not.toHaveBeenCalled();
+      // Demo failures point at the setup guide, not at the admin onboarding flow.
+      expect(await screen.findByRole('alert')).toHaveTextContent(/demo account is not set up/i);
+    });
+
+    it('does not require email or password to be filled in', () => {
+      mockState.demoCredentials = demoCredentials;
+      mockState.demoLoginEnabled = true;
+
+      render(Login);
+
+      expect(screen.getByRole('button', { name: /Explore the demo/i })).toBeEnabled();
+      expect(screen.getByRole('button', { name: /^Sign in$/i })).toBeDisabled();
+    });
   });
 });

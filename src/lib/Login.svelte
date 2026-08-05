@@ -1,11 +1,12 @@
 <script>
   import { createEventDispatcher } from 'svelte'
-  import { supabase, userHasAccess } from './supabase.js'
+  import { supabase, userHasAccess, demoCredentials, demoLoginEnabled } from './supabase.js'
 
   export let recoveryMode = false
 
   const dispatch = createEventDispatcher()
   const accessDeniedMessage = 'This account has not been granted beta access. Ask an admin to add this email through the Admin onboarding flow or into `allowed_users`.'
+  const demoUnavailableMessage = 'The demo account is not set up on this deployment yet. See documentation/demo-access.md.'
 
   let email = ''
   let password = ''
@@ -19,19 +20,19 @@
   $: mode = recoveryMode ? 'updatePassword' : 'signIn'
 
   function getAuthErrorMessage(err, fallback) {
+    if (err?.message === 'Failed to fetch' || err instanceof TypeError) {
+      return 'Could not reach the configured Supabase project. Check the app network connection and Supabase URL, then try again.'
+    }
     return err?.message || fallback
   }
 
-  async function signIn() {
+  async function signInWith(credentials, { deniedMessage = accessDeniedMessage } = {}) {
     error = ''
     info = ''
     loading = true
 
     try {
-      const { data, error: err } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      })
+      const { data, error: err } = await supabase.auth.signInWithPassword(credentials)
 
       if (err) {
         error = err.message
@@ -45,7 +46,7 @@
         } catch {
           // Keep the allowlist error instead of masking it with cleanup noise.
         }
-        error = accessDeniedMessage
+        error = deniedMessage
         return
       }
 
@@ -55,6 +56,18 @@
     } finally {
       loading = false
     }
+  }
+
+  async function signIn() {
+    await signInWith({ email: email.trim(), password })
+  }
+
+  // The demo account is a normal Supabase user on its own team, so it goes
+  // through the same allowlist gate as everyone else. Only the credential
+  // source and the failure message differ.
+  async function signInAsDemo() {
+    if (!demoCredentials) return
+    await signInWith(demoCredentials, { deniedMessage: demoUnavailableMessage })
   }
 
   async function sendResetLink() {
@@ -220,6 +233,13 @@
         <button class="secondary" on:click={sendResetLink} disabled={loading || !email}>
           Send password reset email
         </button>
+        {#if demoLoginEnabled}
+          <div class="divider"><span>or</span></div>
+          <button class="demo" on:click={signInAsDemo} disabled={loading}>
+            {loading ? 'Opening demo...' : 'Explore the demo'}
+          </button>
+          <p class="demo-note">Opens a sample match with no sign-up. Demo data is shared and separate from any club's real data.</p>
+        {/if}
         <p class="invite-note">Access is admin-managed. Have an admin onboard the account first; a Supabase Auth user alone will not pass login.</p>
       {/if}
     </div>
@@ -376,6 +396,43 @@
     background: #eef2ff;
     color: #1c3f8a;
     border: 1px solid #c7d2fe;
+  }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 0 2px;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .divider::before,
+  .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #e2e8f0;
+  }
+
+  .demo {
+    background: #fff;
+    color: #0f1923;
+    border: 1.5px solid #0f1923;
+  }
+
+  .demo:hover:not(:disabled) {
+    background: #0f1923;
+    color: #fff;
+  }
+
+  .demo-note {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #475569;
+    text-align: center;
   }
 
   .secondary:hover:not(:disabled) {

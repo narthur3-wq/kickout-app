@@ -45,6 +45,7 @@ const mockState = vi.hoisted(() => {
     userHasAccessMock: vi.fn(),
     getUserTeamDetailsMock: vi.fn(),
     isConfiguredAdminMock: vi.fn(),
+    isDemoAccountMock: vi.fn(),
     selectOrderMock,
     selectGtMock,
     selectEqMock,
@@ -90,6 +91,10 @@ vi.mock('../../src/lib/supabase.js', () => ({
   userHasAccess: mockState.userHasAccessMock,
   getUserTeamDetails: mockState.getUserTeamDetailsMock,
   isConfiguredAdmin: mockState.isConfiguredAdminMock,
+  isDemoAccount: mockState.isDemoAccountMock,
+  // Login.svelte renders inside this suite too, so it needs the demo exports.
+  demoCredentials: null,
+  demoLoginEnabled: false,
 }));
 
 vi.mock('../../src/lib/diagnostics.js', () => diagnosticsMock);
@@ -194,6 +199,7 @@ describe('App shell auth and sync', () => {
     mockState.userHasAccessMock.mockResolvedValue(true);
     mockState.getUserTeamDetailsMock.mockResolvedValue({ id: 'team-1', name: 'Clontarf' });
     mockState.isConfiguredAdminMock.mockReturnValue(false);
+    mockState.isDemoAccountMock.mockReset().mockReturnValue(false);
     mockState.selectOrderMock.mockReset().mockResolvedValue({ data: [], error: null });
     mockState.selectGtMock.mockReset().mockImplementation(() => ({ order: mockState.selectOrderMock }));
     mockState.selectEqMock.mockReset().mockImplementation(() => ({ gt: mockState.selectGtMock, order: mockState.selectOrderMock }));
@@ -249,6 +255,30 @@ describe('App shell auth and sync', () => {
 
     expect(await screen.findByRole('button', { name: /Sign in/i })).toBeInTheDocument();
     expect(mockState.getSessionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('warns demo visitors that their data is shared', async () => {
+    const session = { user: { id: 'demo-user', email: 'demo@pairc.app' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+    mockState.isDemoAccountMock.mockImplementation((email) => email === 'demo@pairc.app');
+
+    await renderApp();
+
+    const banner = await screen.findByText(/visible to other demo visitors/i);
+    expect(banner).toBeInTheDocument();
+    expect(mockState.isDemoAccountMock).toHaveBeenCalledWith('demo@pairc.app');
+  });
+
+  it('does not show the demo banner for a normal signed-in analyst', async () => {
+    const session = { user: { id: 'user-1', email: 'analyst@example.com' } };
+    mockState.sessionState.session = session;
+    mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+    await renderApp();
+
+    await screen.findByRole('button', { name: 'Capture' });
+    expect(screen.queryByText(/visible to other demo visitors/i)).not.toBeInTheDocument();
   });
 
   it('migrates older local data into signed-in storage on first login', async () => {

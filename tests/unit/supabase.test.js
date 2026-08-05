@@ -20,12 +20,16 @@ async function loadSupabaseModule({
   key = '',
   adminEmails = '',
   disabled = '',
+  demoEmail = '',
+  demoPassword = '',
 } = {}) {
   vi.resetModules();
   vi.stubEnv('VITE_DISABLE_SUPABASE', disabled);
   vi.stubEnv('VITE_SUPABASE_URL', url);
   vi.stubEnv('VITE_SUPABASE_ANON_KEY', key);
   vi.stubEnv('VITE_ADMIN_EMAILS', adminEmails);
+  vi.stubEnv('VITE_DEMO_EMAIL', demoEmail);
+  vi.stubEnv('VITE_DEMO_PASSWORD', demoPassword);
   return import('../../src/lib/supabase.js');
 }
 
@@ -262,5 +266,58 @@ describe('supabase helpers', () => {
     const mod = await loadSupabaseModule();
 
     await expect(mod.userHasAccess()).resolves.toBe(true);
+  });
+
+  describe('demo account', () => {
+    const cloud = { url: 'https://project.supabase.co', key: 'anon-key' };
+
+    it('exposes no demo account when the env vars are unset', async () => {
+      const mod = await loadSupabaseModule(cloud);
+
+      expect(mod.demoCredentials).toBeNull();
+      expect(mod.demoLoginEnabled).toBe(false);
+      expect(mod.isDemoAccount('demo@pairc.app')).toBe(false);
+    });
+
+    it('requires both the email and the password before enabling the demo', async () => {
+      const emailOnly = await loadSupabaseModule({ ...cloud, demoEmail: 'demo@pairc.app' });
+      expect(emailOnly.demoLoginEnabled).toBe(false);
+
+      const passwordOnly = await loadSupabaseModule({ ...cloud, demoPassword: 'demo-pass' });
+      expect(passwordOnly.demoLoginEnabled).toBe(false);
+    });
+
+    it('enables the demo when both env vars are set alongside a configured client', async () => {
+      const mod = await loadSupabaseModule({
+        ...cloud,
+        demoEmail: '  demo@pairc.app  ',
+        demoPassword: 'demo-pass',
+      });
+
+      expect(mod.demoCredentials).toEqual({ email: 'demo@pairc.app', password: 'demo-pass' });
+      expect(mod.demoLoginEnabled).toBe(true);
+    });
+
+    it('stays disabled when Supabase itself is not configured', async () => {
+      const mod = await loadSupabaseModule({
+        demoEmail: 'demo@pairc.app',
+        demoPassword: 'demo-pass',
+      });
+
+      expect(mod.demoLoginEnabled).toBe(false);
+    });
+
+    it('matches the demo account regardless of case or surrounding space', async () => {
+      const mod = await loadSupabaseModule({
+        ...cloud,
+        demoEmail: 'demo@pairc.app',
+        demoPassword: 'demo-pass',
+      });
+
+      expect(mod.isDemoAccount('DEMO@Pairc.app')).toBe(true);
+      expect(mod.isDemoAccount('  demo@pairc.app ')).toBe(true);
+      expect(mod.isDemoAccount('analyst@example.com')).toBe(false);
+      expect(mod.isDemoAccount(undefined)).toBe(false);
+    });
   });
 });

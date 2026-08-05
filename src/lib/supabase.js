@@ -9,6 +9,32 @@ const adminEmails = String(import.meta.env.VITE_ADMIN_EMAILS || '')
   .map((value) => value.trim().toLowerCase())
   .filter(Boolean);
 
+const demoEmail = String(import.meta.env.VITE_DEMO_EMAIL || '').trim();
+const demoPassword = String(import.meta.env.VITE_DEMO_PASSWORD || '');
+
+/**
+ * Shared read/write demo account, surfaced as a one-tap sign-in on the login
+ * screen so evaluators do not need to be onboarded first.
+ *
+ * These credentials ship in the client bundle — that is inherent to a public
+ * one-tap demo and is not a leak to be fixed by hiding them better. The
+ * containment is Row Level Security: every table is scoped by `auth_team_id()`
+ * (see supabase/migrations/20260323000000_team_rls.sql), so the demo account
+ * must be assigned its own `teams` row. It can then only ever read or write
+ * demo data, never a real club's.
+ *
+ * Leave the env vars unset to remove the demo button entirely.
+ */
+export const demoCredentials = (demoEmail && demoPassword)
+  ? { email: demoEmail, password: demoPassword }
+  : null;
+
+/** True when the given email is the configured demo account. */
+export function isDemoAccount(email) {
+  if (!demoCredentials) return false;
+  return String(email || '').trim().toLowerCase() === demoCredentials.email.toLowerCase();
+}
+
 export function getSupabaseClientOptions(browser = globalThis) {
   if (!shouldBypassBrowserAuthLock(browser)) return undefined;
 
@@ -24,6 +50,9 @@ export const supabase = (url && key) ? createClient(url, key, getSupabaseClientO
 
 /** True when Supabase is configured and network features are available */
 export const supabaseConfigured = !!(url && key);
+
+/** True when a demo account is configured and reachable for this deployment. */
+export const demoLoginEnabled = supabaseConfigured && !!demoCredentials;
 
 /** Client-side convenience only; the Edge Function enforces admin access server-side. */
 export function isConfiguredAdmin(email) {
