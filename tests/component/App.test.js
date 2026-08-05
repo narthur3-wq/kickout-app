@@ -270,6 +270,100 @@ describe('App shell auth and sync', () => {
     expect(mockState.isDemoAccountMock).toHaveBeenCalledWith('demo@pairc.app');
   });
 
+  describe('recent events strip', () => {
+    const userScope = 'user:user-1';
+
+    function seedCaptureScreen(eventCount) {
+      const session = { user: { id: 'user-1', email: 'analyst@example.com' } };
+      mockState.sessionState.session = session;
+      mockState.getSessionMock.mockResolvedValue({ data: { session } });
+
+      seedScopedMatches(userScope, [{
+        id: 'match-1',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        match_date: '2026-03-29',
+        status: 'open',
+        created_at: '2026-03-29T09:00:00.000Z',
+        updated_at: '2026-03-29T09:00:00.000Z',
+        last_event_at: '2026-03-29T09:05:00.000Z',
+        closed_at: null,
+      }]);
+      seedScopedActiveMatchId(userScope, 'match-1');
+      seedScopedEvents(userScope, Array.from({ length: eventCount }, (_, i) => ({
+        id: `ev-${i}`,
+        match_id: 'match-1',
+        created_at: `2026-03-29T09:${String(10 + i).padStart(2, '0')}:00.000Z`,
+        match_date: '2026-03-29',
+        team: 'Clontarf',
+        opponent: 'Crokes',
+        period: 'H1',
+        clock: `${10 + i}:00`,
+        event_type: 'shot',
+        direction: 'ours',
+        outcome: 'Point',
+        x: 0.42,
+        y: 0.28,
+        schema_version: 1,
+      })));
+    }
+
+    it('caps the list at three rows even when more events exist', async () => {
+      seedCaptureScreen(8);
+
+      await renderApp();
+
+      await waitFor(() => {
+        expect(document.querySelectorAll('.recent-event-row')).toHaveLength(3);
+      });
+    });
+
+    it('shows the newest events first', async () => {
+      seedCaptureScreen(8);
+
+      await renderApp();
+
+      await waitFor(() => expect(document.querySelectorAll('.recent-event-row')).toHaveLength(3));
+      const clocks = [...document.querySelectorAll('.recent-event-row .re-clock')].map((n) => n.textContent.trim());
+      expect(clocks).toEqual(['17:00', '16:00', '15:00']);
+    });
+
+    it('collapses and expands the list, and remembers the choice', async () => {
+      const user = userEvent.setup();
+      seedCaptureScreen(4);
+
+      await renderApp();
+      await waitFor(() => expect(document.querySelectorAll('.recent-event-row')).toHaveLength(3));
+
+      const header = document.querySelector('.re-header');
+      expect(header.getAttribute('aria-expanded')).toBe('true');
+
+      await user.click(header);
+
+      expect(document.querySelectorAll('.recent-event-row')).toHaveLength(0);
+      expect(document.querySelector('.re-header').getAttribute('aria-expanded')).toBe('false');
+      // Persisted so a mid-match reload does not silently give the space back.
+      expect(localStorage.getItem('ko_recent_events_collapsed')).toBe('1');
+
+      await user.click(document.querySelector('.re-header'));
+
+      expect(document.querySelectorAll('.recent-event-row')).toHaveLength(3);
+      expect(localStorage.getItem('ko_recent_events_collapsed')).toBe('0');
+    });
+
+    it('starts collapsed when that was the stored preference', async () => {
+      localStorage.setItem('ko_recent_events_collapsed', '1');
+      seedCaptureScreen(4);
+
+      await renderApp();
+
+      await waitFor(() => expect(document.querySelector('.re-header')).toBeTruthy());
+      expect(document.querySelectorAll('.recent-event-row')).toHaveLength(0);
+      // The count stays visible while collapsed so the strip is not a dead bar.
+      expect(document.querySelector('.re-count').textContent.trim()).toBe('3');
+    });
+  });
+
   it('does not show the demo banner for a normal signed-in analyst', async () => {
     const session = { user: { id: 'user-1', email: 'analyst@example.com' } };
     mockState.sessionState.session = session;

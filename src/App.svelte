@@ -248,7 +248,28 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
       : 'capture';
   $: if (['live','digest','kickouts','shots','turnovers','events'].includes(activeTab)) lastIngameTab = activeTab;
   $: if (['analysis-possession','analysis-pass'].includes(activeTab)) lastToolsTab = activeTab;
-  $: recentMatchEvents = [...currentMatchEvents].sort((a,b) => (b.created_at||'').localeCompare(a.created_at||'')).slice(0,5);
+  // Three is enough to catch a mistake you just made, which is what this strip
+  // is for. Five cost ~200px of a capture screen that is already short.
+  const RECENT_EVENTS_LIMIT = 3;
+  const RECENT_EVENTS_COLLAPSED_KEY = 'ko_recent_events_collapsed';
+  $: recentMatchEvents = [...currentMatchEvents].sort((a,b) => (b.created_at||'').localeCompare(a.created_at||'')).slice(0, RECENT_EVENTS_LIMIT);
+
+  let recentEventsCollapsed = readRecentEventsCollapsed();
+  function readRecentEventsCollapsed() {
+    try {
+      return localStorage.getItem(RECENT_EVENTS_COLLAPSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
+  function toggleRecentEvents() {
+    recentEventsCollapsed = !recentEventsCollapsed;
+    try {
+      localStorage.setItem(RECENT_EVENTS_COLLAPSED_KEY, recentEventsCollapsed ? '1' : '0');
+    } catch {
+      // Collapsing is a view preference; losing it is not worth surfacing.
+    }
+  }
 
   // ── Clock timer ───────────────────────────────────────────────────────────
   let timerRunning = false;
@@ -3194,10 +3215,20 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
 
   {#if recentMatchEvents.length > 0}
   <div class="recent-events-strip">
-    <div class="re-header">
+    <button
+      type="button"
+      class="re-header"
+      aria-expanded={!recentEventsCollapsed}
+      aria-controls="recent-events-list"
+      on:click={toggleRecentEvents}
+    >
       <span class="re-label">Recent events</span>
-      <span class="re-hint">Tap to edit</span>
-    </div>
+      <span class="re-count">{recentMatchEvents.length}</span>
+      {#if !recentEventsCollapsed}<span class="re-hint">Tap a row to edit</span>{/if}
+      <span class="re-chevron" class:collapsed={recentEventsCollapsed} aria-hidden="true">⌃</span>
+    </button>
+    {#if !recentEventsCollapsed}
+    <div id="recent-events-list">
     {#each recentMatchEvents as ev (ev.id)}
       <button class="recent-event-row" on:click={() => loadToForm(ev)}>
         <span class="re-type-tag re-type-{ev.event_type}">{ev.event_type === 'kickout' ? 'KO' : ev.event_type === 'shot' ? 'Shot' : 'TO'}</span>
@@ -3209,6 +3240,8 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
         {#if ev.turnover_lost_player}<span class="re-muted">Lost: {ev.turnover_lost_player}</span>{/if}
       </button>
     {/each}
+    </div>
+    {/if}
   </div>
   {/if}
 
@@ -3646,16 +3679,30 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   .tab-btn.active .tab-count { background: #dbeafe; color: #1e40af; }
   .edit-dot { color: #f59e0b; font-size: 10px; }
 
-  .recent-events-strip { border-top: 1px solid #e5e7eb; background: #fafafa; }
+  .recent-events-strip { border-top: 1px solid #e5e7eb; background: #fafafa; flex-shrink: 0; }
   .re-header {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 8px 16px 4px;
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 6px 14px; background: none; border: none;
+    cursor: pointer; text-align: left; font-family: inherit;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
   }
-  .re-label { font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; }
-  .re-hint { font-size: 11px; color: #d1d5db; }
+  .re-header:hover { background: #f3f4f6; }
+  .re-label { font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
+  .re-count {
+    font-size: 10px; font-weight: 700; color: #4b5563; background: #e5e7eb;
+    padding: 1px 6px; border-radius: 999px; line-height: 1.5;
+  }
+  /* Was #d1d5db on #fafafa — 1.4:1, effectively invisible. */
+  .re-hint { font-size: 11px; color: #6b7280; margin-left: auto; }
+  .re-chevron {
+    font-size: 12px; color: #6b7280; line-height: 1; margin-left: auto;
+    transition: transform 0.15s;
+  }
+  .re-hint + .re-chevron { margin-left: 8px; }
+  .re-chevron.collapsed { transform: rotate(180deg); }
   .recent-event-row {
     display: flex; align-items: center; gap: 8px; width: 100%;
-    padding: 8px 16px; background: none; border: none; border-bottom: 1px solid #f3f4f6;
+    padding: 5px 14px; background: none; border: none; border-bottom: 1px solid #f3f4f6;
     cursor: pointer; text-align: left; font-family: inherit;
     touch-action: manipulation; -webkit-tap-highlight-color: transparent;
   }
@@ -3667,11 +3714,12 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   .re-type-kickout { background: #dbeafe; color: #1e40af; }
   .re-type-shot { background: #dcfce7; color: #166534; }
   .re-type-turnover { background: #fef3c7; color: #92400e; }
-  .re-period { font-size: 11px; color: #9ca3af; font-weight: 600; flex-shrink: 0; }
-  .re-clock { font-size: 11px; color: #9ca3af; flex-shrink: 0; }
+  /* These carry match data, not decoration — the old #9ca3af was 2.4:1. */
+  .re-period { font-size: 11px; color: #4b5563; font-weight: 600; flex-shrink: 0; }
+  .re-clock { font-size: 11px; color: #4b5563; flex-shrink: 0; font-variant-numeric: tabular-nums; }
   .re-team { font-size: 12px; font-weight: 700; color: #374151; flex-shrink: 0; }
   .re-outcome { font-size: 12px; color: #374151; flex: 1; }
-  .re-muted { font-size: 11px; color: #9ca3af; }
+  .re-muted { font-size: 11px; color: #4b5563; }
 
   .admin-modal-card { max-width: 480px; max-height: 80vh; overflow-y: auto; }
 
