@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import MatchPicker from '../../src/lib/MatchPicker.svelte';
@@ -178,5 +178,36 @@ describe('MatchPicker', () => {
     });
 
     expect(screen.getAllByText('Untitled match')).toHaveLength(2);
+  });
+
+  describe('dialog behaviour', () => {
+    it('moves focus inside on open, as aria-modal promises', async () => {
+      const { container } = render(MatchPicker, {
+        props: { matches: [makeMatch({ id: 'open-1' })], activeMatchId: 'open-1', isMatchClosed: false },
+      });
+
+      const dialog = container.querySelector('[role="dialog"]');
+      await waitFor(() => {
+        expect(dialog.contains(document.activeElement)).toBe(true);
+      });
+    });
+
+    it('closes on Escape', async () => {
+      const user = userEvent.setup();
+      const onClose = vi.fn();
+      const { container } = render(MatchPicker, {
+        props: { matches: [makeMatch({ id: 'open-1' })], activeMatchId: 'open-1', isMatchClosed: false },
+        events: { close: onClose },
+      });
+
+      // Handled on the dialog, not the window: the shell wraps this in a
+      // `on:keydown|stopPropagation` div, so window-level handlers never fire.
+      // That makes it depend on focus being inside, which open() arranges.
+      const dialog = container.querySelector('[role="dialog"]');
+      await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+      await user.keyboard('{Escape}');
+
+      expect(onClose).toHaveBeenCalled();
+    });
   });
 });

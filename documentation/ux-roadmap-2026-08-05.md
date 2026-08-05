@@ -64,13 +64,45 @@ The unlock for everything after it. Do not skip ahead to Phase 3.
 
 ---
 
+## Second review pass — 2026-08-05 (after Phases 0–1)
+
+Re-reviewed by driving flows rather than only screenshotting screens, which is
+how the broken password reset went unnoticed the first time.
+
+**Fixed immediately (small):**
+
+- Match picker did not move focus into itself despite `aria-modal="true"`, and
+  Escape did not close it. The shell wraps the dialog in a
+  `on:keydown|stopPropagation` div, so the existing window-level handler could
+  never fire — it is now handled on the dialog itself.
+- Login fields were not inside a `<form>`, so password managers would not
+  reliably offer to save or autofill. Matters here because passwords are
+  admin-assigned rather than user-chosen.
+- Possession Analysis rendered the match date twice.
+- Contrast, ahead of the token work because each was a one-line change on a
+  high-traffic control: top-level nav `#b0b8c4` **2.0:1** → `#6b7280`; selected
+  capture option white-on-`#0a5` **3.05:1** → `#0b8043` (5.0:1); "Other #"
+  label **2.5:1**; inactive segmented labels **4.39:1**.
+- The two remaining unlabelled inputs (custom jersey number, match clock).
+
+**Checked and found healthy:** save-without-a-match is blocked with a clear
+message, single-row delete does confirm, no console errors on any tab, no
+horizontal overflow at any width, weak/mismatched passwords are rejected
+clearly, and the demo button is a 46px target.
+
+**Correction to the first review:** the Live panel's "N of the last M points"
+line was flagged as disagreeing with its chip count. It does not — a goal is
+three points, so the chips count *scores* and the sentence counts *points*.
+That is correct GAA scoring. The only residual issue is that the two use
+different units without saying so, which is minor.
+
 ## Phase 3 — Accessibility
 
 Cheap once Phase 2 is in, because the contrast fixes become token edits.
 
 | # | Item | Detail | Effort |
 |---|---|---|---|
-| 3.1 | **Contrast to AA.** `.seg-btn.active` 3.05:1 (selected capture option — the most-tapped control, and it has to read in bright outdoor light); `.section-btn`/`.tab-btn` 2.00:1 (top-level nav is barely visible); `.re-hint` 1.41:1; `.re-period`/`.re-clock`/`.re-muted` 2.43:1 (this is match *data*, not chrome); `.jersey-custom-label` 2.54:1; header period pills ~3.4:1. | 7 token edits after 2.2 | S |
+| 3.1 | ~~**Contrast to AA.**~~ **Mostly done.** All light-background failures fixed (nav, selected capture option, recent-events data, "Other #", inactive segmented labels). **Still open:** the dark header's `Phase:` label and inactive period pills at ~3.4:1 — `rgba(255,255,255,0.38)` on `#0f1923`. Left for the token pass since it needs a decision about the dark surface as a whole. | | S |
 | 3.2 | **Document structure.** Add `<main>`, and promote panel titles ("Live Match State", "Kickouts", "Possession Analysis") from `div` to `h2`/`h3`. Currently the app exposes exactly one heading and no main landmark. | | M |
 | 3.3 | **Tab semantics.** `role="tablist"` / `role="tab"` / `aria-selected` / arrow-key navigation on all three nav levels. Currently zero tab roles. | | M |
 | 3.4 | **Label the 2 unlabelled inputs.** | | S |
@@ -106,6 +138,19 @@ Larger conceptual changes; safe to run during beta.
 | 5.5 | **Consolidate the two segmented-control styles** (square in analytics, pill in Possession Analysis) onto the Phase 2 tokens. | S |
 
 ---
+
+## Phase 5b — Auth and account surfaces (new)
+
+The first review treated Login as a screen to look at rather than a flow to
+drive, and missed that password reset was broken end to end. These are the
+remaining gaps in that area, none of them blocking.
+
+| # | Item | Effort |
+|---|---|---|
+| 5b.1 | **No signed-in way to change your password.** The only route is "forget it and email yourself a link". For admin-assigned passwords that is the common case, not the edge case. | M |
+| 5b.2 | **Reset depends on unverifiable Supabase config** — the app origin must be in Auth → Redirect URLs and SMTP must be real, or `resetPasswordForEmail` silently redirects to the Site URL. Worth a documented preflight in the release checklist. | S |
+| 5b.3 | **No focus trap in modals.** Focus now moves *into* the match picker, but Tab can still walk out to the page behind it. Same for the admin and confirm dialogs. | M |
+| 5b.4 | **Sign-out has no confirmation** and unsynced events are queued per-scope; signing out with a pending queue is silent. | S |
 
 ## Phase 6 — Post-launch
 

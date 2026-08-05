@@ -1,5 +1,5 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount, tick } from 'svelte';
   import { defaultMatchDate } from './appShellHelpers.js';
 
   export let matches = [];
@@ -69,9 +69,34 @@
     }
     view = 'list';
   }
+
+  // `aria-modal` promises focus is inside the dialog. Without moving it, a
+  // keyboard or screen-reader user stays on the trigger behind the overlay and
+  // Escape has nothing to act on.
+  let dialogEl = null;
+  onMount(async () => {
+    await tick();
+    const target = dialogEl?.querySelector('input, button');
+    target?.focus();
+  });
+
+  // Handled on the dialog rather than the window: the shell wraps this in a
+  // `on:keydown|stopPropagation` div, so nothing reaches window level.
+  function handleDialogKeydown(event) {
+    if (event.key !== 'Escape') return;
+    dispatch('close');
+  }
 </script>
 
-<div class="match-picker" role="dialog" aria-modal="true" aria-label="Match picker">
+<div
+  class="match-picker"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Match picker"
+  tabindex="-1"
+  bind:this={dialogEl}
+  on:keydown={handleDialogKeydown}
+>
 
   {#if view === 'list'}
     <div class="picker-header">

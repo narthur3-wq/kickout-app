@@ -1447,9 +1447,13 @@
     .sort((a, b) => (b.updated_at || b.created_at || '').localeCompare(a.updated_at || a.created_at || ''));
 
   $: matchMetaTitle = analysisMode === 'cross' ? 'Across matches' : titleOfMatch();
+  // The caller's label already ends with "(date)", so repeating it underneath
+  // rendered the date twice. Only show it when the title does not carry it.
   $: matchMetaSubtitle = analysisMode === 'cross'
     ? matchCountLabel(selectedCrossMatchIds.length)
-    : (activeMatch?.match_date || 'Completed match');
+    : (activeMatch?.match_date && !matchMetaTitle.includes(activeMatch.match_date)
+        ? activeMatch.match_date
+        : (activeMatch?.match_date ? '' : 'Completed match'));
 
   $: rosterPlayers = rosterList();
   $: activeRosterPlayers = activeRosterList();
@@ -1716,7 +1720,7 @@
     </div>
     <div class="match-meta">
       <div>{matchMetaTitle}</div>
-      <div>{matchMetaSubtitle}</div>
+      {#if matchMetaSubtitle}<div>{matchMetaSubtitle}</div>{/if}
     </div>
   </div>
 

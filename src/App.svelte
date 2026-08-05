@@ -3192,6 +3192,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
         <button class="timer-reset-btn" on:click={resetTimer} title="Reset clock to 0:00" disabled={timerRunning}>⟳</button>
         <input
           class="timer-clock-input"
+          aria-label="Match clock"
           type="text"
           inputmode="numeric"
           placeholder="0:00"
@@ -3703,7 +3704,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   .section-btn {
     flex: none; padding: 0 22px; height: 46px; font-size: 14px; font-weight: 700;
     border: none; border-bottom: 3px solid transparent; margin-bottom: -1px;
-    background: none; cursor: pointer; color: #b0b8c4;
+    background: none; cursor: pointer; color: #6b7280;
     display: flex; align-items: center; gap: 5px;
     white-space: nowrap; transition: color 0.15s;
     touch-action: manipulation; -webkit-tap-highlight-color: transparent;
@@ -3720,7 +3721,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   .tab-btn {
     flex: none; padding: 0 16px; height: 44px; font-size: 13px; font-weight: 600;
     border: none; border-bottom: 3px solid transparent; margin-bottom: -1px;
-    background: none; cursor: pointer; color: #b0b8c4;
+    background: none; cursor: pointer; color: #6b7280;
     display: flex; align-items: center; justify-content: center; gap: 5px;
     white-space: nowrap; transition: color 0.15s; letter-spacing: 0;
     position: relative; z-index: 9; touch-action: manipulation;
@@ -3728,7 +3729,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   }
   .tab-btn.active { color: #1c3f8a; border-bottom-color: #1c3f8a; font-weight: 800; }
   .tab-btn:hover:not(.active) { color: #4b5563; }
-  .tab-count { background: #f3f4f6; color: #b0b8c4; font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 99px; }
+  .tab-count { background: #f3f4f6; color: #4b5563; font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 99px; }
   .tab-btn.active .tab-count { background: #dbeafe; color: #1e40af; }
   .edit-dot { color: #f59e0b; font-size: 10px; }
 

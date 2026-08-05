@@ -163,8 +163,7 @@
     window.location.reload()
   }
 
-  function handleKey(event) {
-    if (event.key !== 'Enter') return
+  function submitCurrentMode() {
     if (mode === 'updatePassword') updatePassword()
     else signIn()
   }
@@ -183,7 +182,7 @@
       </div>
     </div>
 
-    <div class="form-body">
+    <form class="form-body" on:submit|preventDefault={submitCurrentMode}>
       {#if mode === 'updatePassword'}
         <p class="mode-note">Set a password for your account on this device.</p>
         <div class="field">
@@ -193,7 +192,6 @@
             type="password"
             placeholder="New password"
             bind:value={nextPassword}
-            on:keydown={handleKey}
             autocomplete="new-password"
           />
         </div>
@@ -204,7 +202,6 @@
             type="password"
             placeholder="Confirm new password"
             bind:value={confirmPassword}
-            on:keydown={handleKey}
             autocomplete="new-password"
           />
         </div>
@@ -216,7 +213,6 @@
             type="email"
             placeholder="Email"
             bind:value={email}
-            on:keydown={handleKey}
             autocomplete="email"
           />
         </div>
@@ -227,7 +223,6 @@
             type="password"
             placeholder="Password"
             bind:value={password}
-            on:keydown={handleKey}
             autocomplete="current-password"
           />
         </div>
@@ -242,31 +237,31 @@
       {/if}
 
       {#if mode === 'updatePassword'}
-        <button class="primary" on:click={updatePassword} disabled={loading || !nextPassword || !confirmPassword}>
+        <button type="submit" class="primary" disabled={loading || !nextPassword || !confirmPassword}>
           {loading ? 'Updating...' : 'Set password'}
         </button>
         <!-- Without this a spent or expired link is a dead end: the set-password
              form is the only thing on screen and it can never succeed. -->
-        <button class="secondary" on:click={leaveRecoveryMode} disabled={loading}>
+        <button type="button" class="secondary" on:click={leaveRecoveryMode} disabled={loading}>
           Back to sign in
         </button>
       {:else}
-        <button class="primary" on:click={signIn} disabled={loading || !email || !password}>
+        <button type="submit" class="primary" disabled={loading || !email || !password}>
           {loading ? 'Signing in...' : 'Sign in'}
         </button>
-        <button class="secondary" on:click={sendResetLink} disabled={loading || !email}>
+        <button type="button" class="secondary" on:click={sendResetLink} disabled={loading || !email}>
           Send password reset email
         </button>
         {#if demoLoginEnabled}
           <div class="divider"><span>or</span></div>
-          <button class="demo" on:click={signInAsDemo} disabled={loading}>
+          <button type="button" class="demo" on:click={signInAsDemo} disabled={loading}>
             {loading ? 'Opening demo...' : 'Explore the demo'}
           </button>
           <p class="demo-note">Opens a sample match with no sign-up. Demo data is shared and separate from any club's real data.</p>
         {/if}
         <p class="invite-note">Access is admin-managed. Have an admin onboard the account first; a Supabase Auth user alone will not pass login.</p>
       {/if}
-    </div>
+    </form>
   </div>
 </div>
 

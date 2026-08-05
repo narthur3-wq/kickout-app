@@ -343,6 +343,7 @@
       <span class="jersey-custom-label">Other #</span>
       <input
         class="jersey-custom-input"
+        aria-label="Target player jersey number above 15"
         type="number"
         min="1"
         max="99"
@@ -430,7 +431,8 @@
     border-radius: 7px;
     background: transparent;
     cursor: pointer;
-    color: #6b7280;
+    /* #6b7280 on the #f3f4f6 track is 4.39:1 — just under AA. */
+    color: #4b5563;
     font-family: inherit;
     transition: all 0.15s;
   }
@@ -539,9 +541,9 @@
   }
 
   .seg-btn.active {
-    background: #0a5;
+    background: #0b8043;
     color: #fff;
-    border-color: #0a5;
+    border-color: #0b8043;
     font-weight: 700;
     box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.18);
     transform: translateY(-1px);
@@ -779,7 +781,8 @@
   .jersey-custom-label {
     font-size: 11px;
     font-weight: 700;
-    color: #9ca3af;
+    /* #9ca3af on white is 2.5:1 — this labels an input, not decoration. */
+    color: #6b7280;
     flex-shrink: 0;
   }
 
