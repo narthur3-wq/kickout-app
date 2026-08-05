@@ -7,6 +7,7 @@
   const dispatch = createEventDispatcher()
   const accessDeniedMessage = 'This account has not been granted beta access. Ask an admin to add this email through the Admin onboarding flow or into `allowed_users`.'
   const demoUnavailableMessage = 'The demo account is not set up on this deployment yet. See documentation/demo-access.md.'
+  const expiredLinkMessage = 'This reset link has expired or has already been used. Go back and request a new password reset email. Reset links must be opened on the same device and browser that requested them.'
 
   let email = ''
   let password = ''
@@ -22,6 +23,12 @@
   function getAuthErrorMessage(err, fallback) {
     if (err?.message === 'Failed to fetch' || err instanceof TypeError) {
       return 'Could not reach the configured Supabase project. Check the app network connection and Supabase URL, then try again.'
+    }
+    // Supabase raises "Auth session missing!" when the recovery token in the
+    // link could not be exchanged — expired, already used, or opened in a
+    // different browser than the one that requested it.
+    if (/auth session missing/i.test(err?.message || '')) {
+      return expiredLinkMessage
     }
     return err?.message || fallback
   }
@@ -116,7 +123,7 @@
     try {
       const { error: err } = await supabase.auth.updateUser({ password: nextPassword })
       if (err) {
-        error = err.message
+        error = getAuthErrorMessage(err, 'Password update failed. Check your connection and try again.')
         return
       }
 
@@ -142,6 +149,18 @@
     } finally {
       loading = false
     }
+  }
+
+  // Strips the spent token from the URL and drops back to the sign-in form.
+  // Reloading is the simplest way to reset the shell's recovery state without
+  // threading another event back up through App.
+  function leaveRecoveryMode() {
+    try {
+      window.history.replaceState(null, '', window.location.pathname)
+    } catch {
+      // Fall through to the reload regardless.
+    }
+    window.location.reload()
   }
 
   function handleKey(event) {
@@ -225,6 +244,11 @@
       {#if mode === 'updatePassword'}
         <button class="primary" on:click={updatePassword} disabled={loading || !nextPassword || !confirmPassword}>
           {loading ? 'Updating...' : 'Set password'}
+        </button>
+        <!-- Without this a spent or expired link is a dead end: the set-password
+             form is the only thing on screen and it can never succeed. -->
+        <button class="secondary" on:click={leaveRecoveryMode} disabled={loading}>
+          Back to sign in
         </button>
       {:else}
         <button class="primary" on:click={signIn} disabled={loading || !email || !password}>

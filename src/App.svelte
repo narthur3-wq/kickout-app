@@ -110,6 +110,13 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   let teamName = null;
   let authChecked = false; // prevents login flash on load
   let authRecoveryMode = false;
+  // Set once from the URL the reset/invite email landed on, and deliberately
+  // NOT cleared by auth state changes. `authRecoveryMode` on its own was wiped
+  // before it could ever render: Supabase emits INITIAL_SESSION with a null
+  // session during startup, which took the signed-out branch below and reset
+  // the flag, so a password reset link always fell through to the normal
+  // sign-in screen with no way to set a new password.
+  let recoveryRequested = false;
   $: isDemoSession = isDemoAccount(user?.email);
 
   // ── Match setup (set once per match, persisted to localStorage) ──────────
@@ -1672,11 +1679,12 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     if (!supabaseConfigured) {
       activateStorageScope(LOCAL_STORAGE_SCOPE);
     }
-    authRecoveryMode =
+    recoveryRequested =
       window.location.hash.includes('type=recovery') ||
       window.location.search.includes('type=recovery') ||
       window.location.hash.includes('type=invite') ||
       window.location.search.includes('type=invite');
+    authRecoveryMode = recoveryRequested;
 
     const handleOnline = () => {
       isOnline = true;
@@ -1719,6 +1727,21 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
         }
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
           if (_event === 'PASSWORD_RECOVERY') {
+            authRecoveryMode = true;
+            authChecked = true;
+            stopRealtimeSync();
+            user = null;
+            teamId = null;
+            teamName = null;
+            isAdminUser = false;
+            activateStorageScope(null);
+            return;
+          }
+          // Arriving from a reset or invite link means finishing that flow,
+          // even though Supabase establishes a real session for it. Without
+          // this the user is silently signed straight into the app and never
+          // gets to set the password they asked to reset.
+          if (recoveryRequested) {
             authRecoveryMode = true;
             authChecked = true;
             stopRealtimeSync();
@@ -1780,8 +1803,24 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   });
 
   async function handleLogin(e) {
+    // Login dispatches the session. A null one would mean signing in with no
+    // user, so treat it as a failed recovery rather than throwing on .user.
+    if (!e.detail?.user) {
+      showNotice('error', 'Could not complete sign-in. Try signing in again.', 7000);
+      return;
+    }
     user = e.detail.user;
     authRecoveryMode = false;
+    // Drop the recovery flag and strip the token fragment, so a refresh does
+    // not drop the user back into the set-password form with a spent link.
+    recoveryRequested = false;
+    if (window.location.hash || window.location.search.includes('type=')) {
+      try {
+        window.history.replaceState(null, '', window.location.pathname);
+      } catch {
+        // Cosmetic only — never block sign-in on it.
+      }
+    }
     isAdminUser = isConfiguredAdmin(e.detail.user?.email);
     ({ id: teamId, name: teamName } = await getUserTeamDetails());
     const nextScope = storageScopeForUser(e.detail.user, supabaseConfigured);
@@ -1799,6 +1838,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     teamId = null;
     teamName = null;
     authRecoveryMode = false;
+    recoveryRequested = false;
     isAdminUser = false;
     stopRealtimeSync();
     activateStorageScope(null);

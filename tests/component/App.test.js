@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MATCH_KEYS } from '../../src/lib/matchStore.js';
 import { LOCAL_STORAGE_SCOPE, STORAGE_KEYS, storageKey } from '../../src/lib/storageScope.js';
 
@@ -268,6 +268,52 @@ describe('App shell auth and sync', () => {
     const banner = await screen.findByText(/visible to other demo visitors/i);
     expect(banner).toBeInTheDocument();
     expect(mockState.isDemoAccountMock).toHaveBeenCalledWith('demo@pairc.app');
+  });
+
+  describe('password recovery', () => {
+    afterEach(() => {
+      window.location.hash = '';
+    });
+
+    it('keeps the set-password form up when Supabase reports no initial session', async () => {
+      // The regression: onMount set recovery mode from the URL, then Supabase
+      // emitted INITIAL_SESSION with a null session, which took the signed-out
+      // branch and cleared the flag. The reset link fell through to the normal
+      // sign-in screen with no way to set a new password.
+      window.location.hash = '#access_token=abc&refresh_token=def&type=recovery';
+
+      await renderApp();
+
+      expect(await screen.findByRole('button', { name: /Set password/i })).toBeInTheDocument();
+
+      const onAuthStateChange = mockState.onAuthStateChangeMock.mock.calls[0]?.[0];
+      expect(onAuthStateChange).toBeTypeOf('function');
+      await onAuthStateChange('INITIAL_SESSION', null);
+
+      expect(screen.getByRole('button', { name: /Set password/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Sign in$/i })).not.toBeInTheDocument();
+    });
+
+    it('does not sign the user straight in when a recovery session arrives', async () => {
+      // Supabase does establish a real session for a recovery link. Without
+      // the URL flag the shell treated that as an ordinary sign-in and skipped
+      // the password form entirely.
+      window.location.hash = '#access_token=abc&type=recovery';
+
+      await renderApp();
+      const onAuthStateChange = mockState.onAuthStateChangeMock.mock.calls[0]?.[0];
+      await onAuthStateChange('SIGNED_IN', { user: { id: 'user-1', email: 'analyst@example.com' } });
+
+      expect(screen.getByRole('button', { name: /Set password/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Capture' })).not.toBeInTheDocument();
+    });
+
+    it('shows the normal sign-in screen when the URL is not a recovery link', async () => {
+      await renderApp();
+
+      expect(await screen.findByRole('button', { name: /^Sign in$/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Set password/i })).not.toBeInTheDocument();
+    });
   });
 
   describe('recent events strip', () => {

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { signInIfNeeded } from './appSession.js';
+import { openInGame, signInIfNeeded } from './appSession.js';
 import { buildSimulatedMatchState } from '../fixtures/simulatedMatch.js';
 
 test('simulates a match and exports the coach digest as a PNG', async ({ page }) => {
@@ -18,7 +18,7 @@ test('simulates a match and exports the coach digest as a PNG', async ({ page })
   await signInIfNeeded(page);
 
   await expect(page.getByText('Clontarf v Vincents')).toBeVisible();
-  await page.getByRole('button', { name: 'Live' }).click();
+  await openInGame(page, /^Live$/i);
   await expect(page.getByText('Live Match State')).toBeVisible();
   await expect(page.getByText('Showing all periods in this view.')).toBeVisible();
   await page.getByRole('button', { name: 'H1' }).click();
@@ -59,7 +59,7 @@ test('live deep-analysis shortcuts open the matching detailed tabs', async ({ pa
   await page.goto('/');
   await signInIfNeeded(page);
 
-  await page.getByRole('button', { name: 'Live' }).click();
+  await openInGame(page, /^Live$/i);
   await expect(page.getByText('Live Match State')).toBeVisible();
 
   const deepAnalysis = page.locator('.card').filter({ hasText: 'Deep Analysis' });
@@ -67,11 +67,11 @@ test('live deep-analysis shortcuts open the matching detailed tabs', async ({ pa
   await deepAnalysis.getByRole('button', { name: 'Kickouts', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Kickouts', exact: true }).first()).toHaveClass(/active/);
 
-  await page.getByRole('button', { name: 'Live' }).click();
+  await openInGame(page, /^Live$/i);
   await deepAnalysis.getByRole('button', { name: 'Shots', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Shots', exact: true }).first()).toHaveClass(/active/);
 
-  await page.getByRole('button', { name: 'Live' }).click();
+  await openInGame(page, /^Live$/i);
   await deepAnalysis.getByRole('button', { name: 'Turnovers', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Turnovers', exact: true }).first()).toHaveClass(/active/);
 });

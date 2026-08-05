@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
-import { openFreshApp, setUpMatch, signInIfNeeded } from './appSession.js';
+import { openFreshApp, openInGame, setUpMatch, signInIfNeeded } from './appSession.js';
 
 async function placeLandingPoint(page, position = { x: 220, y: 120 }) {
   await page.locator('svg[aria-label*="GAA pitch"]').click({ position });
@@ -13,7 +13,7 @@ test('JSON export can round-trip back into the app', async ({ page }) => {
   await placeLandingPoint(page);
   await page.getByRole('button', { name: /Save Event/i }).click();
 
-  await page.getByRole('button', { name: /^Events/i }).click();
+  await openInGame(page, /^Events/i);
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: /Export JSON/i }).click();
   const download = await downloadPromise;
@@ -34,7 +34,7 @@ test('JSON export can round-trip back into the app', async ({ page }) => {
   await page.evaluate(() => window.localStorage.clear());
   await page.reload();
   await signInIfNeeded(page);
-  await page.getByRole('button', { name: /^Events/i }).click();
+  await openInGame(page, /^Events/i);
   await expect(page.getByText(/No events recorded yet/i)).toBeVisible();
 
   const chooserPromise = page.waitForEvent('filechooser');
@@ -56,7 +56,7 @@ test('JSON import reuses an existing logical match when the imported id differs'
   await setUpMatch(page, { opponent: 'Na Fianna' });
 
   const chooserPromise = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: /^Events/i }).click();
+  await openInGame(page, /^Events/i);
   await page.getByRole('button', { name: /Import JSON/i }).click();
   const chooser = await chooserPromise;
 

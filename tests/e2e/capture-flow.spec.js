@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openFreshApp, setUpMatch, signInIfNeeded } from './appSession.js';
+import { openFreshApp, openInGame, setUpMatch, signInIfNeeded } from './appSession.js';
 
 async function placeLandingPoint(page, position = { x: 220, y: 120 }) {
   await page.locator('svg[aria-label*="GAA pitch"]').click({ position });
@@ -44,14 +44,14 @@ test('captures a live event and restores the match after reload', async ({ page 
   await placeLandingPoint(page);
   await page.getByRole('button', { name: /Save Event/i }).click();
 
-  await page.getByRole('button', { name: /Events/i }).click();
+  await openInGame(page, /^Events/i);
   await expect(page.getByRole('cell', { name: 'Crokes' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Clontarf' })).toBeVisible();
 
   await page.reload();
 
   await expect(page.locator('button.match-ctx-bar')).toContainText('Clontarf vs Crokes');
-  await page.getByRole('button', { name: /Events/i }).click();
+  await openInGame(page, /^Events/i);
   await expect(page.getByRole('cell', { name: 'Crokes' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Clontarf' })).toBeVisible();
 });
@@ -78,7 +78,7 @@ test('returns to live capture cleanly after editing and cancelling an event', as
   await placeLandingPoint(page);
   await page.getByRole('button', { name: /Save Event/i }).click();
 
-  await page.getByRole('button', { name: /Events/i }).click();
+  await openInGame(page, /^Events/i);
   await page.getByRole('button', { name: 'Edit' }).click();
 
   await expect(page.getByText(/Editing event/i)).toBeVisible();
@@ -93,11 +93,16 @@ test('top navigation can reach Kickouts from the main tabs', async ({ page }) =>
   await openFreshApp(page);
   await setUpMatch(page, { opponent: 'Crokes' });
 
-  const tabsToCheck = [/^Capture/i, /^Live/i, /^Digest/i, /^Events/i];
   const tabBar = page.locator('nav.tab-bar');
 
-  for (const tab of tabsToCheck) {
-    await tabBar.getByRole('button', { name: tab }).click();
+  // From Capture, which is a different section, Kickouts is one level down.
+  await tabBar.getByRole('button', { name: /^Capture$/i }).click();
+  await openInGame(page, /^Kickouts/i);
+  await expect(tabBar.getByRole('button', { name: /^Kickouts/i })).toHaveClass(/active/);
+
+  // From the other In-game sub-tabs it is a sibling, so directly reachable.
+  for (const tab of [/^Live/i, /^Digest/i, /^Events/i]) {
+    await tabBar.getByRole('button', { name: tab }).first().click();
     await tabBar.getByRole('button', { name: /^Kickouts/i }).click();
     await expect(tabBar.getByRole('button', { name: /^Kickouts/i })).toHaveClass(/active/);
   }
@@ -111,11 +116,15 @@ test('top navigation can reach Kickouts from the main tabs', async ({ page }) =>
 test.describe('touch navigation', () => {
   test.use({ hasTouch: true, isMobile: false, viewport: { width: 1180, height: 820 } });
 
-  test('touch users can open Kickouts directly from Capture', async ({ page }) => {
+  test('touch users can reach Kickouts from Capture', async ({ page }) => {
     await openFreshApp(page);
     await setUpMatch(page, { opponent: 'Crokes' });
 
-    const kickoutsTab = page.locator('nav.tab-bar').getByRole('button', { name: /^Kickouts/i });
+    // Two taps, not one: Kickouts lives under the In-game section.
+    const tabBar = page.locator('nav.tab-bar');
+    await tabBar.getByRole('button', { name: /^In-game$/i }).tap();
+
+    const kickoutsTab = tabBar.getByRole('button', { name: /^Kickouts/i });
     await kickoutsTab.tap();
 
     await expect(kickoutsTab).toHaveClass(/active/);
@@ -148,7 +157,7 @@ test('captures a turnover with explicit loser and winner players', async ({ page
   await placeLandingPoint(page, { x: 260, y: 140 });
   await page.getByRole('button', { name: /Save Event/i }).click();
 
-  await page.getByRole('button', { name: /^Events/i }).click();
+  await openInGame(page, /^Events/i);
   await expect(page.getByText(/Lost Clontarf #2 \/ Won Crokes #14/i)).toBeVisible();
 });
 
@@ -160,12 +169,13 @@ test('updates the current match setup without silently splitting saved events', 
   await page.getByRole('button', { name: /Save Event/i }).click();
 
   await page.locator('button.match-ctx-bar').click();
-  await page.getByRole('button', { name: 'Edit' }).click();
+  // Scoped to the dialog: the Events table also renders per-row Edit buttons.
+  await page.getByRole('dialog', { name: 'Match picker' }).getByRole('button', { name: 'Edit' }).click();
   await page.getByLabel('Opponent').fill('Vincents');
   await page.getByRole('dialog', { name: 'Match picker' }).getByRole('button', { name: 'Update match' }).dispatchEvent('click');
   await page.locator('.confirm-card').getByRole('button', { name: 'Update match', exact: true }).click();
 
-  await page.getByRole('button', { name: /Events/i }).click();
+  await openInGame(page, /^Events/i);
   await expect(page.getByRole('cell', { name: 'Vincents' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Crokes' })).toHaveCount(0);
 });
@@ -177,7 +187,7 @@ test('delete all can be recovered with Undo from Capture', async ({ page }) => {
   await placeLandingPoint(page);
   await page.getByRole('button', { name: /Save Event/i }).click();
 
-  await page.getByRole('button', { name: /Events/i }).click();
+  await openInGame(page, /^Events/i);
   await page.getByRole('button', { name: /Delete all/i }).click();
   await page.getByRole('button', { name: /Delete all data/i }).click();
 
@@ -185,7 +195,7 @@ test('delete all can be recovered with Undo from Capture', async ({ page }) => {
   await page.getByRole('button', { name: /Undo/i }).click();
   await page.locator('.confirm-card').getByRole('button', { name: 'Undo last change', exact: true }).click();
 
-  await page.getByRole('button', { name: /Events/i }).click();
+  await openInGame(page, /^Events/i);
   await expect(page.getByRole('cell', { name: 'Na Fianna' })).toBeVisible();
 });
 
@@ -284,7 +294,7 @@ test('import can keep current conflicting data while still adding brand-new even
 
   await page.goto('/');
   await signInIfNeeded(page);
-  await page.getByRole('button', { name: /Events/i }).click();
+  await openInGame(page, /^Events/i);
 
   const chooserPromise = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: /Import JSON/i }).click();
@@ -343,18 +353,18 @@ test('analytics legends update to match the active tab', async ({ page }) => {
   await signInIfNeeded(page);
   const legend = page.locator('.pitch-viz-legend');
 
-  await page.getByRole('button', { name: /^Shots/i }).click();
+  await openInGame(page, /^Shots/i);
   await expect(legend.getByText('Goal attempt')).toBeVisible();
   await expect(legend.getByText('Blocked')).toBeVisible();
 
-  await page.getByRole('button', { name: /^Kickouts/i }).click();
+  await openInGame(page, /^Kickouts/i);
   await expect(legend.getByText('Clontarf')).toBeVisible();
   await expect(legend.getByText('Crokes')).toBeVisible();
   await expect(legend.getByText('Dead-ball / foul')).toBeVisible();
   await expect(legend.getByText('Targeted player')).toBeVisible();
   await expect(legend.getByText('Goal attempt')).toHaveCount(0);
 
-  await page.getByRole('button', { name: /^Turnovers/i }).click();
+  await openInGame(page, /^Turnovers/i);
   await expect(legend.getByText('Won')).toBeVisible();
   await expect(legend.getByText('Lost')).toBeVisible();
   await expect(legend.getByText('Blocked')).toHaveCount(0);

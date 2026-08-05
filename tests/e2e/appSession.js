@@ -53,6 +53,32 @@ export async function setUpMatch(page, { team = 'Clontarf', opponent = 'Crokes',
   await expect(matchContextButton).toContainText(opponent);
 }
 
+/**
+ * Navigation is two-level: a section row (Capture / In-game / Tools) and a
+ * sub-tab row that only exists once its section is open. Clicking a sub-tab
+ * straight from Capture finds nothing.
+ *
+ * Both lookups are scoped to the tab bar because several sub-tab labels are
+ * duplicated elsewhere in the app — the Live panel's deep-analysis shortcuts
+ * use the same words — which otherwise trips Playwright strict mode.
+ */
+export async function openSubTab(page, section, tab) {
+  const tabBar = page.locator('nav.tab-bar');
+  await tabBar.getByRole('button', { name: new RegExp(`^${section}$`, 'i') }).click();
+  if (tab) {
+    await tabBar.getByRole('button', { name: tab }).first().click();
+  }
+  return tabBar;
+}
+
+export function openInGame(page, tab) {
+  return openSubTab(page, 'In-game', tab);
+}
+
+export function openTools(page, tab) {
+  return openSubTab(page, 'Tools', tab);
+}
+
 export async function openFreshApp(page) {
   await page.goto('/');
   await page.evaluate(() => {

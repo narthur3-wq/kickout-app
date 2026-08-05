@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openFreshApp, setUpMatch } from './appSession.js';
+import { openFreshApp, openTools, setUpMatch } from './appSession.js';
 
 async function clearAnalysisState(page) {
   await page.evaluate(() => {
@@ -24,7 +24,7 @@ async function clearAnalysisState(page) {
 }
 
 async function openPossessionTab(page) {
-  await page.getByRole('button', { name: /^Possession$/i }).click();
+  await openTools(page, /^Possession$/i);
   await expect(page.getByRole('heading', { name: 'Possession Analysis' })).toBeVisible();
 }
 

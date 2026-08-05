@@ -158,6 +158,33 @@ describe('Login', () => {
     expect(onLogin).toHaveBeenCalledWith(expect.objectContaining({ detail: { access_token: 'token' } }));
   });
 
+  describe('expired recovery links', () => {
+    it('explains a spent link instead of surfacing "Auth session missing!"', async () => {
+      const user = userEvent.setup();
+      // What Supabase returns when the recovery token cannot be exchanged —
+      // expired, already used, or opened in a different browser.
+      mockState.updateUserMock.mockResolvedValue({
+        error: { message: 'Auth session missing!' },
+      });
+
+      render(Login, { recoveryMode: true });
+
+      await user.type(screen.getByLabelText('New password'), 'temporary123');
+      await user.type(screen.getByLabelText('Confirm new password'), 'temporary123');
+      await user.click(screen.getByRole('button', { name: /Set password/i }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(/expired or has already been used/i);
+      expect(alert).not.toHaveTextContent(/Auth session missing/i);
+    });
+
+    it('offers a way out of recovery mode so a dead link is not a trap', () => {
+      render(Login, { recoveryMode: true });
+
+      expect(screen.getByRole('button', { name: /Back to sign in/i })).toBeEnabled();
+    });
+  });
+
   describe('demo access', () => {
     const demoCredentials = { email: 'demo@pairc.app', password: 'demo-pass' };
 
