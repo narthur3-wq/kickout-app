@@ -29,7 +29,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
-        globIgnores: ['**/html2canvas*.js'],
+        // og-image.png is only ever fetched by link-preview scrapers, never by
+        // the app itself — no reason to make every user precache it.
+        globIgnores: ['**/html2canvas*.js', '**/og-image.png'],
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api\//],
       },
