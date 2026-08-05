@@ -257,7 +257,16 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   let recentEventsCollapsed = readRecentEventsCollapsed();
   function readRecentEventsCollapsed() {
     try {
-      return localStorage.getItem(RECENT_EVENTS_COLLAPSED_KEY) === '1';
+      const stored = localStorage.getItem(RECENT_EVENTS_COLLAPSED_KEY);
+      if (stored !== null) return stored === '1';
+    } catch {
+      return false;
+    }
+    // No stored preference yet: start collapsed on phones, where the strip is
+    // ~16% of the viewport and the pitch needs every pixel it can get. An
+    // explicit choice always wins over this default.
+    try {
+      return window.matchMedia('(max-width: 767px)').matches;
     } catch {
       return false;
     }
@@ -3625,7 +3634,11 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   .chip.pending { background: rgba(245,158,11,0.15);  color: #f59e0b; }
 
   .match-ctx-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0; }
-  .match-score { font-size: 15px; font-weight: 700; color: rgba(255,255,255,0.95); letter-spacing: 0.04em; }
+  /* nowrap so a squeezed header can never break "1-10 – 1-6" across lines. */
+  .match-score {
+    font-size: 15px; font-weight: 700; color: rgba(255,255,255,0.95); letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
 
   /* Sign-out — dark header */
   .hdr-sm {
@@ -3943,8 +3956,18 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
 
   /* ── Capture layout ── */
   .capture-layout { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+  /*
+   * Stacked (phone) layout. The form must be allowed to shrink and scroll
+   * inside its own box — with `flex-shrink: 0` it took its full ~810px of
+   * content height, pushed the pitch out of the viewport entirely and left it
+   * with zero height, so the capture screen could not be used at all on a
+   * phone. The pitch is the thing you have to hit accurately under time
+   * pressure, so it gets the larger share and the form scrolls.
+   */
   .form-panel {
-    overflow-y: auto; padding: 0; background: #fff; flex-shrink: 0; border-bottom: 1px solid #e5e7eb;
+    overflow-y: auto; padding: 0; background: #fff;
+    flex: 0 1 auto; min-height: 0; max-height: 42%;
+    border-bottom: 1px solid #e5e7eb;
   }
   .pitch-panel {
     flex: 1; padding: 14px; background: #eaf2ea;
@@ -3954,7 +3977,12 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
 
   @media (min-width: 768px) {
     .capture-layout { flex-direction: row; }
-    .form-panel { width: 300px; flex-shrink: 0; border-bottom: none; border-right: 1px solid #e5e7eb; overflow-y: auto; }
+    /* Side-by-side: the form is a full-height column, so the stacked-layout
+       height cap must be cleared or it would clip the sidebar to 42%. */
+    .form-panel {
+      width: 300px; flex: 0 0 auto; max-height: none;
+      border-bottom: none; border-right: 1px solid #e5e7eb; overflow-y: auto;
+    }
     .pitch-panel { flex: 1; padding: 24px; justify-content: center; }
   }
 
@@ -4074,10 +4102,33 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   .toast button:hover { background: rgba(255,255,255,0.18); }
 
   /* ── Responsive ── */
+  /*
+   * Phone header. Everything in here is flex-shrink: 0 except .header-center,
+   * so at narrow widths the centre was squeezed to nothing: the match name
+   * rendered on top of the crest and wordmark, and the score wrapped one
+   * character per line, taking the header from 54px to 120px.
+   *
+   * The match name, date and score are already shown in the match context bar
+   * directly below and in the Live panel, so dropping them here loses nothing.
+   */
+  @media (max-width: 640px) {
+    .header-center { justify-content: flex-end; min-width: 0; overflow: hidden; }
+    .match-ctx-wrap { display: none; }
+    .pills-label { display: none; }
+    .period-pill { padding: 3px 7px; }
+
+    /* The goal bar wrapped to two lines here, costing ~40px of pitch. Which end
+       we defend is already implied by "Attacking: <side>" and by the red goal
+       marker on the pitch itself, so drop the redundant half. */
+    .goal-indicator { padding: 6px 12px; }
+    .goal-copy span:first-child { display: none; }
+  }
+
   @media (max-width: 480px) {
     .header { padding: 0 10px; min-height: 50px; }
     .tab-btn { padding: 0 11px; font-size: 12px; }
     .pitch-panel { padding: 10px; }
     h1 { font-size: 16px; }
+    .logo-crest { width: 30px; height: 30px; }
   }
 </style>

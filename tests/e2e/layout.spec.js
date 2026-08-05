@@ -62,13 +62,92 @@ test('analytics pitch stays fully in view in landscape on Kickouts, Shots, and T
   await page.goto('/');
   await signInIfNeeded(page);
 
+  // Navigation is two-level: the analytics sub-tabs only exist once the
+  // In-game section is open. This test predates that and clicked them
+  // straight from Capture, where they do not exist.
+  const tabBar = page.locator('nav.tab-bar');
+  await tabBar.getByRole('button', { name: /^In-game$/i }).click();
+
   const tabs = [/^Kickouts/i, /^Shots/i, /^Turnovers/i];
   for (const tab of tabs) {
-    await page.getByRole('button', { name: tab }).click();
+    // Scoped to the tab bar: the Live panel also has deep-analysis shortcuts
+    // with these same labels, so an unscoped lookup is ambiguous.
+    await tabBar.getByRole('button', { name: tab }).click();
     const pitch = page.locator('.pitch-viz-card');
     await expect(pitch).toBeVisible();
     const box = await pitch.boundingBox();
     expect(box).not.toBeNull();
     expect(box.y + box.height).toBeLessThanOrEqual(768);
+  }
+});
+
+// Portrait phone was entirely untested, which is how the capture screen shipped
+// unusable at phone widths: the form panel took its full content height, the
+// pitch collapsed to 0px and Save Event sat below an overflow:hidden boundary
+// with nothing to scroll. These assert the three things that were broken.
+test.describe('portrait phone capture', () => {
+  for (const size of [
+    { name: 'small', width: 360, height: 740 },
+    { name: 'standard', width: 390, height: 844 },
+  ]) {
+    test.describe(`${size.name} (${size.width}x${size.height})`, () => {
+      test.use({ viewport: { width: size.width, height: size.height }, hasTouch: true });
+
+      test('keeps the pitch tappable and the save control in view', async ({ page }) => {
+        await openFreshApp(page);
+        await setUpMatch(page, { opponent: 'Kilmacud Crokes' });
+
+        const pitch = page.locator('.pitch-card svg');
+        await expect(pitch).toBeVisible();
+
+        const pitchBox = await pitch.boundingBox();
+        expect(pitchBox).not.toBeNull();
+        // The regression was height 0. Anything under ~120px is untappable in
+        // practice, so assert a floor rather than merely non-zero.
+        expect(pitchBox.height).toBeGreaterThan(120);
+        expect(pitchBox.y + pitchBox.height).toBeLessThanOrEqual(size.height);
+
+        const saveButton = page.getByRole('button', { name: /Save Event/i });
+        await expect(saveButton).toBeVisible();
+        const saveBox = await saveButton.boundingBox();
+        expect(saveBox).not.toBeNull();
+        expect(saveBox.y).toBeGreaterThanOrEqual(0);
+        expect(saveBox.y + saveBox.height).toBeLessThanOrEqual(size.height);
+      });
+
+      test('keeps the header to one compact row', async ({ page }) => {
+        await openFreshApp(page);
+        await setUpMatch(page, { opponent: 'Kilmacud Crokes' });
+
+        const header = page.locator('header.header');
+        const headerBox = await header.boundingBox();
+        expect(headerBox).not.toBeNull();
+        // It grew to 120px when the match name and score wrapped.
+        expect(headerBox.height).toBeLessThanOrEqual(64);
+
+        // The wrapped score also rendered on top of the crest and wordmark.
+        const overlaps = await page.evaluate(() => {
+          const logo = document.querySelector('.logo-wrap')?.getBoundingClientRect();
+          if (!logo) return false;
+          const others = document.querySelectorAll('.header-center *, .header-actions *');
+          return [...others].some((el) => {
+            const r = el.getBoundingClientRect();
+            if (!r.width || !r.height) return false;
+            return r.left < logo.right && r.right > logo.left && r.top < logo.bottom && r.bottom > logo.top;
+          });
+        });
+        expect(overlaps).toBe(false);
+      });
+
+      test('does not scroll horizontally', async ({ page }) => {
+        await openFreshApp(page);
+        await setUpMatch(page, { opponent: 'Kilmacud Crokes' });
+
+        const overflows = await page.evaluate(
+          () => document.documentElement.scrollWidth > window.innerWidth
+        );
+        expect(overflows).toBe(false);
+      });
+    });
   }
 });

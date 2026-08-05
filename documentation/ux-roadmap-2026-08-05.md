@@ -9,7 +9,20 @@ Effort labels: **S** ≈ under an hour, **M** ≈ half a day, **L** ≈ 1–2 da
 
 ---
 
-## Phase 0 — Launch blockers
+## Phase 0 — Launch blockers ✅ DONE (2026-08-05)
+
+All three landed. Measured after, at 390×844: header 120px → **50px** with no
+overlap, pitch 0px → **232px**, Save Event in view, no horizontal scroll. Six
+portrait-phone E2E tests added at 360×740 and 390×844.
+
+Two things came out of the work that were not in the original plan:
+
+- **1.1 (sticky Save bar) is also done.** The bar is now sticky in *every*
+  layout, not just ≥768px, because the phone form scrolls internally and
+  hunting for the save button mid-match is the wrong ask.
+- **The recent events strip was a contributing factor**, not just a polish
+  item — at a flat 202px it was 24% of a phone viewport. Now 116px expanded,
+  30px collapsed, and collapsed by default on phones.
 
 Nothing ships until these are done. All three are layout defects on the app's primary device.
 
@@ -29,7 +42,7 @@ Fast, high-value, low-risk. Mostly one-line or one-rule changes.
 
 | # | Item | Ref | Effort |
 |---|---|---|---|
-| 1.1 | **Sticky Save bar overlap.** Jersey numbers 1–5 sit behind the sticky action row on any ≤940 px-tall desktop. Add `padding-bottom` to the scroll container equal to the action row height. | [CaptureForm.svelte:959-965](src/lib/CaptureForm.svelte#L959-L965) | S |
+| 1.1 | ~~**Sticky Save bar overlap.**~~ **Done in Phase 0.** The action row is now sticky in all layouts. It still overlays scrolling content at rest, but it is the last child, so at full scroll nothing is hidden — the fields are reachable. | [CaptureForm.svelte](src/lib/CaptureForm.svelte) | — |
 | 1.2 | **Global focus-visible style.** One rule in `app.css` covering all interactive elements, plus removal of the `outline: none` declarations that substitute nothing. Currently `:focus-visible` exists in only 2 of 15 components. | `src/app.css`, 8 sites | S |
 | 1.3 | **TEAM vs OUTCOME disambiguation.** Two identically-styled `[Clontarf|Vincents]` controls 200 px apart meaning different things. Relabel the outcome row to carry a verb ("Won by Clontarf" / "Retained" / "Lost"). This is the one UX defect that silently corrupts data, so it ranks above cosmetics. | [CaptureForm.svelte](src/lib/CaptureForm.svelte) | M |
 | 1.4 | **Touch targets to 44 px.** `.jersey-btn` 68×32 → 44 min-height; `.seg-btn` 87×37 → 44. Note this makes the capture form taller, so land it *after* 0.1 or the two changes fight each other. | [CaptureForm.svelte](src/lib/CaptureForm.svelte) | S |
@@ -117,6 +130,22 @@ Larger conceptual changes; safe to run during beta.
 
 ## Interaction with demo access
 
-The demo account (see [demo-access.md](demo-access.md)) drops a visitor straight onto the capture screen. Until Phase 0 lands, that means **the demo opens on a screen where the pitch is invisible and the save button is unreachable** for anyone opening it on a phone — which is most people following a link.
+**Resolved.** Phase 0 landed on 2026-08-05, so the demo (see
+[demo-access.md](demo-access.md)) now opens on a working capture screen at
+phone widths. The link is safe to share once the demo account is seeded.
 
-Phase 0 is therefore a hard prerequisite for publicising the demo, not just for general release. The demo can be built and tested now; it should not be shared until 0.1 and 0.3 are done.
+## Note on the E2E suite
+
+19 tests were failing on `main` before this work, which is why the phone
+regression went unnoticed for so long. The cause is **stale test selectors, not
+broken app behaviour**:
+
+1. Navigation became two-level, so analytics sub-tabs only exist after opening
+   the In-game section. Older tests clicked them straight from Capture.
+2. The Live panel later gained deep-analysis shortcuts with the same labels as
+   the nav tabs, so unscoped `getByRole('button', { name: /^Kickouts/i })`
+   lookups now hit two elements and fail Playwright strict mode.
+
+`layout.spec.js` is fixed and fully green. The same two fixes almost certainly
+apply to the remaining failures in `capture-flow`, `import-export`,
+`match-summary` and `possession-analysis`.

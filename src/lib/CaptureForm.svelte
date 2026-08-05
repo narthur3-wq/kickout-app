@@ -803,11 +803,21 @@
     background: #fef2f2;
   }
 
+  /*
+   * Sticky in every layout. The form panel scrolls internally, so without this
+   * saving an event means scrolling to the bottom of the form first — which is
+   * the wrong thing to ask for during live capture. The gradient keeps the
+   * rows underneath from appearing to collide with the button.
+   */
   .action-row {
     display: flex;
     flex-direction: column;
     gap: 7px;
     margin-top: 18px;
+    position: sticky;
+    bottom: 0;
+    padding-top: 10px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, #fff 22%);
   }
 
   .save-cta {
@@ -957,11 +967,7 @@
     }
 
     .action-row {
-      position: sticky;
-      bottom: 0;
       margin-top: 14px;
-      padding-top: 10px;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, #fff 22%);
     }
 
     .save-cta {
