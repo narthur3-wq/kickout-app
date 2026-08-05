@@ -67,7 +67,7 @@ describe('Pitch', () => {
       showZoneLabels: true,
       overlays: [
         { id: 'target', x: 0.2, y: 0.3, outcome: 'Retained', marker_shape: 'circle', marker_fill: '#16a34a', marker_ring: 'target' },
-        { id: 'goal-attempt', x: 0.4, y: 0.6, outcome: 'Goal', marker_shape: 'square', marker_fill: '#15803d', marker_ring: 'goal-attempt' },
+        { id: 'goal-attempt', x: 0.4, y: 0.6, outcome: 'Goal', marker_shape: 'square', marker_fill: '#22c55e', marker_ring: 'goal-attempt' },
       ],
     });
 
@@ -77,7 +77,10 @@ describe('Pitch', () => {
     expect(screen.getAllByText('20').length).toBeGreaterThan(0);
     expect(container.querySelector('circle[stroke="rgba(255,255,255,0.98)"]')).not.toBeNull();
     expect(container.querySelector('circle[stroke-width="2"]')).not.toBeNull();
-    expect(container.querySelector('circle[stroke-width="0.9"]')).not.toBeNull();
+    // The goal-attempt ring must be dashed. Every marker already carries a
+    // solid light outline for turf contrast, so a solid ring here is
+    // indistinguishable from it and the encoding does not read.
+    expect(container.querySelector('circle[stroke-dasharray]')).not.toBeNull();
   });
 
   it('keeps the 40m and D markings anchored to each goal line', () => {

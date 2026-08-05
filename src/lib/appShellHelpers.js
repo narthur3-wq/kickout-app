@@ -30,12 +30,19 @@ export function analyticsMarkerFill(event) {
   const outcome = scoreOutcomeOf(event);
 
   if (type === 'shot') {
+    // These are drawn on dark green turf, so they have to be bright — the old
+    // set was dark green / teal / amber / orange, which meant the single most
+    // important distinction in the app (goal vs point) was two dark, adjacent
+    // hues at 12px, and wide vs blocked was amber vs orange.
+    //
+    // Now separated by a wide hue gap and kept light: scores read cool
+    // (green, sky), misses read warm (amber, rose), keeper saves neutral.
     switch (outcome) {
-      case 'goal': return '#15803d';
-      case 'point': return '#0f766e';
-      case 'wide': return '#f59e0b';
-      case 'blocked': return '#ea580c';
-      case 'saved': return '#64748b';
+      case 'goal': return '#22c55e';
+      case 'point': return '#38bdf8';
+      case 'wide': return '#fbbf24';
+      case 'blocked': return '#fb7185';
+      case 'saved': return '#cbd5e1';
       default: return '#94a3b8';
     }
   }

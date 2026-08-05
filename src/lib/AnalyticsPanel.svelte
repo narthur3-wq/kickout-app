@@ -117,14 +117,16 @@ import {
       case 'retained':
       case 'selected':
       case 'won':      return '#16a34a';
-      case 'goal':     return '#15803d';
-      case 'point':    return '#0f766e';
+      // Shot colours mirror analyticsMarkerFill() so the legend swatches and
+      // the outcome chips match the dots actually drawn on the pitch.
+      case 'goal':     return '#16a34a';
+      case 'point':    return '#0284c7';
       case 'opposing':
       case 'lost':     return '#dc2626';
       case 'wide':
       case 'out':
       case 'foul':     return '#d97706';
-      case 'blocked':  return '#ea580c';
+      case 'blocked':  return '#e11d48';
       case 'saved':    return '#64748b';
       default:         return '#6b7280';
     }
@@ -458,6 +460,7 @@ import {
           </div>
         {/if}
       </div>
+      <div class="pitch-viz-layout">
       <div class="pitch-viz-frame">
         <div class="pitch-viz-card">
           {#if vizMode === 'heat'}
@@ -530,6 +533,7 @@ import {
           <span class="legend-item">L / C / R = side band</span>
           <span class="legend-item">20 / 45 / 65 = metres from goal</span>
         </div>
+      </div>
       </div>
     </div>
 
@@ -1057,14 +1061,50 @@ import {
     display: flex;
     justify-content: center;
     margin-bottom: 12px;
+    min-width: 0;
   }
+  /*
+   * The pitch is width-limited by viewport HEIGHT, because it has to sit under
+   * the filters and KPI row and still be visible without scrolling. At 35svh
+   * that left 57% of the panel empty on any wide screen.
+   *
+   * Two changes: a taller cap, and (below) the legend moves beside the pitch
+   * on wide screens. Moving the legend out from underneath is what buys the
+   * vertical room for the taller cap, so the pitch still fits in view.
+   */
   .pitch-viz-card {
     border-radius: 10px;
     overflow: hidden;
     box-shadow: 0 4px 20px rgba(0,50,0,0.18), 0 1px 6px rgba(0,0,0,0.08);
     aspect-ratio: 145 / 90;
-    width: min(100%, calc(35svh * 145 / 90));
-    max-width: 1280px;
+    /*
+     * A flat `35svh` cap left 57% of the panel empty on wide screens. The real
+     * limit is what is left after the filters and KPI row above it — measured
+     * at roughly 30rem across tabs — so budget against that instead. It scales
+     * with viewport height rather than assuming a fixed fraction of it, and
+     * keeps the pitch and its numbers visible together without scrolling.
+     */
+    width: 100%;
+    max-width: min(1280px, max(300px, calc((100svh - 30rem) * 145 / 90)));
+  }
+  @media (min-width: 1100px) {
+    .pitch-viz-layout {
+      display: flex;
+      align-items: flex-start;
+      gap: 20px;
+    }
+    .pitch-viz-layout .pitch-viz-frame {
+      flex: 1 1 auto;
+      margin-bottom: 0;
+    }
+    /* Legend beside the pitch: uses the width that was empty, and costs no
+       vertical space, so the pitch can take the full height budget. */
+    .pitch-viz-layout .pitch-viz-legend {
+      flex: 0 0 210px;
+      margin: 0;
+      padding-top: 0;
+      border-top: none;
+    }
   }
   .pitch-viz-legend {
     display: flex;

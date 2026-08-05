@@ -198,13 +198,16 @@
   // Bright palette — legible on dark green turf
   function outcomeColor(o: string) {
     const s = String(o || '').toLowerCase();
-    if (s === 'score' || s === 'point')   return '#60a5fa'; // sky blue
+    // Kept in step with analyticsMarkerFill() in appShellHelpers.js — these are
+    // the fallback when an overlay carries no explicit marker_fill, so the two
+    // drifting apart would mean the same outcome rendering two colours.
+    if (s === 'score' || s === 'point')   return '#38bdf8'; // sky
     if (s === 'retained' || s === 'won')  return '#4ade80'; // bright green
-    if (s === 'goal')                     return '#c084fc'; // purple
+    if (s === 'goal')                     return '#22c55e'; // green
     if (s === 'lost')                     return '#f87171'; // red
     if (s === 'wide')                     return '#fbbf24'; // amber
-    if (s === 'blocked')                  return '#fb923c'; // orange
-    if (s === 'saved')                    return '#94a3b8'; // slate
+    if (s === 'blocked')                  return '#fb7185'; // rose
+    if (s === 'saved')                    return '#cbd5e1'; // light slate
     if (s === 'foul')                     return '#f472b6'; // pink
     return '#e2e8f0';
   }
@@ -661,14 +664,20 @@
               vector-effect="non-scaling-stroke"
             />
           {:else}
+            <!--
+              Dashed, and clear of the marker. Every marker already carries a
+              solid white outline for contrast against the turf, so a solid
+              white ring here just read as a slightly thicker outline — the
+              "ring = goal attempt" encoding was invisible on every dot.
+            -->
             <circle
               cx={sx}
               cy={sy}
-              r={SZ * 1.55}
+              r={SZ * 1.75}
               fill="none"
               stroke={ringColor}
-              stroke-width={ring === 'goal-attempt' ? 0.9 : 0.7}
-              stroke-dasharray={ring === 'goal-attempt' ? null : null}
+              stroke-width={ring === 'goal-attempt' ? 1.4 : 0.7}
+              stroke-dasharray={ring === 'goal-attempt' ? '3 2.4' : null}
               vector-effect="non-scaling-stroke"
             />
           {/if}

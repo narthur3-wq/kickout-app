@@ -69,7 +69,7 @@ describe('appShellHelpers', () => {
 
     expect(analyticsMarkerFill({ event_type: 'kickout', outcome: 'Retained' })).toBe('#16a34a');
     expect(analyticsMarkerFill({ event_type: 'turnover', outcome: 'Lost' })).toBe('#dc2626');
-    expect(analyticsMarkerFill({ event_type: 'shot', outcome: 'Saved' })).toBe('#64748b');
+    expect(analyticsMarkerFill({ event_type: 'shot', outcome: 'Saved' })).toBe('#cbd5e1');
 
     expect(analyticsMarkerRing({ event_type: 'kickout', target_player: '8' })).toBe('target');
     expect(analyticsMarkerRing({ event_type: 'shot', shot_type: 'goal' })).toBe('goal-attempt');
