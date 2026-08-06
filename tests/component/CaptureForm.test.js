@@ -66,7 +66,7 @@ describe('CaptureForm', () => {
   it('labels team ownership clearly without implying pitch direction', () => {
     renderForm();
 
-    expect(screen.getByText('Team')).toBeInTheDocument();
+    expect(screen.getByText('Kickout by')).toBeInTheDocument();
     // Scoped to the team row: for a kickout the outcome options are the same
     // two team names, so an unscoped lookup is ambiguous. That ambiguity is a
     // real UX issue in its own right — roadmap item 1.3.
@@ -109,5 +109,79 @@ describe('CaptureForm', () => {
     expect(screen.getByLabelText(/Lost by \(Vincents\)/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Won by \(Clontarf\)/i)).toBeInTheDocument();
     expect(screen.queryByText(/Target player/i)).not.toBeInTheDocument();
+  });
+
+  describe('kickout team and outcome rows', () => {
+    function outcomeButtons() {
+      return [...document.querySelectorAll('.outcome-grid button')].map((b) => ({
+        label: b.textContent.trim().replace(/\s*On$/, ''),
+        retained: b.className.includes('outcome-retained'),
+      }));
+    }
+
+    it('names the question each row is asking', () => {
+      renderForm();
+
+      // "Team" and "Outcome" sat above two identical rows of the same two club
+      // names, which is how the wrong row got set under time pressure.
+      expect(screen.getByText('Kickout by')).toBeInTheDocument();
+      expect(screen.getByText('Won by')).toBeInTheDocument();
+    });
+
+    it('keeps the outcome options in the same order whoever kicked', async () => {
+      const user = userEvent.setup();
+      renderForm();
+
+      expect(outcomeButtons().map((b) => b.label)).toEqual(['Clontarf', 'Vincents']);
+
+      // Switch to the opposition's kickout. The options used to swap places,
+      // so the leftmost button changed meaning and an analyst working by
+      // position recorded the result backwards.
+      const teamRow = document.querySelector('.dir-row');
+      await user.click(within(teamRow).getByRole('button', { name: 'Vincents' }));
+
+      expect(outcomeButtons().map((b) => b.label)).toEqual(['Clontarf', 'Vincents']);
+    });
+
+    it('colours the kicking team as the retention, whoever kicked', async () => {
+      const user = userEvent.setup();
+      renderForm();
+
+      // Our kickout: we are the retention.
+      expect(outcomeButtons()).toEqual([
+        { label: 'Clontarf', retained: true },
+        { label: 'Vincents', retained: false },
+      ]);
+
+      const teamRow = document.querySelector('.dir-row');
+      await user.click(within(teamRow).getByRole('button', { name: 'Vincents' }));
+
+      // Their kickout: they are the retention now. This inverted silently once
+      // the option order stopped changing, because the class came from a plain
+      // function call the each-block could not see as a dependency.
+      expect(outcomeButtons()).toEqual([
+        { label: 'Clontarf', retained: false },
+        { label: 'Vincents', retained: true },
+      ]);
+    });
+
+    it('marks the kicking team winning it as the retention', async () => {
+      const user = userEvent.setup();
+      renderForm();
+
+      const teamRow = document.querySelector('.dir-row');
+      await user.click(within(teamRow).getByRole('button', { name: 'Vincents' }));
+
+      const outcomeGrid = () => document.querySelector('.outcome-grid');
+      await user.click(within(outcomeGrid()).getByRole('button', { name: 'Vincents' }));
+      let active = outcomeGrid().querySelector('.active');
+      expect(active.textContent).toContain('Vincents');
+      expect(active.className).toContain('outcome-retained');
+
+      await user.click(within(outcomeGrid()).getByRole('button', { name: 'Clontarf' }));
+      active = outcomeGrid().querySelector('.active');
+      expect(active.textContent).toContain('Clontarf');
+      expect(active.className).toContain('outcome-lost');
+    });
   });
 });

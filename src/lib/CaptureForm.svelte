@@ -52,14 +52,37 @@
   const EVENT_TYPES = ['kickout', 'turnover', 'shot'];
   const JERSEY_NUMS = Array.from({ length: 15 }, (_, index) => index + 1);
 
-  $: selectedTeamName = direction === 'ours' ? (team || 'Ours') : (opponent || 'Theirs');
-  $: opposingTeamName = direction === 'ours' ? (opponent || 'Theirs') : (team || 'Ours');
+  $: ourTeamName = team || 'Ours';
+  $: oppositionName = opponent || 'Theirs';
+  // Whose kickout it was, and who the other side is — used to translate a
+  // chosen team name back into Retained/Lost.
+  $: kickingTeamName = direction === 'ours' ? ourTeamName : oppositionName;
+  $: nonKickingTeamName = direction === 'ours' ? oppositionName : ourTeamName;
+
+  /*
+   * Kickout outcome options are always listed in the same order — our club,
+   * then the opposition — regardless of whose kickout it is.
+   *
+   * They used to be listed as [kicking team, other team], which meant the
+   * buttons swapped places whenever the Team row changed. The leftmost button
+   * read "Clontarf" on our restarts and "Na Fianna" on theirs, so an analyst
+   * working by position rather than by label recorded the result backwards the
+   * moment play switched ends. A wrong answer here is not obviously wrong
+   * afterwards: it inverts the retention figure for both teams.
+   */
   $: activeOutcomes = eventType === 'kickout'
-    ? [selectedTeamName, opposingTeamName]
+    ? [ourTeamName, oppositionName]
     : (OUTCOME_MAP[`${eventType}-${direction}`] || ['Retained']);
   $: selectedOutcomeOption = eventType === 'kickout'
-    ? (outcome === 'Retained' ? selectedTeamName : opposingTeamName)
+    ? (outcome === 'Retained' ? kickingTeamName : nonKickingTeamName)
     : outcome;
+
+  // "Team" and "Outcome" sat above two identical-looking rows of the same two
+  // club names. Naming the actual question keeps them apart.
+  $: teamFieldLabel =
+    eventType === 'kickout' ? 'Kickout by'
+    : eventType === 'shot' ? 'Shot by'
+    : 'Turnover by';
 
   $: if (eventType === 'kickout') {
     if (outcome !== 'Retained' && outcome !== 'Lost') {
@@ -77,16 +100,21 @@
     targetPlayer = targetPlayer === String(num) ? '' : String(num);
   }
 
-  function outcomeClass(value) {
-    if (eventType === 'kickout') {
-      return value === selectedTeamName ? 'outcome-retained' : 'outcome-lost';
-    }
-    return `outcome-${String(value || '').toLowerCase().replace(/\s+/g, '-')}`;
-  }
+
+  // Derived rather than computed in the template: these depend on
+  // `kickingTeamName`, and a plain function call inside the each-block is not a
+  // dependency Svelte can see.
+  $: outcomeOptions = activeOutcomes.map((option) => ({
+    option,
+    className: eventType === 'kickout'
+      ? (option === kickingTeamName ? 'outcome-retained' : 'outcome-lost')
+      : `outcome-${String(option || '').toLowerCase().replace(/\s+/g, '-')}`,
+    selected: selectedOutcomeOption === option,
+  }));
 
   function chooseOutcome(option) {
     if (eventType === 'kickout') {
-      outcome = option === selectedTeamName ? 'Retained' : 'Lost';
+      outcome = option === kickingTeamName ? 'Retained' : 'Lost';
       return;
     }
     outcome = option;
@@ -128,7 +156,7 @@
     {/each}
   </div>
 
-  <div class="field-label">Team</div>
+  <div class="field-label">{teamFieldLabel}</div>
   <div class="dir-row">
     <button
       type="button"
@@ -175,17 +203,17 @@
     {/if}
   {/if}
 
-  <div class="field-label">Outcome</div>
+  <div class="field-label">{eventType === 'kickout' ? 'Won by' : 'Outcome'}</div>
   <div class="btn-group outcome-grid {eventType === 'kickout' ? 'kickout-grid' : ''}">
-    {#each activeOutcomes as option (option)}
+    {#each outcomeOptions as { option, className, selected } (option)}
       <button
         type="button"
-        class="seg-btn {outcomeClass(option)}"
-        class:active={selectedOutcomeOption === option}
+        class="seg-btn {className}"
+        class:active={selected}
         on:click={() => chooseOutcome(option)}
       >
         {option}
-        {#if selectedOutcomeOption === option}
+        {#if selected}
           <span class="seg-selected-indicator" aria-hidden="true">On</span>
         {/if}
       </button>
