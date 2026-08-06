@@ -96,21 +96,21 @@ test('top navigation can reach Kickouts from the main tabs', async ({ page }) =>
   const tabBar = page.locator('nav.tab-bar');
 
   // From Capture, which is a different section, Kickouts is one level down.
-  await tabBar.getByRole('button', { name: /^Capture$/i }).click();
+  await tabBar.getByRole('tab', { name: /^Capture$/i }).click();
   await openInGame(page, /^Kickouts/i);
-  await expect(tabBar.getByRole('button', { name: /^Kickouts/i })).toHaveClass(/active/);
+  await expect(tabBar.getByRole('tab', { name: /^Kickouts/i })).toHaveClass(/active/);
 
   // From the other In-game sub-tabs it is a sibling, so directly reachable.
   for (const tab of [/^Live/i, /^Digest/i, /^Events/i]) {
-    await tabBar.getByRole('button', { name: tab }).first().click();
-    await tabBar.getByRole('button', { name: /^Kickouts/i }).click();
-    await expect(tabBar.getByRole('button', { name: /^Kickouts/i })).toHaveClass(/active/);
+    await tabBar.getByRole('tab', { name: tab }).first().click();
+    await tabBar.getByRole('tab', { name: /^Kickouts/i }).click();
+    await expect(tabBar.getByRole('tab', { name: /^Kickouts/i })).toHaveClass(/active/);
   }
 
-  await tabBar.getByRole('button', { name: /^Shots/i }).click();
-  await tabBar.getByRole('button', { name: /^Turnovers/i }).click();
-  await tabBar.getByRole('button', { name: /^Kickouts/i }).click();
-  await expect(tabBar.getByRole('button', { name: /^Kickouts/i })).toHaveClass(/active/);
+  await tabBar.getByRole('tab', { name: /^Shots/i }).click();
+  await tabBar.getByRole('tab', { name: /^Turnovers/i }).click();
+  await tabBar.getByRole('tab', { name: /^Kickouts/i }).click();
+  await expect(tabBar.getByRole('tab', { name: /^Kickouts/i })).toHaveClass(/active/);
 });
 
 test.describe('touch navigation', () => {
@@ -122,9 +122,9 @@ test.describe('touch navigation', () => {
 
     // Two taps, not one: Kickouts lives under the In-game section.
     const tabBar = page.locator('nav.tab-bar');
-    await tabBar.getByRole('button', { name: /^In-game$/i }).tap();
+    await tabBar.getByRole('tab', { name: /^In-game$/i }).tap();
 
-    const kickoutsTab = tabBar.getByRole('button', { name: /^Kickouts/i });
+    const kickoutsTab = tabBar.getByRole('tab', { name: /^Kickouts/i });
     await kickoutsTab.tap();
 
     await expect(kickoutsTab).toHaveClass(/active/);

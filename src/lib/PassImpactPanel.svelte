@@ -652,7 +652,7 @@
 <section class="analysis-shell">
   <div class="heading">
     <div>
-      <div class="eyebrow">Post-match</div>
+      <h2 class="eyebrow">Post-match</h2>
       <h2>Pass Destination</h2>
       <p>Where do this player's passes travel to, and do they progress play?</p>
     </div>
@@ -945,7 +945,8 @@
 <style>
   .analysis-shell { display: flex; flex-direction: column; gap: 14px; }
   .heading { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
-  .eyebrow { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #1c3f8a; }
+  .eyebrow {
+    margin: 0; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #1c3f8a; }
   h2 { margin: 4px 0 0; font-size: 24px; font-weight: 900; letter-spacing: -0.04em; }
   .heading p { margin: 6px 0 0; color: #6b7280; font-size: 13px; line-height: 1.5; max-width: 62ch; }
   .match-meta { text-align: right; font-size: 12px; color: #6b7280; line-height: 1.5; }

@@ -34,8 +34,8 @@ test('tactical board controls stay usable after the visual refactor', async ({ p
   await openFreshApp(page);
   await setUpMatch(page, { opponent: 'Visual Rovers' });
 
-  await page.getByRole('button', { name: /^Tools$/i }).click();
-  await page.locator('nav.tab-bar').getByRole('button', { name: /^Board$/i }).click();
+  await page.getByRole('tab', { name: /^Tools$/i }).click();
+  await page.locator('nav.tab-bar').getByRole('tab', { name: /^Board$/i }).click();
 
   const board = page.getByRole('application', { name: /Tactical board/i });
   await expect(board).toBeVisible();

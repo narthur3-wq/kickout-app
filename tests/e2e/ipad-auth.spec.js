@@ -34,7 +34,7 @@ test.describe('iPad auth smoke', () => {
     await page.getByLabel('Password').fill(smokePassword);
     await page.getByRole('button', { name: /^Sign in$/i }).click();
 
-    await expect(page.getByRole('button', { name: /^Capture$/i })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('tab', { name: /^Capture$/i })).toBeVisible({ timeout: 20_000 });
     await expect(page.locator('button.match-ctx-bar')).toBeVisible();
   });
 });

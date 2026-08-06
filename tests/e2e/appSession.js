@@ -5,7 +5,7 @@ const smokePassword = process.env.PAIRC_SMOKE_PASSWORD?.trim();
 
 export async function signInIfNeeded(page) {
   const signInButton = page.getByRole('button', { name: /^Sign in$/i });
-  const captureButton = page.getByRole('button', { name: /^Capture$/i });
+  const captureButton = page.getByRole('tab', { name: /^Capture$/i });
   const loginState = await Promise.race([
     captureButton.waitFor({ state: 'visible' }).then(() => 'capture'),
     page.getByPlaceholder('Email').waitFor({ state: 'visible' }).then(() => 'login'),
@@ -64,9 +64,9 @@ export async function setUpMatch(page, { team = 'Clontarf', opponent = 'Crokes',
  */
 export async function openSubTab(page, section, tab) {
   const tabBar = page.locator('nav.tab-bar');
-  await tabBar.getByRole('button', { name: new RegExp(`^${section}$`, 'i') }).click();
+  await tabBar.getByRole('tab', { name: new RegExp(`^${section}$`, 'i') }).click();
   if (tab) {
-    await tabBar.getByRole('button', { name: tab }).first().click();
+    await tabBar.getByRole('tab', { name: tab }).first().click();
   }
   return tabBar;
 }

@@ -130,7 +130,7 @@
   {:else}
     <section class="digest-header">
       <div>
-        <div class="eyebrow">Coach Digest</div>
+        <h2 class="eyebrow">Coach Digest</h2>
         <h2>{teamName || 'Us'} vs {opponentName || 'Them'}</h2>
         <p>{phaseLabel} summary built for a 3-minute team talk.</p>
       </div>
@@ -191,7 +191,7 @@
 
     <div class="digest-grid">
       <section class="card">
-        <div class="eyebrow">Flow Read</div>
+        <h2 class="eyebrow">Flow Read</h2>
         {#if insights.flow.coachLines.length === 0}
           <p class="copy">Not enough data yet to describe the flow with confidence.</p>
         {:else}
@@ -202,7 +202,7 @@
       </section>
 
       <section class="card">
-        <div class="eyebrow">Main Threat</div>
+        <h2 class="eyebrow">Main Threat</h2>
         <p class="copy strong">{insights.threat.line}</p>
         {#if insights.threat.mainThreat}
           <p class="detail"><strong>{insights.threat.mainThreat.label}</strong>: {insights.threat.mainThreat.points} pts from {insights.threat.mainThreat.chances} chances.</p>
@@ -217,7 +217,7 @@
 
       {#if insights.scoreMomentum.line || insights.kickoutMomentum.line}
         <section class="card momentum-card">
-          <div class="eyebrow">Momentum</div>
+          <h2 class="eyebrow">Momentum</h2>
           {#if insights.scoreMomentum.line}
             <p class="copy momentum-line momentum-{insights.scoreMomentum.tone}">
               <span class="momentum-icon">{insights.scoreMomentum.tone === 'positive' ? '▲' : insights.scoreMomentum.tone === 'negative' ? '▼' : '—'}</span>
@@ -234,7 +234,7 @@
       {/if}
 
       <section class="card">
-        <div class="eyebrow">Best Opportunity</div>
+        <h2 class="eyebrow">Best Opportunity</h2>
         <p class="copy strong">{insights.opportunity.line}</p>
         {#if insights.opportunity.bestSide}
           <p class="detail">{insights.opportunity.bestSide.label} is giving us {insights.opportunity.bestSide.points} points from {insights.opportunity.bestSide.chances} chances.</p>
@@ -245,7 +245,7 @@
       </section>
 
       <section class="card actions-card">
-        <div class="eyebrow">Top 3 Actions</div>
+        <h2 class="eyebrow">Top 3 Actions</h2>
         {#if insights.recommendations.length === 0}
           <p class="copy">No strong tactical change yet. Keep monitoring the half.</p>
         {:else}
@@ -261,7 +261,7 @@
       </section>
 
       <section class="card keep-card">
-        <div class="eyebrow">Keep Doing</div>
+        <h2 class="eyebrow">Keep Doing</h2>
         <p class="copy strong">{insights.keepDoing || 'No strong positive reinforcement signal yet - keep decisions simple.'}</p>
       </section>
     </div>
@@ -317,6 +317,7 @@
     color: #64748b;
   }
   .eyebrow {
+    margin: 0;
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.08em;

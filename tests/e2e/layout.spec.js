@@ -66,13 +66,13 @@ test('analytics pitch stays fully in view in landscape on Kickouts, Shots, and T
   // In-game section is open. This test predates that and clicked them
   // straight from Capture, where they do not exist.
   const tabBar = page.locator('nav.tab-bar');
-  await tabBar.getByRole('button', { name: /^In-game$/i }).click();
+  await tabBar.getByRole('tab', { name: /^In-game$/i }).click();
 
   const tabs = [/^Kickouts/i, /^Shots/i, /^Turnovers/i];
   for (const tab of tabs) {
     // Scoped to the tab bar: the Live panel also has deep-analysis shortcuts
     // with these same labels, so an unscoped lookup is ambiguous.
-    await tabBar.getByRole('button', { name: tab }).click();
+    await tabBar.getByRole('tab', { name: tab }).click();
     const pitch = page.locator('.pitch-viz-card');
     await expect(pitch).toBeVisible();
     const box = await pitch.boundingBox();

@@ -269,7 +269,7 @@ import {
 
   <!-- Panel header -->
   <div class="panel-header">
-    <div class="panel-title">{panelTitle}</div>
+    <h2 class="panel-title">{panelTitle}</h2>
     <span class="panel-count">{vizEvents.length} events</span>
     {#if isKickoutView}
       <button class="summary-btn" on:click={() => dispatch('showSummary')}>Summary</button>
@@ -911,7 +911,7 @@ import {
   .panel-header {
     display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;
   }
-  .panel-title { font-size: 16px; font-weight: 800; color: #111827; letter-spacing: -0.02em; }
+  .panel-title { margin: 0; font-size: 16px; font-weight: 800; color: #111827; letter-spacing: -0.02em; }
   .panel-count { font-size: 12px; font-weight: 500; color: #9ca3af; margin-right: auto; }
   .summary-btn {
     padding: 5px 12px; border: 1.5px solid #e5e7eb; border-radius: 7px;

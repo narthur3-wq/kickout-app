@@ -28,7 +28,7 @@ test('simulates a match and exports the coach digest as a PNG', async ({ page })
   await expect(page.getByText('Top kickout target')).toBeVisible();
   await expect(page.getByText(/#8 is their main kickout target so far/i)).toBeVisible();
 
-  await page.getByRole('button', { name: 'Digest' }).click();
+  await page.getByRole('tab', { name: 'Digest' }).click();
   await expect(page.getByText('Coach Digest')).toBeVisible();
   await expect(page.getByText('Top 3 Actions')).toBeVisible();
   await expect(page.getByText('Press #8 on their kickouts')).toBeVisible();
@@ -65,13 +65,13 @@ test('live deep-analysis shortcuts open the matching detailed tabs', async ({ pa
   const deepAnalysis = page.locator('.card').filter({ hasText: 'Deep Analysis' });
 
   await deepAnalysis.getByRole('button', { name: 'Kickouts', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Kickouts', exact: true }).first()).toHaveClass(/active/);
+  await expect(page.getByRole('tab', { name: 'Kickouts', exact: true }).first()).toHaveClass(/active/);
 
   await openInGame(page, /^Live$/i);
   await deepAnalysis.getByRole('button', { name: 'Shots', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Shots', exact: true }).first()).toHaveClass(/active/);
+  await expect(page.getByRole('tab', { name: 'Shots', exact: true }).first()).toHaveClass(/active/);
 
   await openInGame(page, /^Live$/i);
   await deepAnalysis.getByRole('button', { name: 'Turnovers', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Turnovers', exact: true }).first()).toHaveClass(/active/);
+  await expect(page.getByRole('tab', { name: 'Turnovers', exact: true }).first()).toHaveClass(/active/);
 });

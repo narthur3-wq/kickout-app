@@ -1993,6 +1993,31 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     }
   }
 
+  /*
+   * Arrow-key movement within a tablist.
+   *
+   * Announcing these as tabs promises this behaviour — a screen-reader user
+   * hearing "tab, 2 of 3" will reach for the arrow keys. Without it the role
+   * is a lie, which is worse than leaving them as plain buttons.
+   */
+  function handleTablistKeydown(event) {
+    const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+    if (!keys.includes(event.key)) return;
+    const list = event.currentTarget;
+    const tabs = [...list.querySelectorAll('[role="tab"]')].filter((t) => !t.disabled);
+    if (tabs.length < 2) return;
+    const current = tabs.indexOf(document.activeElement);
+    if (current < 0) return;
+    event.preventDefault();
+    const next =
+      event.key === 'Home' ? 0
+      : event.key === 'End' ? tabs.length - 1
+      : event.key === 'ArrowLeft' ? (current - 1 + tabs.length) % tabs.length
+      : (current + 1) % tabs.length;
+    tabs[next].focus();
+    tabs[next].click();
+  }
+
   function onLanding(e) {
     landing = e.detail;
     if (quickCaptureArmed) quickSave();
@@ -3194,31 +3219,31 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
 
   <!-- Tab bar -->
   <nav class="tab-bar">
-    <div class="tab-sections">
-      <button type="button" class="section-btn {activeSection === 'capture' ? 'active' : ''}" on:click={() => switchTab('capture')}>
+    <div class="tab-sections" role="tablist" aria-label="Sections" on:keydown={handleTablistKeydown}>
+      <button type="button" role="tab" aria-selected={activeSection === 'capture'} class="section-btn {activeSection === 'capture' ? 'active' : ''}" on:click={() => switchTab('capture')}>
         Capture{#if editingId}&nbsp;<span class="edit-dot">●</span>{/if}
       </button>
-      <button type="button" class="section-btn {activeSection === 'ingame' ? 'active' : ''}" on:click={() => switchTab(lastIngameTab)}>
+      <button type="button" role="tab" aria-selected={activeSection === 'ingame'} class="section-btn {activeSection === 'ingame' ? 'active' : ''}" on:click={() => switchTab(lastIngameTab)}>
         In-game
       </button>
-      <button type="button" class="section-btn {activeSection === 'tools' ? 'active' : ''}" on:click={() => switchTab(lastToolsTab)}>
+      <button type="button" role="tab" aria-selected={activeSection === 'tools'} class="section-btn {activeSection === 'tools' ? 'active' : ''}" on:click={() => switchTab(lastToolsTab)}>
         Tools
       </button>
     </div>
     {#if activeSection === 'ingame'}
-    <div class="tab-sub-bar">
-      <button type="button" class="tab-btn {activeTab === 'live' ? 'active' : ''}" on:click={() => switchTab('live')}>Live</button>
-      <button type="button" class="tab-btn {activeTab === 'digest' ? 'active' : ''}" on:click={() => switchTab('digest')}>Digest</button>
-      <button type="button" class="tab-btn {activeTab === 'kickouts' ? 'active' : ''}" on:click={() => switchTab('kickouts')}>Kickouts</button>
-      <button type="button" class="tab-btn {activeTab === 'shots' ? 'active' : ''}" on:click={() => switchTab('shots')}>Shots</button>
-      <button type="button" class="tab-btn {activeTab === 'turnovers' ? 'active' : ''}" on:click={() => switchTab('turnovers')}>Turnovers</button>
-      <button type="button" class="tab-btn {activeTab === 'events' ? 'active' : ''}" on:click={() => switchTab('events')}>Events <span class="tab-count">{events.length}</span></button>
+    <div class="tab-sub-bar" role="tablist" aria-label="In-game views" on:keydown={handleTablistKeydown}>
+      <button type="button" role="tab" aria-selected={activeTab === 'live'} class="tab-btn {activeTab === 'live' ? 'active' : ''}" on:click={() => switchTab('live')}>Live</button>
+      <button type="button" role="tab" aria-selected={activeTab === 'digest'} class="tab-btn {activeTab === 'digest' ? 'active' : ''}" on:click={() => switchTab('digest')}>Digest</button>
+      <button type="button" role="tab" aria-selected={activeTab === 'kickouts'} class="tab-btn {activeTab === 'kickouts' ? 'active' : ''}" on:click={() => switchTab('kickouts')}>Kickouts</button>
+      <button type="button" role="tab" aria-selected={activeTab === 'shots'} class="tab-btn {activeTab === 'shots' ? 'active' : ''}" on:click={() => switchTab('shots')}>Shots</button>
+      <button type="button" role="tab" aria-selected={activeTab === 'turnovers'} class="tab-btn {activeTab === 'turnovers' ? 'active' : ''}" on:click={() => switchTab('turnovers')}>Turnovers</button>
+      <button type="button" role="tab" aria-selected={activeTab === 'events'} class="tab-btn {activeTab === 'events' ? 'active' : ''}" on:click={() => switchTab('events')}>Events <span class="tab-count">{events.length}</span></button>
     </div>
     {:else if activeSection === 'tools'}
-    <div class="tab-sub-bar">
-      <button type="button" class="tab-btn {activeTab === 'analysis-possession' ? 'active' : ''}" on:click={() => switchTab('analysis-possession')}>Possession</button>
-      <button type="button" class="tab-btn {activeTab === 'analysis-pass' ? 'active' : ''}" on:click={() => switchTab('analysis-pass')}>Pass Destination</button>
-      <button type="button" class="tab-btn {showTacticalBoard ? 'active' : ''}" on:click={openTacticalBoard}>Board</button>
+    <div class="tab-sub-bar" role="tablist" aria-label="Tools" on:keydown={handleTablistKeydown}>
+      <button type="button" role="tab" aria-selected={activeTab === 'analysis-possession'} class="tab-btn {activeTab === 'analysis-possession' ? 'active' : ''}" on:click={() => switchTab('analysis-possession')}>Possession</button>
+      <button type="button" role="tab" aria-selected={activeTab === 'analysis-pass'} class="tab-btn {activeTab === 'analysis-pass' ? 'active' : ''}" on:click={() => switchTab('analysis-pass')}>Pass Destination</button>
+      <button type="button" role="tab" aria-selected={showTacticalBoard} class="tab-btn {showTacticalBoard ? 'active' : ''}" on:click={openTacticalBoard}>Board</button>
     </div>
     {/if}
   </nav>
@@ -3247,6 +3272,9 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   {/if}
 
   <!-- ══ CAPTURE TAB ══ -->
+  <!-- The app had header and nav landmarks but no main, so assistive tech had
+       no way to skip to the actual content. -->
+  <main class="app-main" id="app-main">
   {#if activeTab === 'capture'}
   <button class="match-ctx-bar" on:click={() => openMatchPicker({ startInCreateMode: matches.length === 0 })}>
     {#if team || opponent}
@@ -3696,6 +3724,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   </div>
   {/if}
   {/if}
+  </main>
 
   <!-- Admin settings overlay -->
   {#if showAdmin && isAdminUser}
@@ -3814,6 +3843,9 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
 
   /* ── App shell ── */
   .app-shell { display: flex; flex-direction: column; height: 100svh; overflow: hidden; }
+  /* Has to participate in the shell's flex column, or the panels inside it
+     lose their height basis and the pitch collapses. */
+  .app-main { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
   /* ── Header — dark ── */
   .header {

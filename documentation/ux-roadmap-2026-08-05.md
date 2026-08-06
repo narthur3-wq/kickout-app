@@ -103,11 +103,11 @@ Cheap once Phase 2 is in, because the contrast fixes become token edits.
 | # | Item | Detail | Effort |
 |---|---|---|---|
 | 3.1 | ~~**Contrast to AA.**~~ **Mostly done.** All light-background failures fixed (nav, selected capture option, recent-events data, "Other #", inactive segmented labels). **Done 2026-08-06** — the dark header's `Phase:` label and inactive period pills went from `rgba(255,255,255,0.38)` (~3.4:1) to `0.62`. No known text contrast failures remain. | | S |
-| 3.2 | **Document structure.** Add `<main>`, and promote panel titles ("Live Match State", "Kickouts", "Possession Analysis") from `div` to `h2`/`h3`. Currently the app exposes exactly one heading and no main landmark. | | M |
-| 3.3 | **Tab semantics.** `role="tablist"` / `role="tab"` / `aria-selected` / arrow-key navigation on all three nav levels. Currently zero tab roles. | | M |
+| 3.2 | ~~**Document structure.**~~ **Done 2026-08-06.** `<main>` landmark added, and section labels promoted from `div` to `h2` across Live, Digest, Possession, Pass and the analytics panels. Original text: **Document structure.** Add `<main>`, and promote panel titles ("Live Match State", "Kickouts", "Possession Analysis") from `div` to `h2`/`h3`. Currently the app exposes exactly one heading and no main landmark. | | M |
+| 3.3 | ~~**Tab semantics.**~~ **Done 2026-08-06.** `role=tablist/tab`, `aria-selected`, and arrow/Home/End movement on all three nav levels. Done in full deliberately: announcing a control as a tab without arrow-key movement promises behaviour that is not there, which is worse than a plain button. Cost ~30 test locators, since the accessible role genuinely changed from button to tab. Original text: **Tab semantics.** `role="tablist"` / `role="tab"` / `aria-selected` / arrow-key navigation on all three nav levels. Currently zero tab roles. | | M |
 | 3.4 | **Label the 2 unlabelled inputs.** | | S |
 | 3.5 | ~~**`prefers-reduced-motion` block**~~ **Done 2026-08-06** in `app.css`. Original text: **`prefers-reduced-motion` block** — the app runs an infinite `timerPulse` and a `pitchFlash` error animation with no opt-out. | | S |
-| 3.6 | **Extend `accessibility.spec.js`** to assert landmarks, heading order, tab roles and focus visibility, so 3.1–3.5 cannot regress. | | M |
+| 3.6 | ~~**Extend `accessibility.spec.js`**~~ **Done 2026-08-06.** Three new cases: main landmark plus heading outline, tab selected-state and arrow-key movement, and an assertion that the global focus rule exists with zero `outline: none` suppressions anywhere. Original text: **Extend `accessibility.spec.js`** to assert landmarks, heading order, tab roles and focus visibility, so 3.1–3.5 cannot regress. | | M |
 
 ---
 

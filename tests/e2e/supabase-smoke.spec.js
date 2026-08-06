@@ -28,7 +28,7 @@ test.describe('Supabase smoke', () => {
     await page.getByPlaceholder('Password').fill(smokePassword);
     await page.getByRole('button', { name: /Sign in/i }).click();
 
-    await expect(page.getByRole('button', { name: /Capture/i })).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole('tab', { name: /Capture/i })).toBeVisible({ timeout: 30000 });
     await page.waitForLoadState('networkidle');
 
     await setUpMatch(page, { team, opponent, date: matchDate });
@@ -36,13 +36,13 @@ test.describe('Supabase smoke', () => {
     await page.locator('svg[aria-label*="GAA pitch"]').click({ position: { x: 220, y: 120 } });
     await page.getByRole('button', { name: /Save Event/i }).click();
 
-    await page.getByRole('button', { name: /^Events/i }).click();
+    await page.getByRole('tab', { name: /^Events/i }).click();
     await expect(page.getByRole('cell', { name: opponent })).toBeVisible();
     await expect(page.locator('.outcome-badge').first()).toBeVisible();
 
     await page.reload();
-    await expect(page.getByRole('button', { name: /Capture/i })).toBeVisible({ timeout: 30000 });
-    await page.getByRole('button', { name: /^Events/i }).click();
+    await expect(page.getByRole('tab', { name: /Capture/i })).toBeVisible({ timeout: 30000 });
+    await page.getByRole('tab', { name: /^Events/i }).click();
     await expect(page.getByRole('cell', { name: opponent })).toBeVisible();
   });
 });

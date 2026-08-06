@@ -185,14 +185,14 @@ async function findSubNavButton(name) {
 }
 
 async function openInGameTab(user, name) {
-  await user.click(await screen.findByRole('button', { name: 'In-game' }));
+  await user.click(await screen.findByRole('tab', { name: 'In-game' }));
   const tab = await findSubNavButton(name);
   await user.click(tab);
   return tab;
 }
 
 async function openToolsTab(user, name) {
-  await user.click(await screen.findByRole('button', { name: 'Tools' }));
+  await user.click(await screen.findByRole('tab', { name: 'Tools' }));
   const tab = await findSubNavButton(name);
   await user.click(tab);
   return tab;
@@ -429,7 +429,7 @@ describe('App shell auth and sync', () => {
 
     await renderApp();
 
-    await screen.findByRole('button', { name: 'Capture' });
+    await screen.findByRole('tab', { name: 'Capture' });
     expect(screen.queryByText(/visible to other demo visitors/i)).not.toBeInTheDocument();
   });
 
@@ -530,8 +530,8 @@ describe('App shell auth and sync', () => {
     const user = userEvent.setup();
     await openToolsTab(user, 'Possession');
 
-    expect(screen.getByRole('button', { name: 'Possession' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Pass Destination' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Possession' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Pass Destination' })).toBeInTheDocument();
   });
 
   it('keeps the tactical board visible and usable without an active match', async () => {
@@ -1947,8 +1947,9 @@ describe('App shell auth and sync', () => {
 
       await renderApp();
 
-      const tabs = await screen.findAllByRole('tab');
-      expect(tabs.map((t) => t.textContent.trim())).toEqual([
+      await waitFor(() => expect(document.querySelector('.re-views')).toBeTruthy());
+      const strip = document.querySelector('.re-views');
+      expect([...strip.querySelectorAll('[role="tab"]')].map((t) => t.textContent.trim())).toEqual([
         'Recent', 'Crokes scorers', 'Crokes kickouts',
       ]);
     });

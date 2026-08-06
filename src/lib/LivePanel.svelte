@@ -66,7 +66,7 @@
 <section class="live-shell">
   <div class="live-grid">
     <section class="hero-card">
-      <div class="eyebrow">Live Match State</div>
+      <h2 class="eyebrow">Live Match State</h2>
       <div class="hero-topline">{phaseLabel}</div>
       <div class="score-row">
         <div class="score-side">
@@ -102,7 +102,7 @@
     </section>
 
     <section class="card">
-      <div class="eyebrow">Recent Momentum</div>
+      <h2 class="eyebrow">Recent Momentum</h2>
       <div class="momentum-block">
         <div class="mini-title">Recent scores</div>
         <div class="marker-row">
@@ -132,7 +132,7 @@
     </section>
 
     <section class="card">
-      <div class="eyebrow">Flow Of The {phaseLabel.startsWith('Match') ? 'Match' : phaseLabel}</div>
+      <h2 class="eyebrow">Flow Of The {phaseLabel.startsWith('Match') ? 'Match' : phaseLabel}</h2>
       <div class="flow-block">
         <div class="mini-title">Score flow</div>
         <div class="flow-row">
@@ -172,7 +172,7 @@
     </section>
 
     <section class="card two-column">
-      <div class="eyebrow">{opponentName || 'Their'} Kickout Pattern</div>
+      <h2 class="eyebrow">{opponentName || 'Their'} Kickout Pattern</h2>
       <p class="headline-copy">{insights.kickoutPattern.line}</p>
       {#if insights.kickoutPattern.primaryWinner}
         <div class="stat-chip">
@@ -201,7 +201,7 @@
     </section>
 
     <section class="card two-column">
-      <div class="eyebrow">{teamName || 'Our'} Kickout Performance</div>
+      <h2 class="eyebrow">{teamName || 'Our'} Kickout Performance</h2>
       <p class="headline-copy">{insights.kickoutPerformance.line}</p>
       <div class="lane-grid">
         {#each insights.kickoutPerformance.laneStats as lane (lane.key)}
@@ -218,7 +218,7 @@
     </section>
 
     <section class="card two-column">
-      <div class="eyebrow">Main Threat</div>
+      <h2 class="eyebrow">Main Threat</h2>
       <p class="headline-copy">{insights.threat.line}</p>
       {#if insights.threat.mainThreat}
         <div class="stat-chip">
@@ -240,7 +240,7 @@
     </section>
 
     <section class="card two-column">
-      <div class="eyebrow">Best Opportunity</div>
+      <h2 class="eyebrow">Best Opportunity</h2>
       <p class="headline-copy">{insights.opportunity.line}</p>
       {#if insights.opportunity.bestSide}
         <div class="stat-chip">
@@ -262,7 +262,7 @@
     </section>
 
     <section class="card">
-      <div class="eyebrow">Top Actions</div>
+      <h2 class="eyebrow">Top Actions</h2>
       {#if insights.recommendations.length === 0}
         <p class="empty-copy">No strong recommendation yet. Keep monitoring the live patterns.</p>
       {:else}
@@ -278,7 +278,7 @@
     </section>
 
     <section class="card">
-      <div class="eyebrow">Deep Analysis</div>
+      <h2 class="eyebrow">Deep Analysis</h2>
       <p class="headline-copy">Use the detailed tabs when you need to validate the live read or dig deeper into one phase.</p>
       <div class="deep-links">
         <button on:click={() => dispatch('showTab', 'kickouts')}>Kickouts</button>
@@ -313,6 +313,7 @@
     border-color: rgba(255, 255, 255, 0.08);
   }
   .eyebrow {
+    margin: 0;
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.08em;
