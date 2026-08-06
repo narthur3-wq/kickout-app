@@ -7,8 +7,7 @@ import {
   eventYearOf,
   matchKeyOf,
   normText,
-  scoreOutcomeOf,
-} from './appShellHelpers.js';
+  scoreOutcomeOf, nextCaptureDefaults } from './appShellHelpers.js';
 
 describe('appShellHelpers', () => {
   it('normalizes text and match keys consistently', () => {
@@ -74,5 +73,42 @@ describe('appShellHelpers', () => {
     expect(analyticsMarkerRing({ event_type: 'kickout', target_player: '8' })).toBe('target');
     expect(analyticsMarkerRing({ event_type: 'shot', shot_type: 'goal' })).toBe('goal-attempt');
     expect(analyticsMarkerRing({ event_type: 'turnover' })).toBe(null);
+  });
+});
+
+describe('nextCaptureDefaults', () => {
+  const shot = (outcome, direction = 'ours') => ({ event_type: 'shot', outcome, direction });
+
+  it('hands the restart to the team that did not shoot', () => {
+    expect(nextCaptureDefaults(shot('Point', 'ours'))).toEqual({
+      eventType: 'kickout', direction: 'theirs', restartReason: 'Score',
+    });
+    expect(nextCaptureDefaults(shot('Goal', 'theirs'))).toEqual({
+      eventType: 'kickout', direction: 'ours', restartReason: 'Score',
+    });
+  });
+
+  it('carries the reason through from how the shot ended', () => {
+    expect(nextCaptureDefaults(shot('Wide', 'ours')).restartReason).toBe('Wide');
+    expect(nextCaptureDefaults(shot('Two Point', 'ours')).restartReason).toBe('Score');
+  });
+
+  it('stays out of the way when the next event is not knowable', () => {
+    // These can leave the ball in play or produce a 45 — there is no single
+    // likely next event, so the form should be left alone rather than guessed.
+    for (const outcome of ['Blocked', 'Saved', 'Dropped short']) {
+      expect(nextCaptureDefaults(shot(outcome)), outcome).toBeNull();
+    }
+    expect(nextCaptureDefaults({ event_type: 'kickout', outcome: 'Retained' })).toBeNull();
+    expect(nextCaptureDefaults({ event_type: 'turnover', outcome: 'Won' })).toBeNull();
+    expect(nextCaptureDefaults(null)).toBeNull();
+  });
+
+  it('never pre-selects a player', () => {
+    // Who wins the next kickout is a genuine unknown, and in quick capture a
+    // wrong default would be saved silently on one tap.
+    const next = nextCaptureDefaults(shot('Point', 'ours'));
+    expect(next).not.toHaveProperty('targetPlayer');
+    expect(Object.keys(next).sort()).toEqual(['direction', 'eventType', 'restartReason']);
   });
 });

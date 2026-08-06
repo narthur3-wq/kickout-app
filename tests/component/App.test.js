@@ -2084,4 +2084,72 @@ describe('App shell auth and sync', () => {
       expect(storedEventCount()).toBe(0);
     });
   });
+
+  describe('auto-advance after a save', () => {
+    const userScope = 'user:user-1';
+
+    function seedOpenMatch() {
+      const session = { user: { id: 'user-1', email: 'analyst@example.com' } };
+      mockState.sessionState.session = session;
+      mockState.getSessionMock.mockResolvedValue({ data: { session } });
+      seedScopedMatches(userScope, [{
+        id: 'match-1', team: 'Clontarf', opponent: 'Crokes', match_date: '2026-03-29',
+        status: 'open', created_at: '2026-03-29T09:00:00.000Z', updated_at: '2026-03-29T09:00:00.000Z',
+        last_event_at: null, closed_at: null,
+      }]);
+      seedScopedActiveMatchId(userScope, 'match-1');
+      seedScopedEvents(userScope, []);
+    }
+
+    async function tapPitch(user) {
+      const svg = document.querySelector('.pitch-card svg');
+      Object.defineProperty(svg, 'createSVGPoint', {
+        configurable: true,
+        value: () => ({ x: 40, y: 30, matrixTransform() { return { x: this.x, y: this.y }; } }),
+      });
+      Object.defineProperty(svg, 'getScreenCTM', {
+        configurable: true,
+        value: () => ({ inverse: () => ({}) }),
+      });
+      await user.click(svg);
+    }
+
+    it('sets up the opposition restart after we score', async () => {
+      const user = userEvent.setup();
+      seedOpenMatch();
+
+      await renderApp();
+      await screen.findByRole('button', { name: /Save Event/i });
+
+      // Record a Clontarf point.
+      await user.click(getCaptureFormButton('shot'));
+      await user.click(getCaptureFormButton('Point'));
+      await tapPitch(user);
+      await user.click(screen.getByRole('button', { name: /Save Event/i }));
+
+      // Crokes restart, reason Score — both determined by what was recorded.
+      await waitFor(() => {
+        expect(getCaptureFormButton('kickout')).toHaveClass(/active/);
+      });
+      expect(getCaptureFormButton('Crokes')).toHaveClass(/active/);
+      expect(getCaptureFormButton('Score')).toHaveClass(/active/);
+    });
+
+    it('leaves the form alone after a kickout, where the next event is unknown', async () => {
+      const user = userEvent.setup();
+      seedOpenMatch();
+
+      await renderApp();
+      await screen.findByRole('button', { name: /Save Event/i });
+      await tapPitch(user);
+      await user.click(screen.getByRole('button', { name: /Save Event/i }));
+
+      await waitFor(() => {
+        expect(JSON.parse(localStorage.getItem(storageKey(STORAGE_KEYS.events, userScope)) || '[]')).toHaveLength(1);
+      });
+      // Still a Clontarf kickout; nothing assumed about what follows.
+      expect(getCaptureFormButton('kickout')).toHaveClass(/active/);
+      expect(getCaptureFormButton('Clontarf')).toHaveClass(/active/);
+    });
+  });
 });

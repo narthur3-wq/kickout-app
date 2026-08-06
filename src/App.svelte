@@ -12,6 +12,7 @@
   import {
     analyticsMarkerFill,
     analyticsMarkerRing,
+    nextCaptureDefaults,
     analyticsMarkerShape,
     buildCurrentMatchScore,
     defaultMatchDate,
@@ -311,7 +312,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     // ~16% of the viewport and the pitch needs every pixel it can get. An
     // explicit choice always wins over this default.
     try {
-      return window.matchMedia('(max-width: 767px)').matches;
+      return window.matchMedia('(max-width: 767px), (max-height: 560px)').matches;
     } catch {
       return false;
     }
@@ -2277,6 +2278,19 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
       shotType = 'point';
       conversionResult = 'unreviewed';
       scoreSource = 'unreviewed';
+
+      // A score or a wide ends the passage and the other team restarts, and the
+      // restart reason follows from how the shot ended. Both are determined by
+      // what was just recorded, so set them up rather than making the analyst
+      // re-enter them. Never touches the player: that one is a real unknown.
+      if (isNew) {
+        const next = nextCaptureDefaults(ev);
+        if (next) {
+          eventType = next.eventType;
+          direction = next.direction;
+          restartReason = next.restartReason;
+        }
+      }
     }
     markDraftPristine();
 
@@ -4457,6 +4471,19 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
    * The match name, date and score are already shown in the match context bar
    * directly below and in the Live panel, so dropping them here loses nothing.
    */
+  @media (max-height: 560px) {
+    /* Short viewport: every band has to give something back to the pitch. */
+    .header { min-height: 44px; }
+    .match-ctx-bar { padding: 4px 14px; font-size: 12px; }
+    .section-btn { height: 38px; }
+    .tab-sub-bar .tab-btn { height: 32px; }
+    .timer-strip { padding: 4px 10px; }
+    .timer-clock-input { font-size: 20px; width: 60px; }
+    .pitch-status { min-height: 28px; padding: 3px 12px; }
+    .goal-indicator { padding: 4px 12px; }
+    .pitch-panel { padding: 8px; gap: 6px; }
+  }
+
   @media (max-width: 640px) {
     .header-center { justify-content: flex-end; min-width: 0; overflow: hidden; }
     .match-ctx-wrap { display: none; }

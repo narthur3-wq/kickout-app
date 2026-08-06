@@ -58,6 +58,42 @@ export function analyticsMarkerFill(event) {
   return '#d97706';
 }
 
+/**
+ * The form state that most likely follows the event just saved.
+ *
+ * These are rules, not predictions. In GAA a score or a wide ends the passage
+ * and the other team restarts, and the restart reason is decided by how the
+ * previous shot ended — both are determined by the record, not guessed from it.
+ *
+ * Deliberately narrow. Blocked, saved and dropped-short shots can leave the
+ * ball in play or produce a 45, so there is no single likely next event and the
+ * form is left alone. Nothing here ever pre-selects a player: who wins the next
+ * kickout is a genuine unknown, and a wrong default there would be saved
+ * silently on a single tap.
+ *
+ * @returns {{ eventType: string, direction: string, restartReason: string } | null}
+ *   null when the next event is not reliably known.
+ */
+export function nextCaptureDefaults(event) {
+  if (!event) return null;
+  if (String(event.event_type || '').toLowerCase() !== 'shot') return null;
+
+  const outcome = String(event.outcome || '').trim().toLowerCase();
+  const restartReason =
+    outcome === 'goal' || outcome === 'point' || outcome === 'two point' ? 'Score'
+    : outcome === 'wide' ? 'Wide'
+    : null;
+  if (!restartReason) return null;
+
+  // The team that did not shoot restarts.
+  const shooter = String(event.direction || 'ours').toLowerCase() === 'theirs' ? 'theirs' : 'ours';
+  return {
+    eventType: 'kickout',
+    direction: shooter === 'ours' ? 'theirs' : 'ours',
+    restartReason,
+  };
+}
+
 export function analyticsMarkerRing(event) {
   const type = String(event?.event_type || 'kickout').toLowerCase();
   if (type === 'kickout' && event?.target_player) return 'target';
