@@ -2055,8 +2055,16 @@
           <button type="button" class:active={showScoreInvolvementsOnly} on:click={() => showScoreInvolvementsOnly = !showScoreInvolvementsOnly}>
             Score involvements only
           </button>
+        </div>
+
+        <!-- "Show paths" sat under "Show only:" alongside two genuine filters,
+             but it does not filter anything — it draws the carry lines on top
+             of whatever is already shown. Grouped with the other display
+             toggles instead. -->
+        <div class="filter-row show-only" aria-label="Display options">
+          <span class="filter-label">Display:</span>
           <button type="button" class:active={showCarryLines} on:click={() => showCarryLines = !showCarryLines}>
-            Show paths
+            Carry paths
           </button>
         </div>
 

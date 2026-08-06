@@ -3838,14 +3838,14 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     border-radius: 8px; padding: 3px; flex-shrink: 0;
   }
   .pills-label {
-    font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.38);
+    font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.62);
     padding: 0 5px 0 2px; letter-spacing: 0.04em; text-transform: uppercase;
     cursor: default;
   }
   .period-pill {
     padding: 3px 9px; border-radius: 6px; font-size: 11px; font-weight: 600;
     border: none; background: transparent; cursor: pointer;
-    color: rgba(255,255,255,0.38); font-family: inherit; transition: all 0.15s; line-height: 1.3;
+    color: rgba(255,255,255,0.62); font-family: inherit; transition: all 0.15s; line-height: 1.3;
   }
   .period-pill.active { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.9); }
   .period-pill:hover:not(.active) { color: rgba(255,255,255,0.65); }
@@ -4222,7 +4222,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     font-size: 14px; background: #f8fafc; color: #111827; font-family: inherit;
     width: 100%; box-sizing: border-box; transition: border-color 0.12s;
   }
-  .setup-grid input:focus { outline: none; border-color: #1c3f8a; background: #fff; }
+  .setup-grid input:focus { border-color: #1c3f8a; background: #fff; }
   .full-row { grid-column: 1 / -1; }
   .modal-done {
     display: block; width: calc(100% - 40px); margin: 0 20px 20px;
@@ -4346,7 +4346,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   .timer-clock-input {
     font-size: 26px; font-weight: 900; color: #fff;
     font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 1;
-    background: transparent; border: none; outline: none;
+    background: transparent; border: none;
     width: 72px; text-align: center; font-family: inherit;
     cursor: text;
   }

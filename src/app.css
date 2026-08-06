@@ -1,3 +1,43 @@
 /* Reset default Vite scaffold styles — app uses scoped component CSS */
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; }
+
+/*
+ * One keyboard focus indicator for the whole app.
+ *
+ * Before this, `:focus-visible` was defined in two components out of fifteen,
+ * and several inputs set `outline: none` while replacing it with only a border
+ * colour change — which is not a focus indicator anyone can rely on. Everything
+ * else fell back to whatever the browser happened to draw.
+ *
+ * `:focus-visible` rather than `:focus`, so it never fires on a pitch tap. The
+ * double ring keeps it readable on both the light panels and the dark header,
+ * pitch and tactical board, without needing a per-surface variant.
+ */
+:where(a, button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid #1c3f8a;
+  outline-offset: 2px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.85);
+}
+
+/* Dark surfaces: invert the pairing so the ring reads against them too. */
+:where(.header, .timer-strip, .goal-indicator, .pitch-card, .hero-card)
+  :where(a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline-color: #fff;
+  box-shadow: 0 0 0 4px rgba(15, 23, 42, 0.75);
+}
+
+/*
+ * Respect a reduced-motion preference. The app otherwise runs an infinite pulse
+ * on the running-timer dot and a flashing outline on a pitch validation error,
+ * both of which are exactly what this setting exists to stop.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -399,7 +399,6 @@
     font-family: inherit;
     color: #111827;
     background: #fafafa;
-    outline: none;
     transition: border-color 0.15s;
   }
 
@@ -461,7 +460,6 @@
     color: #4b5563;
     background: #fff;
     cursor: pointer;
-    outline: none;
   }
 
   .clear-btn {

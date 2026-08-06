@@ -43,10 +43,10 @@ Fast, high-value, low-risk. Mostly one-line or one-rule changes.
 | # | Item | Ref | Effort |
 |---|---|---|---|
 | 1.1 | ~~**Sticky Save bar overlap.**~~ **Done in Phase 0.** The action row is now sticky in all layouts. It still overlays scrolling content at rest, but it is the last child, so at full scroll nothing is hidden — the fields are reachable. | [CaptureForm.svelte](src/lib/CaptureForm.svelte) | — |
-| 1.2 | **Global focus-visible style.** One rule in `app.css` covering all interactive elements, plus removal of the `outline: none` declarations that substitute nothing. Currently `:focus-visible` exists in only 2 of 15 components. | `src/app.css`, 8 sites | S |
+| 1.2 | ~~**Global focus-visible style.**~~ **Done 2026-08-06.** One rule in `app.css` covering every interactive element, with an inverted variant for the dark surfaces, plus all nine `outline: none` declarations removed. Original text: **Global focus-visible style.** One rule in `app.css` covering all interactive elements, plus removal of the `outline: none` declarations that substitute nothing. Currently `:focus-visible` exists in only 2 of 15 components. | `src/app.css`, 8 sites | S |
 | 1.3 | ~~**TEAM vs OUTCOME disambiguation.**~~ **Done 2026-08-06.** Rows now read "Kickout by" / "Won by" (and "Shot by" / "Turnover by"), and the outcome options are in a fixed order so they no longer swap places when the kicking team changes. Team names kept: "Retained" was ambiguous about whom — the kicking team, or our club. Original text: **TEAM vs OUTCOME disambiguation.** Two identically-styled `[Clontarf|Vincents]` controls 200 px apart meaning different things. Relabel the outcome row to carry a verb ("Won by Clontarf" / "Retained" / "Lost"). This is the one UX defect that silently corrupts data, so it ranks above cosmetics. | [CaptureForm.svelte](src/lib/CaptureForm.svelte) | M |
-| 1.4 | **Touch targets to 44 px.** `.jersey-btn` 68×32 → 44 min-height; `.seg-btn` 87×37 → 44. Note this makes the capture form taller, so land it *after* 0.1 or the two changes fight each other. | [CaptureForm.svelte](src/lib/CaptureForm.svelte) | S |
-| 1.5 | **Remove the redundant `ON` pill** from the selected outcome button — the selected state already says it, and it renders white-on-white at the button edge. | [CaptureForm.svelte](src/lib/CaptureForm.svelte) | S |
+| 1.4 | ~~**Touch targets to 44 px.**~~ **Partly done 2026-08-06.** 44px on phones, iPad portrait and desktop. Deliberately NOT on iPad landscape: measured there, 44px reintroduced 74px of scrolling on a kickout, and scrolling mid-match was the original complaint. Those stay 68x32 / 87x37, which clears the 24x24 WCAG minimum. Original text: **Touch targets to 44 px.** `.jersey-btn` 68×32 → 44 min-height; `.seg-btn` 87×37 → 44. Note this makes the capture form taller, so land it *after* 0.1 or the two changes fight each other. | [CaptureForm.svelte](src/lib/CaptureForm.svelte) | S |
+| 1.5 | ~~**Remove the redundant `ON` pill**~~ **Reconsidered 2026-08-06 — kept, contrast fixed instead.** It was added deliberately so touch users see a selection register, with an E2E test asserting it. The real defect was its own contrast: white on a 20% white wash over the button colour, ~2.9:1. Darkened the wash. Original text: **Remove the redundant `ON` pill** from the selected outcome button — the selected state already says it, and it renders white-on-white at the button edge. | [CaptureForm.svelte](src/lib/CaptureForm.svelte) | S |
 
 ---
 
@@ -102,11 +102,11 @@ Cheap once Phase 2 is in, because the contrast fixes become token edits.
 
 | # | Item | Detail | Effort |
 |---|---|---|---|
-| 3.1 | ~~**Contrast to AA.**~~ **Mostly done.** All light-background failures fixed (nav, selected capture option, recent-events data, "Other #", inactive segmented labels). **Still open:** the dark header's `Phase:` label and inactive period pills at ~3.4:1 — `rgba(255,255,255,0.38)` on `#0f1923`. Left for the token pass since it needs a decision about the dark surface as a whole. | | S |
+| 3.1 | ~~**Contrast to AA.**~~ **Mostly done.** All light-background failures fixed (nav, selected capture option, recent-events data, "Other #", inactive segmented labels). **Done 2026-08-06** — the dark header's `Phase:` label and inactive period pills went from `rgba(255,255,255,0.38)` (~3.4:1) to `0.62`. No known text contrast failures remain. | | S |
 | 3.2 | **Document structure.** Add `<main>`, and promote panel titles ("Live Match State", "Kickouts", "Possession Analysis") from `div` to `h2`/`h3`. Currently the app exposes exactly one heading and no main landmark. | | M |
 | 3.3 | **Tab semantics.** `role="tablist"` / `role="tab"` / `aria-selected` / arrow-key navigation on all three nav levels. Currently zero tab roles. | | M |
 | 3.4 | **Label the 2 unlabelled inputs.** | | S |
-| 3.5 | **`prefers-reduced-motion` block** — the app runs an infinite `timerPulse` and a `pitchFlash` error animation with no opt-out. | | S |
+| 3.5 | ~~**`prefers-reduced-motion` block**~~ **Done 2026-08-06** in `app.css`. Original text: **`prefers-reduced-motion` block** — the app runs an infinite `timerPulse` and a `pitchFlash` error animation with no opt-out. | | S |
 | 3.6 | **Extend `accessibility.spec.js`** to assert landmarks, heading order, tab roles and focus visibility, so 3.1–3.5 cannot regress. | | M |
 
 ---
@@ -134,7 +134,7 @@ Larger conceptual changes; safe to run during beta.
 | 5.1 | **Resolve the two period controls.** Header `Phase:` (a filter) vs form `PERIOD` (an event attribute) — same values, same visual family, opposite meanings. Resolving this should also remove the permanent "Showing all periods in this view." banner, which exists to apologise for the ambiguity. | M |
 | 5.2 | **Unify the filter affordances.** `Clear` / `Reset` / `Filters · 1 ▼` are three overlapping controls for one filter state; `FILTERED: 1 match` reads as a result count. | M |
 | 5.3 | **Events table on mobile** — move Edit/Delete out of the first column so identifying data (date, period, clock) is what you see first, and de-emphasise Delete relative to Edit. Fix the `Delete all` toolbar overflowing its scroll container. | M |
-| 5.4 | **Possession Analysis grouping** — move "Show paths" out of `SHOW ONLY:` (it is a display toggle, not a filter); resolve the duplicated half selectors; drop the repeated date in the header. | S |
+| 5.4 | ~~**Possession Analysis grouping**~~ **Partly done 2026-08-06.** "Show paths" moved out of "Show only:" into its own Display row and renamed "Carry paths" — it is a display toggle, not a filter. Duplicated half selectors and the repeated date still open. Original text: **Possession Analysis grouping** — move "Show paths" out of `SHOW ONLY:` (it is a display toggle, not a filter); resolve the duplicated half selectors; drop the repeated date in the header. | S |
 | 5.5 | **Consolidate the two segmented-control styles** (square in analytics, pill in Possession Analysis) onto the Phase 2 tokens. | S |
 
 ---

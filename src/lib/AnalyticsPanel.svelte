@@ -987,7 +987,7 @@ import {
     font-size: 13px; background: #fff; color: #111827; font-family: inherit;
     cursor: pointer; transition: border-color 0.12s;
   }
-  .fselect-wrap select:focus { outline: none; border-color: #1c3f8a; box-shadow: 0 0 0 3px rgba(28,63,138,0.12); }
+  .fselect-wrap select:focus { border-color: #1c3f8a; box-shadow: 0 0 0 3px rgba(28,63,138,0.12); }
 
   /* Flags row */
   .filter-flags-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

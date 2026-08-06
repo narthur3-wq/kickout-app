@@ -354,7 +354,6 @@
   }
 
   input:focus {
-    outline: none;
     border-color: #1c3f8a;
     box-shadow: 0 0 0 3px rgba(28, 63, 138, 0.12);
     background: #fff;

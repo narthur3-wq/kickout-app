@@ -301,7 +301,7 @@
     padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px;
     font-size: 14px; color: #111827;
   }
-  .form-stack input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
+  .form-stack input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
 
   .form-actions {
     display: flex; gap: 8px; padding: 0 16px 16px; justify-content: flex-end;

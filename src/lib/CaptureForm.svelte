@@ -532,6 +532,7 @@
   }
 
   .seg-btn {
+    min-height: 44px;
     position: relative;
     flex: 1;
     min-width: 52px;
@@ -577,8 +578,8 @@
     height: 18px;
     padding: 0 5px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.2);
-    color: inherit;
+    background: rgba(0, 0, 0, 0.32);
+    color: #fff;
     font-size: 9px;
     font-weight: 800;
     letter-spacing: 0.02em;
@@ -757,7 +758,6 @@
   .turnover-player-input:focus,
   .jersey-custom-input:focus,
   input:focus {
-    outline: none;
     border-color: #1c3f8a;
     box-shadow: 0 0 0 3px rgba(28, 63, 138, 0.12);
   }
@@ -769,6 +769,7 @@
   }
 
   .jersey-btn {
+    min-height: 44px;
     padding: 7px 2px;
     font-size: 12px;
     font-weight: 700;
@@ -977,6 +978,11 @@
     input {
       padding: 7px 9px;
       font-size: 13px;
+    }
+
+    .jersey-btn,
+    .seg-btn {
+      min-height: 0;
     }
 
     .action-row {
