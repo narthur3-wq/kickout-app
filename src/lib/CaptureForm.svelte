@@ -24,7 +24,6 @@
 
   export let landingSet = false;
   export let pickupSet = false;
-  export let period = 'H1';
 
   export let CONTESTS = [];
   export let BREAK_OUTS = [];
@@ -130,7 +129,6 @@
   </div>
 
   <div class="field-label">Team</div>
-  <p class="field-helper">Choose the team for this event.</p>
   <div class="dir-row">
     <button
       type="button"
@@ -146,19 +144,6 @@
     >
       {opponent || 'Theirs'}
     </button>
-  </div>
-
-  <div class="field-label">Period</div>
-  <div class="dir-row">
-    {#each ['H1', 'H2', 'ET'] as phase (phase)}
-      <button
-        type="button"
-        class="seg-dir {period === phase ? 'active' : ''}"
-        on:click={() => dispatch('periodChange', phase)}
-      >
-        {phase}
-      </button>
-    {/each}
   </div>
 
   {#if eventType === 'kickout'}
@@ -340,7 +325,9 @@
       {/each}
     </div>
     <div class="jersey-custom-row">
-      <span class="jersey-custom-label">Other #</span>
+      <!-- Sits in the grid flow rather than on its own labelled row: squads
+           rarely field 16+, and the row cost 39px of a form that was already
+           scrolling on the device this is captured on. -->
       <input
         class="jersey-custom-input"
         aria-label="Target player jersey number above 15"
@@ -353,7 +340,7 @@
         on:input={(event) => (targetPlayer = event.currentTarget.value || '')}
       />
       {#if targetPlayer}
-        <button type="button" class="jersey-clear" on:click={() => (targetPlayer = '')}>Clear</button>
+        <button type="button" class="jersey-clear" on:click={() => (targetPlayer = '')}>Clear {targetPlayer}</button>
       {/if}
     </div>
   {/if}
@@ -378,7 +365,7 @@
         disabled={undoStack.length === 0}
         title="Undo last change"
       >
-        Undo last change
+        Undo last
       </button>
       <label class="flag-inline" title="Flag for review">
         <input type="checkbox" bind:checked={flagEvent} />
@@ -402,7 +389,9 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: #6b7280;
-    margin: 16px 0 7px;
+    /* Was 16px/7px. With eight labels on a kickout that margin alone was 151px
+       of a form that only had 564px to sit in. */
+    margin: 9px 0 4px;
   }
 
   .field-helper {
@@ -775,16 +764,9 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-top: 6px;
+    margin-top: 4px;
   }
 
-  .jersey-custom-label {
-    font-size: 11px;
-    font-weight: 700;
-    /* #9ca3af on white is 2.5:1 — this labels an input, not decoration. */
-    color: #6b7280;
-    flex-shrink: 0;
-  }
 
   .jersey-custom-input {
     width: 88px;
@@ -815,8 +797,8 @@
   .action-row {
     display: flex;
     flex-direction: column;
-    gap: 7px;
-    margin-top: 18px;
+    gap: 6px;
+    margin-top: 10px;
     position: sticky;
     bottom: 0;
     padding-top: 10px;
@@ -923,12 +905,12 @@
 
   @media (min-width: 768px) and (max-height: 940px) {
     .form-content {
-      padding: 12px 14px 16px;
+      padding: 10px 14px 4px;
     }
 
     .field-label,
     .turnover-player-label {
-      margin: 12px 0 6px;
+      margin: 7px 0 3px;
       font-size: 10px;
     }
 
@@ -970,7 +952,7 @@
     }
 
     .action-row {
-      margin-top: 14px;
+      margin-top: 8px;
     }
 
     .save-cta {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MATCH_KEYS } from '../../src/lib/matchStore.js';
@@ -143,6 +143,16 @@ function getDeepAnalysisButton(label) {
   );
 
   if (!button) throw new Error(`Missing deep analysis button: ${label}`);
+  return button;
+}
+
+function getTimerPeriodButton(label) {
+  const group = document.querySelector('.timer-period-group');
+  if (!group) throw new Error('Missing timer period control');
+  const button = Array.from(group.querySelectorAll('button')).find(
+    (node) => node.textContent?.trim() === label
+  );
+  if (!button) throw new Error(`Missing timer period button: ${label}`);
   return button;
 }
 
@@ -1523,7 +1533,7 @@ describe('App shell auth and sync', () => {
 
     const user = userEvent.setup();
     await screen.findByRole('button', { name: /Save Event/i });
-    await user.click(getCaptureFormButton('H2'));
+    await user.click(getTimerPeriodButton('H2'));
 
     expect(await screen.findByText(/Period set to H2/i)).toBeInTheDocument();
   });
@@ -1558,7 +1568,7 @@ describe('App shell auth and sync', () => {
     await user.click(timerButton);
     expect(await screen.findByText('Running')).toBeInTheDocument();
 
-    await user.click(getCaptureFormButton('ET'));
+    await user.click(getTimerPeriodButton('ET'));
     expect(await screen.findByText(/Period set to ET\. Timer paused/i)).toBeInTheDocument();
   });
 
@@ -2053,7 +2063,8 @@ describe('App shell auth and sync', () => {
 
       // A stray tap now creates a real event, so the correction must be as
       // fast as the mistake — no confirm step in between.
-      await user.click(await screen.findByRole('button', { name: /^Undo$/ }));
+      const toast = await screen.findByRole('status');
+      await user.click(within(toast).getByRole('button', { name: /^Undo$/ }));
 
       await waitFor(() => expect(storedEventCount()).toBe(0));
       expect(document.querySelector('.confirm-card')).toBeNull();

@@ -208,7 +208,9 @@ test('changing period pauses the timer, keeps ends stable, and shows a halftime 
   await expect(page.getByText('Paused')).toBeVisible();
   await page.locator('.timer-btn').click();
   await expect(page.getByText('Running')).toBeVisible();
-  await page.locator('.form-panel').getByRole('button', { name: 'H2' }).click();
+  // Period moved out of the capture form and into the timer strip, which
+  // already displayed the same value beside the clock.
+  await page.locator('.timer-period-group').getByRole('button', { name: 'H2' }).click();
 
   await expect(page.getByText(/Timer paused/i)).toBeVisible();
   await expect(page.getByText('Paused', { exact: true })).toBeVisible();

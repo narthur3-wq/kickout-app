@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import CaptureForm from '../../src/lib/CaptureForm.svelte';
@@ -33,27 +33,6 @@ describe('CaptureForm', () => {
     expect(screen.getByRole('button', { name: /^Point$/i }).querySelector('.seg-selected-indicator')).not.toBeNull();
   });
 
-  it('dispatches a period change event when the analyst switches phase', async () => {
-    const user = userEvent.setup();
-    const onPeriodChange = vi.fn();
-    render(CaptureForm, {
-      props: {
-        team: 'Clontarf',
-        opponent: 'Vincents',
-        CONTESTS: ['clean', 'break', 'foul', 'out'],
-        BREAK_OUTS: ['won', 'lost', 'neutral'],
-        undoStack: [],
-      },
-      events: {
-        periodChange: onPeriodChange,
-      },
-    });
-
-    await user.click(screen.getByRole('button', { name: 'H2' }));
-
-    expect(onPeriodChange).toHaveBeenCalledWith(expect.objectContaining({ detail: 'H2' }));
-  });
-
   it('shows cancel controls while editing and keeps undo disabled with no history', () => {
     renderForm({ editingId: 'event-1', undoStack: [] });
 
@@ -64,7 +43,7 @@ describe('CaptureForm', () => {
     expect(screen.getByRole('button', { name: 'Unreviewed' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Clear points/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Cancel/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Undo last change/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Undo last/i })).toBeDisabled();
   });
 
   it('shows score source controls only when editing a scored shot', () => {
@@ -88,7 +67,12 @@ describe('CaptureForm', () => {
     renderForm();
 
     expect(screen.getByText('Team')).toBeInTheDocument();
-    expect(screen.getByText(/Choose the team for this event/i)).toBeInTheDocument();
+    // Scoped to the team row: for a kickout the outcome options are the same
+    // two team names, so an unscoped lookup is ambiguous. That ambiguity is a
+    // real UX issue in its own right — roadmap item 1.3.
+    const teamRow = document.querySelector('.dir-row');
+    expect(within(teamRow).getByRole('button', { name: 'Clontarf' })).toBeInTheDocument();
+    expect(within(teamRow).getByRole('button', { name: 'Vincents' })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Clontarf' })).toHaveLength(2);
     expect(screen.getAllByRole('button', { name: 'Vincents' })).toHaveLength(2);
   });

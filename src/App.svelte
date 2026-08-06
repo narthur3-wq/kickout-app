@@ -1968,6 +1968,30 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     }
   }
 
+  function changePeriod(p) {
+    const previousPeriod = period;
+    if (previousPeriod === p) return;
+    periodClocks = { ...periodClocks, [previousPeriod]: clock || '' };
+    period = p;
+    const nextClock = periodClocks?.[p] || '';
+    setClock(nextClock, p);
+    const timerWasRunning = timerRunning;
+    if (timerWasRunning) stopTimer();
+    if ((previousPeriod === 'H1' && p === 'H2') || (previousPeriod === 'H2' && p === 'H1')) {
+      showNotice(
+        'success',
+        timerWasRunning
+          ? `Period set to ${p}. Timer paused at ${nextClock || '0:00'}. Ends stay as they are - use "Swap ends" beside the pitch if teams have changed direction.`
+          : `Period set to ${p}. Ends stay as they are - use "Swap ends" beside the pitch if teams have changed direction.`,
+        6000
+      );
+    } else if (timerWasRunning) {
+      showNotice('success', `Period set to ${p}. Timer paused at ${nextClock || '0:00'}.`, 5000);
+    } else {
+      showNotice('success', `Period set to ${p}.`, 4000);
+    }
+  }
+
   function onLanding(e) {
     landing = e.detail;
     if (quickCaptureArmed) quickSave();
@@ -3281,30 +3305,6 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
         onSave={saveEvent}
         onClearPoints={clearPoints}
         onUndoLast={undoLast}
-        on:periodChange={(e) => {
-          const p = e.detail;
-          const previousPeriod = period;
-          if (previousPeriod === p) return;
-          periodClocks = { ...periodClocks, [previousPeriod]: clock || '' };
-          period = p;
-          const nextClock = periodClocks?.[p] || '';
-          setClock(nextClock, p);
-          const timerWasRunning = timerRunning;
-          if (timerWasRunning) stopTimer();
-          if ((previousPeriod === 'H1' && p === 'H2') || (previousPeriod === 'H2' && p === 'H1')) {
-            showNotice(
-              'success',
-              timerWasRunning
-                ? `Period set to ${p}. Timer paused at ${nextClock || '0:00'}. Ends stay as they are - use "Swap ends" beside the pitch if teams have changed direction.`
-                : `Period set to ${p}. Ends stay as they are - use "Swap ends" beside the pitch if teams have changed direction.`,
-              6000
-            );
-          } else if (timerWasRunning) {
-            showNotice('success', `Period set to ${p}. Timer paused at ${nextClock || '0:00'}.`, 5000);
-          } else {
-            showNotice('success', `Period set to ${p}.`, 4000);
-          }
-        }}
         on:cancelEdit={cancelEditMode}
       />
     </div><!-- /form-panel -->
@@ -3348,7 +3348,20 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
         >
           ⚡ Quick
         </button>
-        <span class="timer-period">{period}</span>
+        <!-- Period lived in the capture form as well as being displayed here as
+             read-only text. Same value, two places, and it cost the form 68px
+             it did not have. It belongs beside the clock. -->
+        <div class="timer-period-group" role="group" aria-label="Period">
+          {#each ['H1','H2','ET'] as phase (phase)}
+            <button
+              type="button"
+              class="timer-period-btn"
+              class:active={period === phase}
+              aria-pressed={period === phase}
+              on:click={() => changePeriod(phase)}
+            >{phase}</button>
+          {/each}
+        </div>
       </div>
       <div class="pitch-card">
         <div class="goal-indicator">
@@ -4367,10 +4380,18 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   .quick-toggle.on {
     background: #fbbf24; color: #4a2c00; border-color: #fbbf24;
   }
-  .timer-period {
-    font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.55);
-    text-transform: uppercase; letter-spacing: 0.08em; margin-left: 10px;
+  .timer-period-group {
+    display: flex; gap: 2px; margin-left: 10px;
+    background: rgba(255,255,255,0.1); border-radius: 8px; padding: 3px;
   }
+  .timer-period-btn {
+    padding: 4px 10px; border-radius: 6px; border: none; background: transparent;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.06em;
+    color: rgba(255,255,255,0.6); font-family: inherit; cursor: pointer; line-height: 1.3;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  }
+  .timer-period-btn:hover:not(.active) { color: rgba(255,255,255,0.9); }
+  .timer-period-btn.active { background: rgba(255,255,255,0.22); color: #fff; }
 
   .quick-toast { background: #14532d; }
   .quick-toast-tick { color: #4ade80; font-weight: 800; }
