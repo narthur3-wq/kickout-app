@@ -143,239 +143,241 @@
 </script>
 
 <div class="form-content">
-  <div class="field-label">Type</div>
-  <div class="metric-row">
-    {#each EVENT_TYPES as typeKey (typeKey)}
-      <button
-        type="button"
-        class="seg-top {eventType === typeKey ? 'active' : ''}"
-        on:click={() => (eventType = typeKey)}
-      >
-        {typeKey}
-      </button>
-    {/each}
-  </div>
-
-  <div class="field-label">{teamFieldLabel}</div>
-  <div class="dir-row">
-    <button
-      type="button"
-      class="seg-dir {direction === 'ours' ? 'active' : ''}"
-      on:click={() => (direction = 'ours')}
-    >
-      {team || 'Ours'}
-    </button>
-    <button
-      type="button"
-      class="seg-dir {direction === 'theirs' ? 'active' : ''}"
-      on:click={() => (direction = 'theirs')}
-    >
-      {opponent || 'Theirs'}
-    </button>
-  </div>
-
-  {#if eventType === 'kickout'}
-    <div class="field-label">Contest</div>
-    <div class="btn-group">
-      {#each CONTESTS as option (option)}
+  <div class="form-fields">
+    <div class="field-label">Type</div>
+    <div class="metric-row">
+      {#each EVENT_TYPES as typeKey (typeKey)}
         <button
           type="button"
-          class="seg-btn {contest === option ? 'active' : ''}"
-          on:click={() => {
-            contest = option;
-            if (option !== 'break') breakOutcome = '';
-          }}
+          class="seg-top {eventType === typeKey ? 'active' : ''}"
+          on:click={() => (eventType = typeKey)}
         >
-          {option}
+          {typeKey}
         </button>
       {/each}
     </div>
-    {#if contest === 'break'}
-      <p class="break-hint {!landingSet ? 'break-hint-step' : !pickupSet ? 'break-hint-step2' : 'break-hint-done'}">
-        {#if !landingSet}
-          Step 1 - mark the landing point, then the pickup.
-        {:else if !pickupSet}
-          Landing marked - now tap the pickup point.
-        {:else}
-          Landing and pickup recorded.
-        {/if}
-      </p>
-    {/if}
-  {/if}
 
-  <div class="field-label">{eventType === 'kickout' ? 'Won by' : 'Outcome'}</div>
-  <div class="btn-group outcome-grid {eventType === 'kickout' ? 'kickout-grid' : ''}">
-    {#each outcomeOptions as { option, className, selected } (option)}
+    <div class="field-label">{teamFieldLabel}</div>
+    <div class="dir-row">
       <button
         type="button"
-        class="seg-btn {className}"
-        class:active={selected}
-        on:click={() => chooseOutcome(option)}
+        class="seg-dir {direction === 'ours' ? 'active' : ''}"
+        on:click={() => (direction = 'ours')}
       >
-        {option}
-        {#if selected}
-          <span class="seg-selected-indicator" aria-hidden="true">On</span>
-        {/if}
+        {team || 'Ours'}
       </button>
-    {/each}
-  </div>
+      <button
+        type="button"
+        class="seg-dir {direction === 'theirs' ? 'active' : ''}"
+        on:click={() => (direction = 'theirs')}
+      >
+        {opponent || 'Theirs'}
+      </button>
+    </div>
 
-  {#if eventType === 'shot' && (outcome === 'Wide' || outcome === 'Blocked' || outcome === 'Dropped short')}
-    <div class="shot-type-row">
-      <span class="shot-type-label">Goal attempt?</span>
-      <div class="shot-type-toggle">
-        <button
-          type="button"
-          class="stt-btn {shotType === 'point' ? 'stt-active' : ''}"
-          on:click={() => (shotType = 'point')}
-        >
-          No
-        </button>
-        <button
-          type="button"
-          class="stt-btn {shotType === 'goal' ? 'stt-active' : ''}"
-          on:click={() => (shotType = 'goal')}
-        >
-          Yes
-        </button>
+    {#if eventType === 'kickout'}
+      <div class="field-label">Contest</div>
+      <div class="btn-group">
+        {#each CONTESTS as option (option)}
+          <button
+            type="button"
+            class="seg-btn {contest === option ? 'active' : ''}"
+            on:click={() => {
+              contest = option;
+              if (option !== 'break') breakOutcome = '';
+            }}
+          >
+            {option}
+          </button>
+        {/each}
       </div>
-    </div>
-  {/if}
+      {#if contest === 'break'}
+        <p class="break-hint {!landingSet ? 'break-hint-step' : !pickupSet ? 'break-hint-step2' : 'break-hint-done'}">
+          {#if !landingSet}
+            Step 1 - mark the landing point, then the pickup.
+          {:else if !pickupSet}
+            Landing marked - now tap the pickup point.
+          {:else}
+            Landing and pickup recorded.
+          {/if}
+        </p>
+      {/if}
+    {/if}
 
-  {#if eventType === 'kickout' && contest === 'break'}
-    <div class="field-label">Who won the break?</div>
-    <div class="btn-group">
-      {#each BREAK_OUTS as option (option)}
+    <div class="field-label">{eventType === 'kickout' ? 'Won by' : 'Outcome'}</div>
+    <div class="btn-group outcome-grid {eventType === 'kickout' ? 'kickout-grid' : ''}">
+      {#each outcomeOptions as { option, className, selected } (option)}
         <button
           type="button"
-          class="seg-btn {breakOutcome === option ? 'active' : ''}"
-          on:click={() => (breakOutcome = option)}
+          class="seg-btn {className}"
+          class:active={selected}
+          on:click={() => chooseOutcome(option)}
         >
           {option}
+          {#if selected}
+            <span class="seg-selected-indicator" aria-hidden="true">On</span>
+          {/if}
         </button>
       {/each}
     </div>
-  {/if}
 
-  {#if eventType === 'kickout'}
-    <div class="field-label">Restart after</div>
-    <div class="btn-group">
-      {#each RESTART_REASONS as reason (reason)}
-        <button
-          type="button"
-          class="seg-btn {restartReason === reason ? 'active' : ''}"
-          on:click={() => (restartReason = restartReason === reason ? '' : reason)}
-        >
-          {reason}
-        </button>
-      {/each}
-    </div>
-  {/if}
+    {#if eventType === 'shot' && (outcome === 'Wide' || outcome === 'Blocked' || outcome === 'Dropped short')}
+      <div class="shot-type-row">
+        <span class="shot-type-label">Goal attempt?</span>
+        <div class="shot-type-toggle">
+          <button
+            type="button"
+            class="stt-btn {shotType === 'point' ? 'stt-active' : ''}"
+            on:click={() => (shotType = 'point')}
+          >
+            No
+          </button>
+          <button
+            type="button"
+            class="stt-btn {shotType === 'goal' ? 'stt-active' : ''}"
+            on:click={() => (shotType = 'goal')}
+          >
+            Yes
+          </button>
+        </div>
+      </div>
+    {/if}
 
-  {#if editingId && (eventType === 'kickout' || eventType === 'turnover')}
-    <div class="field-label">Retrospective review</div>
-    <p class="field-helper">Tag this after the match, not during live capture.</p>
-    <div class="btn-group review-grid">
-      {#each KICKOUT_REVIEW_RESULTS as option (option)}
-        <button
-          type="button"
-          class="seg-btn {conversionResult === option ? `active review-${option}` : ''}"
-          on:click={() => (conversionResult = option)}
-        >
-          {labelForReviewResult(option)}
-        </button>
-      {/each}
-    </div>
-  {/if}
+    {#if eventType === 'kickout' && contest === 'break'}
+      <div class="field-label">Who won the break?</div>
+      <div class="btn-group">
+        {#each BREAK_OUTS as option (option)}
+          <button
+            type="button"
+            class="seg-btn {breakOutcome === option ? 'active' : ''}"
+            on:click={() => (breakOutcome = option)}
+          >
+            {option}
+          </button>
+        {/each}
+      </div>
+    {/if}
 
-  {#if editingId && eventType === 'shot' && scoredShotOutcome}
-    <div class="field-label">Score source</div>
-    <p class="field-helper">Tag where this score came from after review.</p>
-    <div class="btn-group review-grid review-grid-wide">
-      {#each SHOT_SCORE_SOURCES as option (option)}
-        <button
-          type="button"
-          class="seg-btn {scoreSource === option ? `active source-${option}` : ''}"
-          on:click={() => (scoreSource = option)}
-        >
-          {labelForScoreSource(option)}
-        </button>
-      {/each}
-    </div>
-  {/if}
+    {#if eventType === 'kickout'}
+      <div class="field-label">Restart after</div>
+      <div class="btn-group">
+        {#each RESTART_REASONS as reason (reason)}
+          <button
+            type="button"
+            class="seg-btn {restartReason === reason ? 'active' : ''}"
+            on:click={() => (restartReason = restartReason === reason ? '' : reason)}
+          >
+            {reason}
+          </button>
+        {/each}
+      </div>
+    {/if}
 
-  {#if eventType === 'turnover'}
-    <div class="field-label">Turnover players</div>
-    <p class="field-helper">Record who lost the ball and who won it.</p>
-    <div class="turnover-player-grid">
-      <label class="turnover-player-field">
-        <span class="turnover-player-label">
-          Lost by{turnoverLostTeam ? ` (${turnoverLostTeam})` : ''}
-        </span>
+    {#if editingId && (eventType === 'kickout' || eventType === 'turnover')}
+      <div class="field-label">Retrospective review</div>
+      <p class="field-helper">Tag this after the match, not during live capture.</p>
+      <div class="btn-group review-grid">
+        {#each KICKOUT_REVIEW_RESULTS as option (option)}
+          <button
+            type="button"
+            class="seg-btn {conversionResult === option ? `active review-${option}` : ''}"
+            on:click={() => (conversionResult = option)}
+          >
+            {labelForReviewResult(option)}
+          </button>
+        {/each}
+      </div>
+    {/if}
+
+    {#if editingId && eventType === 'shot' && scoredShotOutcome}
+      <div class="field-label">Score source</div>
+      <p class="field-helper">Tag where this score came from after review.</p>
+      <div class="btn-group review-grid review-grid-wide">
+        {#each SHOT_SCORE_SOURCES as option (option)}
+          <button
+            type="button"
+            class="seg-btn {scoreSource === option ? `active source-${option}` : ''}"
+            on:click={() => (scoreSource = option)}
+          >
+            {labelForScoreSource(option)}
+          </button>
+        {/each}
+      </div>
+    {/if}
+
+    {#if eventType === 'turnover'}
+      <div class="field-label">Turnover players</div>
+      <p class="field-helper">Record who lost the ball and who won it.</p>
+      <div class="turnover-player-grid">
+        <label class="turnover-player-field">
+          <span class="turnover-player-label">
+            Lost by{turnoverLostTeam ? ` (${turnoverLostTeam})` : ''}
+          </span>
+          <input
+            class="turnover-player-input"
+            type="number"
+            min="1"
+            max="99"
+            inputmode="numeric"
+            placeholder="e.g. 2"
+            value={turnoverLostPlayer}
+            on:input={(event) => (turnoverLostPlayer = event.currentTarget.value || '')}
+          />
+        </label>
+        <label class="turnover-player-field">
+          <span class="turnover-player-label">
+            Won by{turnoverWonTeam ? ` (${turnoverWonTeam})` : ''}
+          </span>
+          <input
+            class="turnover-player-input"
+            type="number"
+            min="1"
+            max="99"
+            inputmode="numeric"
+            placeholder="e.g. 14"
+            value={turnoverWonPlayer}
+            on:input={(event) => (turnoverWonPlayer = event.currentTarget.value || '')}
+          />
+        </label>
+      </div>
+    {:else}
+      <div class="field-label">Target player {targetPlayer ? `- #${targetPlayer}` : ''}</div>
+      <div class="jersey-grid">
+        {#each JERSEY_NUMS as num (num)}
+          <button
+            type="button"
+            class="jersey-btn {targetPlayer === String(num) ? 'active' : ''}"
+            on:click={() => toggleJersey(num)}
+          >
+            {num}
+          </button>
+        {/each}
+      </div>
+      <div class="jersey-custom-row">
+        <!-- Sits in the grid flow rather than on its own labelled row: squads
+             rarely field 16+, and the row cost 39px of a form that was already
+             scrolling on the device this is captured on. -->
         <input
-          class="turnover-player-input"
+          class="jersey-custom-input"
+          aria-label="Target player jersey number above 15"
           type="number"
           min="1"
           max="99"
+          placeholder="16+"
           inputmode="numeric"
-          placeholder="e.g. 2"
-          value={turnoverLostPlayer}
-          on:input={(event) => (turnoverLostPlayer = event.currentTarget.value || '')}
+          value={targetPlayer && parseInt(targetPlayer, 10) > 15 ? targetPlayer : ''}
+          on:input={(event) => (targetPlayer = event.currentTarget.value || '')}
         />
-      </label>
-      <label class="turnover-player-field">
-        <span class="turnover-player-label">
-          Won by{turnoverWonTeam ? ` (${turnoverWonTeam})` : ''}
-        </span>
-        <input
-          class="turnover-player-input"
-          type="number"
-          min="1"
-          max="99"
-          inputmode="numeric"
-          placeholder="e.g. 14"
-          value={turnoverWonPlayer}
-          on:input={(event) => (turnoverWonPlayer = event.currentTarget.value || '')}
-        />
-      </label>
-    </div>
-  {:else}
-    <div class="field-label">Target player {targetPlayer ? `- #${targetPlayer}` : ''}</div>
-    <div class="jersey-grid">
-      {#each JERSEY_NUMS as num (num)}
-        <button
-          type="button"
-          class="jersey-btn {targetPlayer === String(num) ? 'active' : ''}"
-          on:click={() => toggleJersey(num)}
-        >
-          {num}
-        </button>
-      {/each}
-    </div>
-    <div class="jersey-custom-row">
-      <!-- Sits in the grid flow rather than on its own labelled row: squads
-           rarely field 16+, and the row cost 39px of a form that was already
-           scrolling on the device this is captured on. -->
-      <input
-        class="jersey-custom-input"
-        aria-label="Target player jersey number above 15"
-        type="number"
-        min="1"
-        max="99"
-        placeholder="16+"
-        inputmode="numeric"
-        value={targetPlayer && parseInt(targetPlayer, 10) > 15 ? targetPlayer : ''}
-        on:input={(event) => (targetPlayer = event.currentTarget.value || '')}
-      />
-      {#if targetPlayer}
-        <button type="button" class="jersey-clear" on:click={() => (targetPlayer = '')}>Clear {targetPlayer}</button>
-      {/if}
-    </div>
-  {/if}
+        {#if targetPlayer}
+          <button type="button" class="jersey-clear" on:click={() => (targetPlayer = '')}>Clear {targetPlayer}</button>
+        {/if}
+      </div>
+    {/if}
 
-  {#if editingId}
-    <div class="edit-badge">Editing event - tap Update when done</div>
-  {/if}
+    {#if editingId}
+      <div class="edit-badge">Editing event - tap Update when done</div>
+    {/if}
+  </div>
 
   <div class="action-row">
     <button type="button" class="save-cta {savedFlash ? 'save-flash' : editingId ? 'save-edit' : ''}" on:click={onSave}>
@@ -407,7 +409,18 @@
   .form-content {
     display: flex;
     flex-direction: column;
-    padding: 14px 16px 20px;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .form-fields {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    flex-direction: column;
+    padding: 14px 16px 10px;
+    scroll-padding-bottom: 16px;
   }
 
   .field-label,
@@ -817,21 +830,15 @@
     background: #fef2f2;
   }
 
-  /*
-   * Sticky in every layout. The form panel scrolls internally, so without this
-   * saving an event means scrolling to the bottom of the form first — which is
-   * the wrong thing to ask for during live capture. The gradient keeps the
-   * rows underneath from appearing to collide with the button.
-   */
   .action-row {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    margin-top: 10px;
-    position: sticky;
-    bottom: 0;
-    padding-top: 10px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, #fff 22%);
+    flex: 0 0 auto;
+    padding: 10px 16px 14px;
+    background: #fff;
+    border-top: 1px solid #e5e7eb;
+    box-shadow: 0 -8px 18px rgba(15, 23, 42, 0.05);
   }
 
   .save-cta {
@@ -933,8 +940,9 @@
   }
 
   @media (min-width: 768px) and (max-height: 940px) {
-    .form-content {
-      padding: 10px 14px 4px;
+    .form-fields {
+      padding: 10px 14px 8px;
+      scroll-padding-bottom: 12px;
     }
 
     .field-label,
@@ -986,7 +994,7 @@
     }
 
     .action-row {
-      margin-top: 8px;
+      padding: 8px 14px 10px;
     }
 
     .save-cta {

@@ -17,7 +17,7 @@ test('moving between tabs keeps Kickouts reachable from every main screen', asyn
   await expect(page.getByText('Live Match State')).toBeVisible();
 
   await tabBar.getByRole('tab', { name: /^Kickouts/i }).click();
-  await expect(page.getByText(/Showing all periods in this view/i)).toBeVisible();
+  await expect(page.locator('.panel-title')).toHaveText('Kickouts');
   await expect(tabBar.getByRole('tab', { name: /^Kickouts/i })).toHaveClass(/active/);
 
   await tabBar.getByRole('tab', { name: /^Shots/i }).click();
@@ -37,7 +37,7 @@ test('moving between tabs keeps Kickouts reachable from every main screen', asyn
 
   await openInGameSection(tabBar);
   await tabBar.getByRole('tab', { name: /^Kickouts/i }).click();
-  await expect(page.getByText(/Showing all periods in this view/i)).toBeVisible();
+  await expect(page.locator('.panel-title')).toHaveText('Kickouts');
   await expect(tabBar.getByRole('tab', { name: /^Kickouts/i })).toHaveClass(/active/);
 });
 

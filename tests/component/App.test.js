@@ -1499,14 +1499,16 @@ describe('App shell auth and sync', () => {
     const user = userEvent.setup();
     await openInGameTab(user, /^Live$/i);
 
-    expect(await screen.findByText(/Showing all periods in this view\./i)).toBeInTheDocument();
+    expect(screen.queryByText(/Showing all periods in this view\./i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /^H1$/i }));
     expect(await screen.findByText(/Phase filter active: showing H1 only in Live, Digest, and analytics\./i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Show all/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /Show all/i }));
-    expect(await screen.findByText(/Showing all periods in this view\./i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText(/Phase filter active:/i)).not.toBeInTheDocument();
+    });
   });
 
   it('announces capture period changes from the form controls', async () => {

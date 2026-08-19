@@ -3148,8 +3148,16 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
       {:else if syncStatus === 'error'}
         <span class="chip error">!</span>
       {/if}
-      <button class="icon-btn" title="{wakeLock ? 'Screen locked on' : 'Keep screen on'}"
-        on:click={toggleWakeLock}>{wakeLock ? 'Awake' : 'Keep awake'}</button>
+      <button
+        class="icon-btn wake-btn"
+        class:wake-active={wakeLock}
+        aria-pressed={wakeLock ? 'true' : 'false'}
+        title="{wakeLock ? 'Screen locked on' : 'Keep screen on'}"
+        on:click={toggleWakeLock}
+      >
+        <span class="wake-glyph" aria-hidden="true"></span>
+        <span class="wake-label">{wakeLock ? 'Awake' : 'Keep awake'}</span>
+      </button>
       {#if isAdminUser}
         <button class="icon-btn" title="Admin settings" on:click={() => showAdmin = !showAdmin}>⚙</button>
       {/if}
@@ -3219,7 +3227,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
 
   <!-- Tab bar -->
   <nav class="tab-bar">
-    <div class="tab-sections" role="tablist" aria-label="Sections" on:keydown={handleTablistKeydown}>
+    <div class="tab-sections" role="tablist" aria-label="Sections" tabindex="-1" on:keydown={handleTablistKeydown}>
       <button type="button" role="tab" aria-selected={activeSection === 'capture'} class="section-btn {activeSection === 'capture' ? 'active' : ''}" on:click={() => switchTab('capture')}>
         Capture{#if editingId}&nbsp;<span class="edit-dot">●</span>{/if}
       </button>
@@ -3231,7 +3239,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
       </button>
     </div>
     {#if activeSection === 'ingame'}
-    <div class="tab-sub-bar" role="tablist" aria-label="In-game views" on:keydown={handleTablistKeydown}>
+    <div class="tab-sub-bar" role="tablist" aria-label="In-game views" tabindex="-1" on:keydown={handleTablistKeydown}>
       <button type="button" role="tab" aria-selected={activeTab === 'live'} class="tab-btn {activeTab === 'live' ? 'active' : ''}" on:click={() => switchTab('live')}>Live</button>
       <button type="button" role="tab" aria-selected={activeTab === 'digest'} class="tab-btn {activeTab === 'digest' ? 'active' : ''}" on:click={() => switchTab('digest')}>Digest</button>
       <button type="button" role="tab" aria-selected={activeTab === 'kickouts'} class="tab-btn {activeTab === 'kickouts' ? 'active' : ''}" on:click={() => switchTab('kickouts')}>Kickouts</button>
@@ -3240,7 +3248,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
       <button type="button" role="tab" aria-selected={activeTab === 'events'} class="tab-btn {activeTab === 'events' ? 'active' : ''}" on:click={() => switchTab('events')}>Events <span class="tab-count">{events.length}</span></button>
     </div>
     {:else if activeSection === 'tools'}
-    <div class="tab-sub-bar" role="tablist" aria-label="Tools" on:keydown={handleTablistKeydown}>
+    <div class="tab-sub-bar" role="tablist" aria-label="Tools" tabindex="-1" on:keydown={handleTablistKeydown}>
       <button type="button" role="tab" aria-selected={activeTab === 'analysis-possession'} class="tab-btn {activeTab === 'analysis-possession' ? 'active' : ''}" on:click={() => switchTab('analysis-possession')}>Possession</button>
       <button type="button" role="tab" aria-selected={activeTab === 'analysis-pass'} class="tab-btn {activeTab === 'analysis-pass' ? 'active' : ''}" on:click={() => switchTab('analysis-pass')}>Pass Destination</button>
       <button type="button" role="tab" aria-selected={showTacticalBoard} class="tab-btn {showTacticalBoard ? 'active' : ''}" on:click={openTacticalBoard}>Board</button>
@@ -3483,6 +3491,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
       <button
         type="button"
         class="re-toggle"
+        class:with-hint={captureStripView === 'recent' && !recentEventsCollapsed}
         aria-expanded={!recentEventsCollapsed}
         aria-controls="capture-strip-body"
         aria-label={recentEventsCollapsed ? 'Expand capture strip' : 'Collapse capture strip'}
@@ -3565,18 +3574,12 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
   {/if}
 
   {:else}
-  {#if activeTab === 'live' || activeTab === 'digest' || activeTab === 'kickouts' || activeTab === 'shots' || activeTab === 'turnovers'}
+  {#if periodFilter !== 'ALL' && (activeTab === 'live' || activeTab === 'digest' || activeTab === 'kickouts' || activeTab === 'shots' || activeTab === 'turnovers')}
   <div class="phase-scope-banner">
     <span>
-      {#if periodFilter === 'ALL'}
-        Showing all periods in this view.
-      {:else}
-        Phase filter active: showing {periodFilter} only in Live, Digest, and analytics.
-      {/if}
+      Phase filter active: showing {periodFilter} only in Live, Digest, and analytics.
     </span>
-    {#if periodFilter !== 'ALL'}
-      <button class="scope-reset-btn" on:click={() => periodFilter = 'ALL'}>Show all</button>
-    {/if}
+    <button class="scope-reset-btn" on:click={() => periodFilter = 'ALL'}>Show all</button>
   </div>
   {/if}
 
@@ -3954,6 +3957,22 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     padding: 5px 6px; border-radius: 6px; color: rgba(255,255,255,0.55); transition: all 0.15s;
   }
   .icon-btn:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.9); }
+  .wake-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    min-height: 30px; border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+  }
+  .wake-btn.wake-active {
+    color: #fef3c7; background: rgba(251,191,36,0.14); border-color: rgba(251,191,36,0.38);
+  }
+  .wake-glyph {
+    width: 12px; height: 12px; border-radius: 999px;
+    box-shadow: inset 0 0 0 2px currentColor;
+    flex-shrink: 0;
+  }
+  .wake-btn.wake-active .wake-glyph {
+    background: #fbbf24; box-shadow: 0 0 0 3px rgba(251,191,36,0.18);
+  }
 
   .chip { font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 600; }
   .chip.syncing { background: rgba(251,191,36,0.15); color: #fbbf24; }
@@ -4045,6 +4064,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     cursor: pointer; font-family: inherit; line-height: 1;
     touch-action: manipulation; -webkit-tap-highlight-color: transparent;
   }
+  .re-toggle.with-hint { margin-left: 8px; }
   .re-toggle:hover { background: #f3f4f6; border-radius: 6px; }
   .re-label { font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
 
@@ -4067,13 +4087,12 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
     font-size: 10px; font-weight: 700; color: #4b5563; background: #e5e7eb;
     padding: 1px 6px; border-radius: 999px; line-height: 1.5;
   }
-  /* Was #d1d5db on #fafafa — 1.4:1, effectively invisible. */
+  /* Was #d1d5db on #fafafa - 1.4:1, effectively invisible. */
   .re-hint { font-size: 11px; color: #6b7280; margin-left: auto; }
   .re-chevron {
     font-size: 12px; color: #6b7280; line-height: 1; margin-left: auto;
     transition: transform 0.15s;
   }
-  .re-hint + .re-chevron { margin-left: 8px; }
   .re-chevron.collapsed { transform: rotate(180deg); }
   .recent-event-row {
     display: flex; align-items: center; gap: 8px; width: 100%;
@@ -4327,7 +4346,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
    * pressure, so it gets the larger share and the form scrolls.
    */
   .form-panel {
-    overflow-y: auto; padding: 0; background: #fff;
+    overflow: hidden; padding: 0; background: #fff;
     flex: 0 1 auto; min-height: 0; max-height: 42%;
     border-bottom: 1px solid #e5e7eb;
   }
@@ -4343,7 +4362,7 @@ import { loadAnalysisState, saveAnalysisState } from './lib/postMatchAnalysisSto
        height cap must be cleared or it would clip the sidebar to 42%. */
     .form-panel {
       width: 300px; flex: 0 0 auto; max-height: none;
-      border-bottom: none; border-right: 1px solid #e5e7eb; overflow-y: auto;
+      border-bottom: none; border-right: 1px solid #e5e7eb; overflow: hidden;
     }
     .pitch-panel { flex: 1; padding: 24px; justify-content: center; }
   }

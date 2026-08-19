@@ -128,7 +128,7 @@ test.describe('touch navigation', () => {
     await kickoutsTab.tap();
 
     await expect(kickoutsTab).toHaveClass(/active/);
-    await expect(page.getByText(/Showing all periods in this view/i)).toBeVisible();
+    await expect(page.locator('.panel-title')).toHaveText('Kickouts');
   });
 
   test('touch users see shot outcomes as selected immediately', async ({ page }) => {

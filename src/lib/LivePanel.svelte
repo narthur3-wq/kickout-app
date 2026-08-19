@@ -114,6 +114,12 @@
             {/each}
           {/if}
         </div>
+        {#if insights.scoreMomentum.items.length > 0}
+          <div class="marker-legend" aria-label="Recent score marker legend">
+            <span><span class="legend-marker ours" aria-hidden="true"></span>{teamName || 'Us'}</span>
+            <span><span class="legend-marker theirs" aria-hidden="true"></span>{opponentName || 'Them'}</span>
+          </div>
+        {/if}
         <p class="summary-line {insights.scoreMomentum.tone}">{insights.scoreMomentum.line}</p>
       </div>
       <div class="momentum-block">
@@ -410,6 +416,31 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+  }
+  .marker-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+  }
+  .marker-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .legend-marker {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: #166534;
+    flex-shrink: 0;
+  }
+  .legend-marker.theirs {
+    border-radius: 3px;
+    background: #b91c1c;
   }
   .marker {
     min-width: 28px;
